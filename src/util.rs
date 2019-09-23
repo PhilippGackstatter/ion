@@ -1,6 +1,8 @@
 use crate::types::Expression::{self, *};
 
 pub fn pretty_print(expr: &Expression) {
+    println!("\nAbstract Syntax Tree");
+    println!("====================");
     pretty_print_(0, false, expr);
 }
 

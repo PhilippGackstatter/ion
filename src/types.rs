@@ -125,6 +125,8 @@ impl fmt::Display for Expression {
 
 impl fmt::Display for Chunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "\nChunk")?;
+        writeln!(f, "=====")?;
         writeln!(f, "\nConstants")?;
         for (i, con) in self.constants.iter().enumerate() {
             writeln!(f, "{} -> {}", i, con)?;
@@ -135,28 +137,28 @@ impl fmt::Display for Chunk {
         while let Some(str_) = byte_to_opcode(&mut iter, &self.constants) {
             writeln!(f, "{}", str_)?;
         }
-        write!(f, "")
+        Ok(())
     }
 }
 
 fn byte_to_opcode(bytes: &mut std::slice::Iter<u8>, constants: &[Value]) -> Option<String> {
-    if let Some(byte) = bytes.next() {
+    if let Some(byte_) = bytes.next() {
+        let byte = unsafe { std::mem::transmute::<u8, Bytecode>(*byte_) };
         let res = match byte {
-            0 => format!("{:?}", Bytecode::OpMul),
-            1 => format!("{:?}", Bytecode::OpAdd),
-            2 => format!("{:?}", Bytecode::OpDiv),
-            3 => format!("{:?}", Bytecode::OpSub),
-            4 => format!("{:?}", Bytecode::OpNot),
-            5 => format!("{:?}", Bytecode::OpEqual),
-            6 => format!("{:?}", Bytecode::OpNegate),
-            7 => {
+            Bytecode::OpMul => format!("{:?}", byte),
+            Bytecode::OpAdd => format!("{:?}", byte),
+            Bytecode::OpDiv => format!("{:?}", byte),
+            Bytecode::OpSub => format!("{:?}", byte),
+            Bytecode::OpNot => format!("{:?}", byte),
+            Bytecode::OpEqual => format!("{:?}", byte),
+            Bytecode::OpNegate => format!("{:?}", byte),
+            Bytecode::OpReturn => format!("{:?}", byte),
+            Bytecode::OpConstant => {
                 let b1 = bytes.next().unwrap();
                 let b2 = bytes.next().unwrap();
                 let index = u16::from(*b1) << 8 | u16::from(*b2);
-                format!("{:?} {}", Bytecode::OpConstant, constants[index as usize])
+                format!("{:?} {}", byte, constants[index as usize])
             }
-            8 => format!("{:?}", Bytecode::OpReturn),
-            _ => unreachable!(),
         };
         Some(res)
     } else {

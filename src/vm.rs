@@ -18,6 +18,8 @@ impl VM {
     pub fn interpet(&mut self, chunk: &Chunk) {
         let code = &chunk.code;
         let mut i = 0;
+        println!("\nVirtual Machine");
+        println!("===============");
 
         while i < code.len() {
             self.debug_stack();
