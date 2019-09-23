@@ -9,19 +9,18 @@ impl Lexer {
     pub fn new() -> Self {
         Lexer {
             tokens: vec![
-                Token::new_debug(NUMBER(0)),
-                Token::new_debug(PLUS),
-                Token::new_debug(NUMBER(4)),
-                Token::new_debug(STAR),
-                Token::new_debug(NUMBER(8)),
-                Token::new_debug(EOF),
-            ]
+                Token::new_debug(Num(0)),
+                Token::new_debug(Plus),
+                Token::new_debug(Num(4)),
+                Token::new_debug(Star),
+                Token::new_debug(Num(8)),
+                Token::new_debug(EndOfFile),
+            ],
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_from_tokens(tokens: Vec<Token>) -> Self {
-        Lexer {
-            tokens
-        }
+        Lexer { tokens }
     }
 }

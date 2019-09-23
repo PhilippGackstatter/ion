@@ -24,7 +24,7 @@ impl<'a> Parser<'a> {
     fn equality(&mut self) -> Expression {
         // equality → comparison ( ( "!=" | "==" ) comparison )* ;
         let mut expr = self.comparison();
-        while self.match_(BANG_EQUAL) || self.match_(EQUAL_EQUAL) {
+        while self.match_(BangEqual) || self.match_(EqualEqual) {
             let operator = self.previous().clone();
             let right = self.comparison();
             expr = Binary(Box::new(expr), operator, Box::new(right));
@@ -35,10 +35,10 @@ impl<'a> Parser<'a> {
     fn comparison(&mut self) -> Expression {
         // comparison → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
         let mut expr = self.addition();
-        while self.match_(GREATER)
-            || self.match_(GREATER_EQUAL)
-            || self.match_(LESS)
-            || self.match_(LESS_EQUAL)
+        while self.match_(Greater)
+            || self.match_(GreaterEqual)
+            || self.match_(Less)
+            || self.match_(LessEqual)
         {
             let operator = self.previous().clone();
             let right = self.addition();
@@ -49,7 +49,7 @@ impl<'a> Parser<'a> {
 
     fn addition(&mut self) -> Expression {
         let mut expr = self.multiplication();
-        while self.match_(PLUS) || self.match_(MINUS) {
+        while self.match_(Plus) || self.match_(Minus) {
             let operator = self.previous().clone();
             let right = self.multiplication();
             expr = Binary(Box::new(expr), operator, Box::new(right));
@@ -59,7 +59,7 @@ impl<'a> Parser<'a> {
 
     fn multiplication(&mut self) -> Expression {
         let mut expr = self.unary();
-        while self.match_(SLASH) || self.match_(STAR) {
+        while self.match_(Slash) || self.match_(Star) {
             let operator = self.previous().clone();
             let right = self.unary();
             expr = Binary(Box::new(expr), operator, Box::new(right));
@@ -70,9 +70,10 @@ impl<'a> Parser<'a> {
     fn unary(&mut self) -> Expression {
         // unary → ( "!" | "-" ) unary
         //         | primary ;
-        if self.match_(BANG) || self.match_(MINUS) {
+        if self.match_(Bang) || self.match_(Minus) {
+            let operator = self.previous().clone();
             let lexpr = self.unary();
-            return Unary(self.previous().clone(), Box::new(lexpr));
+            return Unary(operator, Box::new(lexpr));
         }
 
         self.primary()
@@ -82,28 +83,28 @@ impl<'a> Parser<'a> {
         // primary → NUMBER | STRING | "false" | "true" | "nil"
         //           | "(" expression ")" ;
         match &self.peek().kind {
-            TRUE => {
+            True_ => {
                 self.advance();
                 True
             }
-            FALSE => {
+            False_ => {
                 self.advance();
                 False
             }
-            NUMBER(int) => {
+            Num(int) => {
                 let num = Number(*int);
                 self.advance();
                 num
             }
-            STRING(str_) => {
+            String_(str_) => {
                 let string = Str(str_.clone());
                 self.advance();
                 string
             }
             _ => {
-                self.consume(LEFT_PAREN, "Expected '('.").unwrap();
+                self.consume(LeftParen, "Expected '('.").unwrap();
                 let expr = self.expression();
-                self.consume(RIGHT_PAREN, "Expected '('.").unwrap();
+                self.consume(RightParen, "Expected '('.").unwrap();
                 expr
             }
         }
@@ -137,7 +138,7 @@ impl<'a> Parser<'a> {
     }
 
     fn is_at_end(&self) -> bool {
-        self.peek().kind == EOF
+        self.peek().kind == EndOfFile
     }
 
     fn previous(&self) -> &Token {
@@ -162,10 +163,7 @@ impl<'a> Parser<'a> {
     // Misc
 
     pub fn new(lexer: &'a Lexer) -> Self {
-        Parser {
-            lexer: lexer,
-            current: 0,
-        }
+        Parser { lexer, current: 0 }
     }
 
     pub fn parse(&mut self) -> Expression {
@@ -179,20 +177,27 @@ mod tests {
 
     #[test]
     fn test_multiplication() {
+        // Test 9 + 1 / 4
         let lexer = Lexer::new_from_tokens(vec![
-            Token::new_debug(NUMBER(0)),
-            Token::new_debug(SLASH),
-            Token::new_debug(NUMBER(4)),
-            Token::new_debug(EOF),
+            Token::new_debug(Num(9)),
+            Token::new_debug(Plus),
+            Token::new_debug(Num(1)),
+            Token::new_debug(Slash),
+            Token::new_debug(Num(4)),
+            Token::new_debug(EndOfFile),
         ]);
         let mut parser = Parser::new(&lexer);
         let res = parser.parse();
         assert_eq!(
             res,
             Binary(
-                Box::new(Number(0)),
-                Token::new_debug(SLASH),
-                Box::new(Number(4))
+                Box::new(Number(9)),
+                Token::new_debug(Plus),
+                Box::new(Binary(
+                    Box::new(Number(1)),
+                    Token::new_debug(Slash),
+                    Box::new(Number(4))
+                ))
             )
         );
     }
@@ -201,18 +206,18 @@ mod tests {
     fn test_unary() {
         // Test "!!false"
         let lexer = Lexer::new_from_tokens(vec![
-            Token::new_debug(BANG),
-            Token::new_debug(BANG),
-            Token::new_debug(FALSE),
-            Token::new_debug(EOF),
+            Token::new_debug(Bang),
+            Token::new_debug(Bang),
+            Token::new_debug(False_),
+            Token::new_debug(EndOfFile),
         ]);
         let mut parser = Parser::new(&lexer);
         let res = parser.parse();
         assert_eq!(
             res,
             Unary(
-                Token::new_debug(BANG),
-                Box::new(Unary(Token::new_debug(BANG), Box::new(False)))
+                Token::new_debug(Bang),
+                Box::new(Unary(Token::new_debug(Bang), Box::new(False)))
             )
         );
     }
