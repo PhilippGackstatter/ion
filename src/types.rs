@@ -1,5 +1,36 @@
 use std::fmt;
 
+pub type Value = i32;
+
+#[derive(Debug)]
+#[repr(u8)]
+pub enum Bytecode {
+    OpMul,
+    OpAdd,
+    OpDiv,
+    OpSub,
+    OpNot,
+    OpEqual,
+    OpNegate,
+    OpConstant,
+    OpReturn,
+}
+
+#[derive(Default, Debug)]
+pub struct Chunk {
+    pub constants: Vec<Value>,
+    pub code: Vec<u8>,
+}
+
+impl Chunk {
+    pub fn new() -> Self {
+        Chunk {
+            constants: vec![],
+            code: vec![],
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     /// The offset in bytes in the source file where the lexeme begins
@@ -41,6 +72,7 @@ pub enum TokenKind {
     Less,
     LessEqual,
     Bang,
+    Negate,
     Plus,
     Minus,
     Star,
@@ -88,5 +120,46 @@ impl fmt::Display for Expression {
             False => write!(f, "false"),
             True => write!(f, "true"),
         }
+    }
+}
+
+impl fmt::Display for Chunk {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "\nConstants")?;
+        for (i, con) in self.constants.iter().enumerate() {
+            writeln!(f, "{} -> {}", i, con)?;
+        }
+
+        writeln!(f, "\nBytecode")?;
+        let mut iter = self.code.iter();
+        while let Some(str_) = byte_to_opcode(&mut iter, &self.constants) {
+            writeln!(f, "{}", str_)?;
+        }
+        write!(f, "")
+    }
+}
+
+fn byte_to_opcode(bytes: &mut std::slice::Iter<u8>, constants: &[Value]) -> Option<String> {
+    if let Some(byte) = bytes.next() {
+        let res = match byte {
+            0 => format!("{:?}", Bytecode::OpMul),
+            1 => format!("{:?}", Bytecode::OpAdd),
+            2 => format!("{:?}", Bytecode::OpDiv),
+            3 => format!("{:?}", Bytecode::OpSub),
+            4 => format!("{:?}", Bytecode::OpNot),
+            5 => format!("{:?}", Bytecode::OpEqual),
+            6 => format!("{:?}", Bytecode::OpNegate),
+            7 => {
+                let b1 = bytes.next().unwrap();
+                let b2 = bytes.next().unwrap();
+                let index = u16::from(*b1) << 8 | u16::from(*b2);
+                format!("{:?} {}", Bytecode::OpConstant, constants[index as usize])
+            }
+            8 => format!("{:?}", Bytecode::OpReturn),
+            _ => unreachable!(),
+        };
+        Some(res)
+    } else {
+        None
     }
 }

@@ -189,7 +189,8 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Expression {
-        self.expression().unwrap_or_else(|err| panic!("ParserError {:?}", err))
+        self.expression()
+            .unwrap_or_else(|err| panic!("ParserError {:?}", err))
     }
 }
 
