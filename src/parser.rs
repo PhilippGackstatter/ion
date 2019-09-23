@@ -11,101 +11,106 @@ struct ParserError {
     message: &'static str,
 }
 
+type ParseResult = Result<Expression, ParserError>;
+
 pub struct Parser<'a> {
     lexer: &'a Lexer,
     current: usize,
 }
 
 impl<'a> Parser<'a> {
-    fn expression(&mut self) -> Expression {
+    fn expression(&mut self) -> ParseResult {
         self.equality()
     }
 
-    fn equality(&mut self) -> Expression {
+    fn equality(&mut self) -> ParseResult {
         // equality → comparison ( ( "!=" | "==" ) comparison )* ;
-        let mut expr = self.comparison();
+        let mut expr = self.comparison()?;
         while self.match_(BangEqual) || self.match_(EqualEqual) {
             let operator = self.previous().clone();
-            let right = self.comparison();
+            let right = self.comparison()?;
             expr = Binary(Box::new(expr), operator, Box::new(right));
         }
-        expr
+        Ok(expr)
     }
 
-    fn comparison(&mut self) -> Expression {
+    fn comparison(&mut self) -> ParseResult {
         // comparison → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
-        let mut expr = self.addition();
+        let mut expr = self.addition()?;
         while self.match_(Greater)
             || self.match_(GreaterEqual)
             || self.match_(Less)
             || self.match_(LessEqual)
         {
             let operator = self.previous().clone();
-            let right = self.addition();
+            let right = self.addition()?;
             expr = Binary(Box::new(expr), operator, Box::new(right));
         }
-        expr
+        Ok(expr)
     }
 
-    fn addition(&mut self) -> Expression {
-        let mut expr = self.multiplication();
+    fn addition(&mut self) -> ParseResult {
+        let mut expr = self.multiplication()?;
         while self.match_(Plus) || self.match_(Minus) {
             let operator = self.previous().clone();
-            let right = self.multiplication();
+            let right = self.multiplication()?;
             expr = Binary(Box::new(expr), operator, Box::new(right));
         }
-        expr
+        Ok(expr)
     }
 
-    fn multiplication(&mut self) -> Expression {
-        let mut expr = self.unary();
+    fn multiplication(&mut self) -> ParseResult {
+        let mut expr = self.unary()?;
         while self.match_(Slash) || self.match_(Star) {
             let operator = self.previous().clone();
-            let right = self.unary();
+            let right = self.unary()?;
             expr = Binary(Box::new(expr), operator, Box::new(right));
         }
-        expr
+        Ok(expr)
     }
 
-    fn unary(&mut self) -> Expression {
+    fn unary(&mut self) -> ParseResult {
         // unary → ( "!" | "-" ) unary
         //         | primary ;
         if self.match_(Bang) || self.match_(Minus) {
             let operator = self.previous().clone();
-            let lexpr = self.unary();
-            return Unary(operator, Box::new(lexpr));
+            let lexpr = self.unary()?;
+            return Ok(Unary(operator, Box::new(lexpr)));
         }
 
         self.primary()
     }
 
-    fn primary(&mut self) -> Expression {
+    fn primary(&mut self) -> ParseResult {
         // primary → NUMBER | STRING | "false" | "true" | "nil"
         //           | "(" expression ")" ;
         match &self.peek().kind {
             True_ => {
                 self.advance();
-                True
+                Ok(True)
             }
             False_ => {
                 self.advance();
-                False
+                Ok(False)
             }
             Num(int) => {
                 let num = Number(*int);
                 self.advance();
-                num
+                Ok(num)
             }
             String_(str_) => {
                 let string = Str(str_.clone());
                 self.advance();
-                string
+                Ok(string)
             }
             _ => {
-                self.consume(LeftParen, "Expected '('.").unwrap();
-                let expr = self.expression();
-                self.consume(RightParen, "Expected '('.").unwrap();
-                expr
+                if self.match_(LeftParen) {
+                    let expr = self.expression()?;
+                    self.consume(RightParen, "Expected '('.")?;
+                    Ok(expr)
+                } else {
+                    Err(self.error(self.peek().clone(), "Expect expression."))
+                }
             }
         }
     }
@@ -160,6 +165,23 @@ impl<'a> Parser<'a> {
         ParserError { token, message }
     }
 
+    // fn synchronize(&mut self) {
+    //     self.advance();
+
+    //     while !self.is_at_end() {
+    //         if self.previous().kind == Semicolon { return; }
+
+    //         match self.peek().kind {
+    //             // Class | Fun | Var | For | If | While | Print | Return => {
+    //             //     return;
+    //             // },
+    //             _ => (),
+    //         }
+
+    //         self.advance();
+    //     }
+    // }
+
     // Misc
 
     pub fn new(lexer: &'a Lexer) -> Self {
@@ -167,7 +189,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Expression {
-        self.expression()
+        self.expression().unwrap_or_else(|err| panic!("ParserError {:?}", err))
     }
 }
 

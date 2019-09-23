@@ -31,6 +31,7 @@ impl Token {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
+    Semicolon,
     LeftParen,
     RightParen,
     BangEqual,
