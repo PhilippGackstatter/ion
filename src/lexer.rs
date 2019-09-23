@@ -1,6 +1,7 @@
 use crate::types::Token;
 use crate::types::TokenKind::*;
 
+#[derive(Default)]
 pub struct Lexer {
     pub tokens: Vec<Token>,
 }
@@ -19,7 +20,6 @@ impl Lexer {
         }
     }
 
-    #[allow(dead_code)]
     pub fn new_from_tokens(tokens: Vec<Token>) -> Self {
         Lexer { tokens }
     }

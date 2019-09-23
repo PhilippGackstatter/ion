@@ -1,19 +1,8 @@
-mod lexer;
-mod parser;
-mod types;
+use crate::types::Expression::{self, *};
 
-use lexer::Lexer;
-use parser::Parser;
-
-fn main() {
-    let lexer = Lexer::new();
-    let mut parser = Parser::new(&lexer);
-    let expr = parser.parse();
-    println!("{}", expr);
-    pretty_print(0, false, &expr);
+pub fn pretty_print(expr: &Expression) {
+    pretty_print_(0, false, expr);
 }
-
-use types::Expression::{self, *};
 
 fn pr(level: u32, is_child: bool, arg: &str) {
     for _ in 0..level {
@@ -26,18 +15,18 @@ fn pr(level: u32, is_child: bool, arg: &str) {
     }
 }
 
-fn pretty_print(mut level: u32, is_child: bool, expr: &Expression) {
+fn pretty_print_(mut level: u32, is_child: bool, expr: &Expression) {
     match expr {
         Binary(lexpr, op, rexpr) => {
             pr(level, is_child, &format!("{:?}", op.kind));
             level += 2;
-            pretty_print(level, true, rexpr);
-            pretty_print(level, true, lexpr);
+            pretty_print_(level, true, rexpr);
+            pretty_print_(level, true, lexpr);
         }
         Unary(op, rexpr) => {
             pr(level, is_child, &format!("{:?}", op.kind));
             level += 2;
-            pretty_print(level, true, rexpr);
+            pretty_print_(level, true, rexpr);
         }
         Number(num) => {
             pr(level, is_child, &format!("{}", num));

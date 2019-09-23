@@ -29,7 +29,6 @@ impl Token {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
     LeftParen,
