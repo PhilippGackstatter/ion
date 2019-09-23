@@ -10,7 +10,7 @@ impl Lexer {
     pub fn new() -> Self {
         Lexer {
             tokens: vec![
-                Token::new_debug(Num(0)),
+                Token::new_debug(Num(10)),
                 Token::new_debug(Plus),
                 Token::new_debug(Num(4)),
                 Token::new_debug(Star),

@@ -2,7 +2,7 @@ use crate::types::{
     Bytecode, Chunk,
     Expression::{self, *},
     Token,
-    TokenKind::{self, *},
+    TokenKind::*,
     Value,
 };
 

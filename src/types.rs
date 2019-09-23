@@ -100,10 +100,10 @@ use Expression::*;
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let symbol = match self {
-            Star => "*",
-            Slash => "/",
-            Plus => "+",
-            Minus => "-",
+            TokenKind::Star => "*",
+            TokenKind::Slash => "/",
+            TokenKind::Plus => "+",
+            TokenKind::Minus => "-",
             _ => "",
         };
         write!(f, "{}", symbol)
