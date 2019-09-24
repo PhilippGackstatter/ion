@@ -5,7 +5,7 @@ pub enum Value {
     Bool(bool),
     Int(i32),
     Double(f32),
-    Obj(Box<Object>),
+    Obj(Object),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -25,6 +25,8 @@ pub enum Bytecode {
     OpNegate,
     OpGreater,
     OpConstant,
+    OpSetGlobal,
+    OpGetGlobal,
     OpJump,
     OpJumpIfFalse,
     OpPrint,
@@ -126,6 +128,7 @@ pub enum Expression {
     Unary(Token, Box<Expression>),
     Number(i32),
     Str(String),
+    Identifier(String),
     False,
     True,
 }
@@ -170,7 +173,8 @@ impl fmt::Display for Expression {
             Binary(rexpr, token, lexpr) => write!(f, "{} {} {}", *rexpr, token.kind, *lexpr),
             Unary(token, lexpr) => write!(f, "{} {}", token.kind, *lexpr),
             Number(int) => write!(f, "{}", int),
-            Str(str_) => write!(f, "{}", str_),
+            Str(str_) => write!(f, r#""{}""#, str_),
+            Identifier(str_) => write!(f, "{}", str_),
             False => write!(f, "false"),
             True => write!(f, "true"),
         }
@@ -181,12 +185,12 @@ impl fmt::Display for Chunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "\nChunk")?;
         writeln!(f, "=====")?;
-        // writeln!(f, "\nConstants")?;
-        // for (i, con) in self.constants.iter().enumerate() {
-        //     writeln!(f, "{} -> {}", i, con)?;
-        // }
+        writeln!(f, "\nConstants")?;
+        for (i, con) in self.constants.iter().enumerate() {
+            writeln!(f, "{} -> {}", i, con)?;
+        }
 
-        // writeln!(f, "\nBytecode")?;
+        writeln!(f, "\nBytecode")?;
         let mut iter = self.code.iter().enumerate();
         while let Some((i, str_)) = byte_to_opcode(&mut iter, &self.constants) {
             writeln!(f, "{} {}", i, str_)?;
@@ -214,7 +218,15 @@ fn byte_to_opcode(
             Bytecode::OpPrint => format!("{:?}", byte),
             Bytecode::OpConstant => {
                 let index = read_u16(bytes);
-                format!("{:?} {:?}", byte, constants[index as usize])
+                format!("{:?} {}", byte, constants[index as usize])
+            }
+            Bytecode::OpSetGlobal => {
+                let index = read_u16(bytes);
+                format!("{:?} {}", byte, constants[index as usize])
+            }
+            Bytecode::OpGetGlobal => {
+                let index = read_u16(bytes);
+                format!("{:?} {}", byte, constants[index as usize])
             }
             Bytecode::OpJumpIfFalse => {
                 let index = read_u16(bytes);

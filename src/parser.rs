@@ -177,6 +177,11 @@ impl<'a> Parser<'a> {
                 self.advance();
                 Ok(string)
             }
+            IdToken(str_) => {
+                let id = Identifier(str_.clone());
+                self.advance();
+                Ok(id)
+            }
             _ => {
                 if self.match_(LeftParen) {
                     let expr = self.expression()?;

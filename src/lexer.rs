@@ -52,12 +52,16 @@ impl Lexer {
 
     pub fn new3() -> Self {
         // var x = 5;
+        // print x;
         let tokens = vec![
             VarToken,
             IdToken("x".to_owned()),
             Equal,
             Num(5),
             Semicolon,
+            // PrintToken,
+            // IdToken("x".to_owned()),
+            // Semicolon,
             EndOfFile,
         ];
         Lexer::new_from_tokenkind(tokens)

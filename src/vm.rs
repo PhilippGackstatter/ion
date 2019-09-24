@@ -1,19 +1,22 @@
 use crate::types::{
     Bytecode::{self, *},
-    Chunk, Token,
+    Chunk, Object, Token,
     TokenKind::{self, *},
     Value,
 };
+use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct VM {
     stack: Vec<Value>,
+    globals: HashMap<String, Value>,
 }
 
 impl VM {
     pub fn new() -> Self {
         VM {
             stack: Vec::with_capacity(16),
+            globals: HashMap::new(),
         }
     }
 
@@ -32,6 +35,23 @@ impl VM {
                     let index = self.read_u16(chunk, &mut i);
                     self.push(chunk.constants[index as usize].clone());
                 }
+                OpSetGlobal => {
+                    let index = self.read_u16(chunk, &mut i);
+                    let assign = self.pop();
+                    if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
+                        self.globals.insert(str_.clone(), assign);
+                    } else {
+                        panic!("Type mismatch");
+                    }
+                }
+                OpGetGlobal => {
+                    let id = self.pop();
+                    if let Value::Obj(Object::StringObj(str_)) = id {
+                        self.globals.get(&str_);
+                    } else {
+                        panic!("Type mismatch");
+                    }
+                }
                 OpJumpIfFalse => {
                     let index = self.read_u16(chunk, &mut i);
                     if self.pop() == Value::Bool(false) {
@@ -49,6 +69,9 @@ impl VM {
                 OpAdd | OpMul | OpSub | OpDiv | OpGreater => {
                     self.apply_binary_op(byte);
                 }
+                OpReturn => {
+                    println!("{}", self.globals.get("x").unwrap());
+                }
                 _ => panic!("Unkown opcode {}", byte as u8),
             }
 
@@ -62,7 +85,9 @@ impl VM {
     }
 
     fn pop(&mut self) -> Value {
-        self.stack.pop().unwrap()
+        self.stack
+            .pop()
+            .unwrap_or_else(|| panic!("Nothing on the stack."))
     }
 
     fn apply_binary_op(&mut self, byte: Bytecode) {

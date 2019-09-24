@@ -33,7 +33,12 @@ impl Compiler {
     fn compile_decl(&mut self, decl: &Declaration) {
         match decl {
             StatementDecl(stmt) => self.compile_stmt(stmt),
-            _ => (),
+            VarDecl(id, expr) => {
+                self.compile_expr(expr);
+                let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                self.emit_op_byte(Bytecode::OpSetGlobal);
+                self.emit_u16(index);
+            }
         }
     }
 
@@ -77,8 +82,12 @@ impl Compiler {
             Number(num) => {
                 let index = self.add_constant(Value::Int(*num));
                 self.emit_op_byte(Bytecode::OpConstant);
-                self.emit_byte((index >> 8) as u8);
-                self.emit_byte((index & 0xff) as u8);
+                self.emit_u16(index);
+            }
+            Identifier(id) => {
+                let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                self.emit_op_byte(Bytecode::OpConstant);
+                self.emit_u16(index);
             }
             _ => (),
         }
@@ -125,6 +134,11 @@ impl Compiler {
         let jump_index = self.chunk.code.len();
         self.chunk.code[placeholder_index] = (jump_index >> 8) as u8;
         self.chunk.code[placeholder_index + 1] = (jump_index & 0xff) as u8;
+    }
+
+    fn emit_u16(&mut self, short: u16) {
+        self.emit_byte((short >> 8) as u8);
+        self.emit_byte((short & 0xff) as u8);
     }
 
     /// Emits the given (jump) OpCode and two u8 placeholders.

@@ -70,6 +70,9 @@ fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
             pr(level, is_child, &format!("{}", num));
         }
         Str(str_) => {
+            pr(level, is_child, &format!(r#""{}""#, str_));
+        }
+        Identifier(str_) => {
             pr(level, is_child, str_);
         }
         True => {
