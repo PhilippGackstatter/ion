@@ -79,9 +79,25 @@ pub enum TokenKind {
     Slash,
     Num(i32),
     String_(String),
-    True_,
-    False_,
+    TrueToken,
+    FalseToken,
+    For,
+    PrintToken,
+    IfToken,
+    ElseToken,
     EndOfFile,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Declaration {
+    StatementDecl(Statement),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Statement {
+    Print(Expression),
+    If(Expression, Box<Statement>, Option<Box<Statement>>),
+    ExpressionStmt(Expression),
 }
 
 #[derive(Debug, PartialEq)]

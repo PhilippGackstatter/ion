@@ -1,5 +1,5 @@
 use crate::types::Token;
-use crate::types::TokenKind::*;
+use crate::types::TokenKind::{self, *};
 
 #[derive(Default)]
 pub struct Lexer {
@@ -7,25 +7,55 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new() -> Self {
-        Lexer {
-            // 8+3×4−10÷2
-            tokens: vec![
-                Token::new_debug(Num(8)),
-                Token::new_debug(Plus),
-                Token::new_debug(Num(3)),
-                Token::new_debug(Star),
-                Token::new_debug(Num(4)),
-                Token::new_debug(Minus),
-                Token::new_debug(Num(10)),
-                Token::new_debug(Slash),
-                Token::new_debug(Num(2)),
-                Token::new_debug(EndOfFile),
-            ],
-        }
+    pub fn new1() -> Self {
+        // 8 + 3 * 4 - 10 / 2;
+        let tokens = vec![
+            Num(8),
+            Plus,
+            Num(3),
+            Star,
+            Num(4),
+            Minus,
+            Num(10),
+            Slash,
+            Num(2),
+            Semicolon,
+            EndOfFile,
+        ];
+        Lexer::new_from_tokenkind(tokens)
+    }
+
+    pub fn new2() -> Self {
+        // if (6 > 2) print 5; else print 9;
+        let tokens = vec![
+            IfToken,
+            LeftParen,
+            Num(6),
+            Greater,
+            Num(2),
+            RightParen,
+            PrintToken,
+            Num(5),
+            Semicolon,
+            ElseToken,
+            PrintToken,
+            Num(9),
+            Semicolon,
+            EndOfFile,
+        ];
+        Lexer::new_from_tokenkind(tokens)
     }
 
     pub fn new_from_tokens(tokens: Vec<Token>) -> Self {
         Lexer { tokens }
+    }
+
+    pub fn new_from_tokenkind(tokens: Vec<TokenKind>) -> Self {
+        Lexer {
+            tokens: tokens
+                .iter()
+                .map(|tk| Token::new_debug(tk.clone()))
+                .collect(),
+        }
     }
 }

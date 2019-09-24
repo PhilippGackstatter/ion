@@ -1,9 +1,13 @@
-use crate::types::Expression::{self, *};
+use crate::types::{
+    Declaration::{self, *},
+    Expression::{self, *},
+    Statement::{self, *},
+};
 
-pub fn pretty_print(expr: &Expression) {
+pub fn pretty_print(decl: &Declaration) {
     println!("\nAbstract Syntax Tree");
     println!("====================");
-    pretty_print_(0, false, expr);
+    pretty_print_decl(0, false, decl);
 }
 
 fn pr(level: u32, is_child: bool, arg: &str) {
@@ -17,18 +21,44 @@ fn pr(level: u32, is_child: bool, arg: &str) {
     }
 }
 
-fn pretty_print_(mut level: u32, is_child: bool, expr: &Expression) {
+fn pretty_print_decl(level: u32, is_child: bool, decl: &Declaration) {
+    match decl {
+        StatementDecl(stmt) => pretty_print_stmt(level, is_child, stmt),
+    }
+}
+
+fn pretty_print_stmt(mut level: u32, is_child: bool, stmt: &Statement) {
+    match stmt {
+        ExpressionStmt(expr) => pretty_print_expr(level, is_child, expr),
+        If(cond, then_stmt, else_stmt) => {
+            pr(level, is_child, "if");
+            level += 2;
+            pretty_print_expr(level, true, cond);
+            pretty_print_stmt(level, true, then_stmt);
+            if let Some(else_) = else_stmt {
+                pretty_print_stmt(level, true, else_);
+            }
+        }
+        Print(expr) => {
+            pr(level, is_child, "print");
+            level += 2;
+            pretty_print_expr(level, true, expr);
+        }
+    }
+}
+
+fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
     match expr {
         Binary(lexpr, op, rexpr) => {
             pr(level, is_child, &format!("{:?}", op.kind));
             level += 2;
-            pretty_print_(level, true, rexpr);
-            pretty_print_(level, true, lexpr);
+            pretty_print_expr(level, true, rexpr);
+            pretty_print_expr(level, true, lexpr);
         }
         Unary(op, rexpr) => {
             pr(level, is_child, &format!("{:?}", op.kind));
             level += 2;
-            pretty_print_(level, true, rexpr);
+            pretty_print_expr(level, true, rexpr);
         }
         Number(num) => {
             pr(level, is_child, &format!("{}", num));

@@ -1,7 +1,11 @@
 use crate::lexer::Lexer;
-use crate::types::Expression::{self, *};
 use crate::types::Token;
 use crate::types::TokenKind::{self, *};
+use crate::types::{
+    Declaration::{self, *},
+    Expression::{self, *},
+    Statement::{self, *},
+};
 
 // TODO: Should be expanded to include the line and column directly,
 // since the parser (and thus the lexer and source code) are no longer accessible
@@ -11,7 +15,9 @@ struct ParserError {
     message: &'static str,
 }
 
-type ParseResult = Result<Expression, ParserError>;
+type StatementResult = Result<Statement, ParserError>;
+type ExpressionResult = Result<Expression, ParserError>;
+type DeclarationResult = Result<Declaration, ParserError>;
 
 pub struct Parser<'a> {
     lexer: &'a Lexer,
@@ -19,11 +25,53 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn expression(&mut self) -> ParseResult {
+    fn declaration(&mut self) -> DeclarationResult {
+        Ok(StatementDecl(self.statement()?))
+    }
+
+    fn expression(&mut self) -> ExpressionResult {
         self.equality()
     }
 
-    fn equality(&mut self) -> ParseResult {
+    fn statement(&mut self) -> StatementResult {
+        match self.peek().kind {
+            PrintToken => self.print_statement(),
+            IfToken => self.if_statement(),
+            _ => self.expression_statement(),
+        }
+    }
+
+    fn expression_statement(&mut self) -> StatementResult {
+        let res = self.expression()?;
+        self.consume(Semicolon, "Expected ';' after expression.")?;
+        Ok(ExpressionStmt(res))
+    }
+
+    fn print_statement(&mut self) -> StatementResult {
+        self.advance();
+        let expr = self.expression()?;
+        self.consume(Semicolon, "Expected ';' after expression.")?;
+        Ok(Print(expr))
+    }
+
+    fn if_statement(&mut self) -> StatementResult {
+        self.advance();
+        self.consume(LeftParen, "Expected '(' after if.")?;
+        let condition_expr = self.expression()?;
+        println!("{:?}", condition_expr);
+        self.consume(RightParen, "Expected ')' after condition.")?;
+        let if_stmt = self.statement()?;
+
+        let else_branch = if self.match_(ElseToken) {
+            Some(Box::new(self.statement()?))
+        } else {
+            None
+        };
+
+        Ok(If(condition_expr, Box::new(if_stmt), else_branch))
+    }
+
+    fn equality(&mut self) -> ExpressionResult {
         // equality → comparison ( ( "!=" | "==" ) comparison )* ;
         let mut expr = self.comparison()?;
         while self.match_(BangEqual) || self.match_(EqualEqual) {
@@ -34,7 +82,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> ParseResult {
+    fn comparison(&mut self) -> ExpressionResult {
         // comparison → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
         let mut expr = self.addition()?;
         while self.match_(Greater)
@@ -49,7 +97,8 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn addition(&mut self) -> ParseResult {
+    fn addition(&mut self) -> ExpressionResult {
+        // addition → multiplication ( ( "-" | "+" ) multiplication )* ;
         let mut expr = self.multiplication()?;
         while self.match_(Plus) || self.match_(Minus) {
             let operator = self.previous().clone();
@@ -59,7 +108,8 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn multiplication(&mut self) -> ParseResult {
+    fn multiplication(&mut self) -> ExpressionResult {
+        // multiplication → unary ( ( "/" | "*" ) unary )* ;
         let mut expr = self.unary()?;
         while self.match_(Slash) || self.match_(Star) {
             let operator = self.previous().clone();
@@ -69,7 +119,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn unary(&mut self) -> ParseResult {
+    fn unary(&mut self) -> ExpressionResult {
         // unary → ( "!" | "-" ) unary
         //         | primary ;
         if self.match_(Bang) || self.match_(Minus) {
@@ -81,15 +131,15 @@ impl<'a> Parser<'a> {
         self.primary()
     }
 
-    fn primary(&mut self) -> ParseResult {
+    fn primary(&mut self) -> ExpressionResult {
         // primary → NUMBER | STRING | "false" | "true" | "nil"
         //           | "(" expression ")" ;
         match &self.peek().kind {
-            True_ => {
+            TrueToken => {
                 self.advance();
                 Ok(True)
             }
-            False_ => {
+            FalseToken => {
                 self.advance();
                 Ok(False)
             }
@@ -188,8 +238,8 @@ impl<'a> Parser<'a> {
         Parser { lexer, current: 0 }
     }
 
-    pub fn parse(&mut self) -> Expression {
-        self.expression()
+    pub fn parse(&mut self) -> Declaration {
+        self.declaration()
             .unwrap_or_else(|err| panic!("ParserError {:?}", err))
     }
 }
@@ -201,48 +251,50 @@ mod tests {
     #[test]
     fn test_multiplication() {
         // Test 9 + 1 / 4
-        let lexer = Lexer::new_from_tokens(vec![
-            Token::new_debug(Num(9)),
-            Token::new_debug(Plus),
-            Token::new_debug(Num(1)),
-            Token::new_debug(Slash),
-            Token::new_debug(Num(4)),
-            Token::new_debug(EndOfFile),
+        let lexer = Lexer::new_from_tokenkind(vec![
+            Num(9),
+            Plus,
+            Num(1),
+            Slash,
+            Num(4),
+            Semicolon,
+            EndOfFile,
         ]);
         let mut parser = Parser::new(&lexer);
-        let res = parser.parse();
-        assert_eq!(
-            res,
-            Binary(
-                Box::new(Number(9)),
-                Token::new_debug(Plus),
-                Box::new(Binary(
-                    Box::new(Number(1)),
-                    Token::new_debug(Slash),
-                    Box::new(Number(4))
-                ))
-            )
-        );
+        if let StatementDecl(ExpressionStmt(expr)) = parser.parse() {
+            assert_eq!(
+                expr,
+                Binary(
+                    Box::new(Number(9)),
+                    Token::new_debug(Plus),
+                    Box::new(Binary(
+                        Box::new(Number(1)),
+                        Token::new_debug(Slash),
+                        Box::new(Number(4))
+                    ))
+                )
+            );
+        } else {
+            panic!();
+        }
     }
 
     #[test]
     fn test_unary() {
         // Test "!!false"
-        let lexer = Lexer::new_from_tokens(vec![
-            Token::new_debug(Bang),
-            Token::new_debug(Bang),
-            Token::new_debug(False_),
-            Token::new_debug(EndOfFile),
-        ]);
+        let lexer = Lexer::new_from_tokenkind(vec![Bang, Bang, FalseToken, Semicolon, EndOfFile]);
         let mut parser = Parser::new(&lexer);
-        let res = parser.parse();
-        assert_eq!(
-            res,
-            Unary(
-                Token::new_debug(Bang),
-                Box::new(Unary(Token::new_debug(Bang), Box::new(False)))
-            )
-        );
+        if let StatementDecl(ExpressionStmt(expr)) = parser.parse() {
+            assert_eq!(
+                expr,
+                Unary(
+                    Token::new_debug(Bang),
+                    Box::new(Unary(Token::new_debug(Bang), Box::new(False)))
+                )
+            );
+        } else {
+            panic!();
+        }
     }
 
 }
