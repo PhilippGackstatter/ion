@@ -8,8 +8,9 @@ pub struct Lexer {
 
 impl Lexer {
     pub fn new1() -> Self {
-        // 8 + 3 * 4 - 10 / 2;
+        // print 8 + 3 * 4 - 10 / 2;
         let tokens = vec![
+            PrintToken,
             Num(8),
             Plus,
             Num(3),

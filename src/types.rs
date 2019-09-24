@@ -13,6 +13,7 @@ pub enum Bytecode {
     OpEqual,
     OpNegate,
     OpConstant,
+    OpPrint,
     OpReturn,
 }
 
@@ -169,6 +170,7 @@ fn byte_to_opcode(bytes: &mut std::slice::Iter<u8>, constants: &[Value]) -> Opti
             Bytecode::OpEqual => format!("{:?}", byte),
             Bytecode::OpNegate => format!("{:?}", byte),
             Bytecode::OpReturn => format!("{:?}", byte),
+            Bytecode::OpPrint => format!("{:?}", byte),
             Bytecode::OpConstant => {
                 let b1 = bytes.next().unwrap();
                 let b2 = bytes.next().unwrap();

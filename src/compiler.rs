@@ -1,6 +1,8 @@
 use crate::types::{
     Bytecode, Chunk,
+    Declaration::{self, *},
     Expression::{self, *},
+    Statement::{self, *},
     Token,
     TokenKind::*,
     Value,
@@ -22,15 +24,38 @@ impl Compiler {
         &self.chunk
     }
 
-    pub fn compile_(&mut self, expr: &Expression) {
+    pub fn compile(&mut self, decl: &Declaration) {
+        self.compile_decl(decl);
+    }
+
+    fn compile_decl(&mut self, decl: &Declaration) {
+        match decl {
+            StatementDecl(stmt) => self.compile_stmt(stmt),
+        }
+    }
+
+    fn compile_stmt(&mut self, stmt: &Statement) {
+        match stmt {
+            ExpressionStmt(expr) => self.compile_expr(expr),
+            If(cond, then_stmt, else_stmt_opt) => {
+                unimplemented!();
+            }
+            Print(expr) => {
+                self.compile_expr(expr);
+                self.emit_op_byte(Bytecode::OpPrint);
+            }
+        }
+    }
+
+    fn compile_expr(&mut self, expr: &Expression) {
         match expr {
             Binary(lexpr, op, rexpr) => {
-                self.compile_(lexpr);
-                self.compile_(rexpr);
+                self.compile_expr(lexpr);
+                self.compile_expr(rexpr);
                 self.binary_op(op);
             }
             Unary(op, rexpr) => {
-                self.compile_(rexpr);
+                self.compile_expr(rexpr);
                 self.unary_op(op);
             }
             Number(num) => {
@@ -43,7 +68,7 @@ impl Compiler {
         }
     }
 
-    pub fn binary_op(&mut self, token: &Token) {
+    fn binary_op(&mut self, token: &Token) {
         match token.kind {
             Star => self.emit_op_byte(Bytecode::OpMul),
             Slash => self.emit_op_byte(Bytecode::OpDiv),
@@ -53,7 +78,7 @@ impl Compiler {
         }
     }
 
-    pub fn unary_op(&mut self, token: &Token) {
+    fn unary_op(&mut self, token: &Token) {
         match token.kind {
             Bang => self.emit_op_byte(Bytecode::OpNot),
             Negate => self.emit_op_byte(Bytecode::OpNegate),
@@ -61,15 +86,15 @@ impl Compiler {
         }
     }
 
-    pub fn emit_op_byte(&mut self, byte: Bytecode) {
+    fn emit_op_byte(&mut self, byte: Bytecode) {
         self.chunk.code.push(byte as u8);
     }
 
-    pub fn emit_byte(&mut self, byte: u8) {
+    fn emit_byte(&mut self, byte: u8) {
         self.chunk.code.push(byte);
     }
 
-    pub fn add_constant(&mut self, constant: Value) -> u16 {
+    fn add_constant(&mut self, constant: Value) -> u16 {
         // TODO: Check u16 overflow?
         self.chunk.constants.push(constant);
         (self.chunk.constants.len() - 1) as u16

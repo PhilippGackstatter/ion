@@ -34,6 +34,10 @@ impl VM {
                     let index = u16::from(b1) << 8 | u16::from(b2);
                     self.push(chunk.constants[index as usize]);
                 }
+                OpPrint => {
+                    let arg = self.pop();
+                    println!("{}", arg);
+                }
                 OpAdd => {
                     let second = self.pop();
                     let first = self.pop();

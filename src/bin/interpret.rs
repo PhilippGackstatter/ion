@@ -7,13 +7,13 @@ use ion::util::pretty_print;
 use ion::vm::VM;
 
 fn main() {
-    let lexer = Lexer::new();
+    let lexer = Lexer::new1();
     let mut parser = Parser::new(&lexer);
-    let expr = parser.parse();
-    println!("{}", expr);
-    pretty_print(&expr);
+    let decl = parser.parse();
+    println!("{:?}", decl);
+    pretty_print(&decl);
     let mut compiler = Compiler::new();
-    compiler.compile_(&expr);
+    compiler.compile(&decl);
     println!("{}", compiler.chunk());
     let mut vm = VM::new();
     vm.interpet(compiler.chunk());
