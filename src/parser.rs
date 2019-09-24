@@ -25,13 +25,34 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    // Declarations
+
     fn declaration(&mut self) -> DeclarationResult {
-        Ok(StatementDecl(self.statement()?))
+        match self.peek().kind {
+            VarToken => self.variable_declaration(),
+            _ => Ok(StatementDecl(self.statement()?)),
+        }
     }
 
-    fn expression(&mut self) -> ExpressionResult {
-        self.equality()
+    fn variable_declaration(&mut self) -> DeclarationResult {
+        // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
+        self.advance();
+        let id = if let IdToken(id_) = &self.advance().kind {
+            Ok(id_.clone())
+        } else {
+            Err(self.error(
+                self.peek().clone(),
+                "Expected an identifier after variable declaration.",
+            ))
+        }?;
+
+        self.consume(Equal, "Expected '=' after variable declaration.")?;
+        let expr = self.expression()?;
+        self.consume(Semicolon, "Expected ';' after expression.")?;
+        Ok(VarDecl(id.clone(), expr))
     }
+
+    // Statements
 
     fn statement(&mut self) -> StatementResult {
         match self.peek().kind {
@@ -58,7 +79,6 @@ impl<'a> Parser<'a> {
         self.advance();
         self.consume(LeftParen, "Expected '(' after if.")?;
         let condition_expr = self.expression()?;
-        println!("{:?}", condition_expr);
         self.consume(RightParen, "Expected ')' after condition.")?;
         let if_stmt = self.statement()?;
 
@@ -69,6 +89,10 @@ impl<'a> Parser<'a> {
         };
 
         Ok(If(condition_expr, Box::new(if_stmt), else_branch))
+    }
+
+    fn expression(&mut self) -> ExpressionResult {
+        self.equality()
     }
 
     fn equality(&mut self) -> ExpressionResult {

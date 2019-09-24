@@ -1,6 +1,8 @@
 use crate::types::{
     Bytecode::{self, *},
-    Chunk, Value,
+    Chunk, Token,
+    TokenKind::{self, *},
+    Value,
 };
 
 #[derive(Debug, Default)]
@@ -27,38 +29,27 @@ impl VM {
             println!("{:?}", byte);
             match byte {
                 OpConstant => {
-                    i += 1;
-                    let b1 = code[i];
-                    i += 1;
-                    let b2 = code[i];
-                    let index = u16::from(b1) << 8 | u16::from(b2);
-                    self.push(chunk.constants[index as usize]);
+                    let index = self.read_u16(chunk, &mut i);
+                    self.push(chunk.constants[index as usize].clone());
+                }
+                OpJumpIfFalse => {
+                    let index = self.read_u16(chunk, &mut i);
+                    if self.pop() == Value::Bool(false) {
+                        i = index as usize - 1;
+                    }
+                }
+                OpJump => {
+                    let index = self.read_u16(chunk, &mut i);
+                    i = index as usize - 1;
                 }
                 OpPrint => {
                     let arg = self.pop();
                     println!("{}", arg);
                 }
-                OpAdd => {
-                    let second = self.pop();
-                    let first = self.pop();
-                    self.push(first + second);
+                OpAdd | OpMul | OpSub | OpDiv | OpGreater => {
+                    self.apply_binary_op(byte);
                 }
-                OpMul => {
-                    let second = self.pop();
-                    let first = self.pop();
-                    self.push(first * second);
-                }
-                OpSub => {
-                    let second = self.pop();
-                    let first = self.pop();
-                    self.push(first - second);
-                }
-                OpDiv => {
-                    let second = self.pop();
-                    let first = self.pop();
-                    self.push(first / second);
-                }
-                _ => (),
+                _ => panic!("Unkown opcode {}", byte as u8),
             }
 
             i += 1;
@@ -74,11 +65,62 @@ impl VM {
         self.stack.pop().unwrap()
     }
 
+    fn apply_binary_op(&mut self, byte: Bytecode) {
+        let second = self.pop();
+        let first = self.pop();
+        if let Value::Int(i1) = first {
+            if let Value::Int(i2) = second {
+                match byte {
+                    OpAdd => {
+                        self.push(Value::Int(i1 + i2));
+                    }
+                    OpMul => {
+                        self.push(Value::Int(i1 * i2));
+                    }
+                    OpSub => {
+                        self.push(Value::Int(i1 - i2));
+                    }
+                    OpDiv => {
+                        self.push(Value::Int(i1 / i2));
+                    }
+                    OpGreater => {
+                        self.push(Value::Bool(i1 > i2));
+                    }
+                    _ => unimplemented!(),
+                }
+            } else {
+                panic!("Operands must be of same type");
+            }
+        } else if let Value::Bool(b1) = first {
+            if let Value::Bool(b2) = second {
+                match byte {
+                    _ => unimplemented!(),
+                }
+            } else {
+                panic!("Operands must be of same type");
+            }
+        } else {
+            unimplemented!();
+        }
+    }
+
+    fn read_u16(&self, chunk: &Chunk, i: &mut usize) -> u16 {
+        *i += 1;
+        let b1 = chunk.code[*i];
+        *i += 1;
+        let b2 = chunk.code[*i];
+        u16::from(b1) << 8 | u16::from(b2)
+    }
+
     // Debug Helper
 
     fn debug_stack(&self) {
-        for elem in self.stack.iter() {
-            print!("[{}] ", elem);
+        if !self.stack.is_empty() {
+            for elem in self.stack.iter() {
+                print!("[{}] ", elem);
+            }
+        } else {
+            print!("[ ]");
         }
         println!();
     }

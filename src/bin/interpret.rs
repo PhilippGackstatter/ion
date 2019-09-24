@@ -7,10 +7,10 @@ use ion::util::pretty_print;
 use ion::vm::VM;
 
 fn main() {
-    let lexer = Lexer::new1();
+    let lexer = Lexer::new2();
     let mut parser = Parser::new(&lexer);
     let decl = parser.parse();
-    println!("{:?}", decl);
+    // println!("{:?}", decl);
     pretty_print(&decl);
     let mut compiler = Compiler::new();
     compiler.compile(&decl);

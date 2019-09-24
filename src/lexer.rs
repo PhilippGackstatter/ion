@@ -21,6 +21,9 @@ impl Lexer {
             Slash,
             Num(2),
             Semicolon,
+            PrintToken,
+            Num(55),
+            Semicolon,
             EndOfFile,
         ];
         Lexer::new_from_tokenkind(tokens)
@@ -31,7 +34,7 @@ impl Lexer {
         let tokens = vec![
             IfToken,
             LeftParen,
-            Num(6),
+            Num(1),
             Greater,
             Num(2),
             RightParen,
@@ -41,6 +44,19 @@ impl Lexer {
             ElseToken,
             PrintToken,
             Num(9),
+            Semicolon,
+            EndOfFile,
+        ];
+        Lexer::new_from_tokenkind(tokens)
+    }
+
+    pub fn new3() -> Self {
+        // var x = 5;
+        let tokens = vec![
+            VarToken,
+            IdToken("x".to_owned()),
+            Equal,
+            Num(5),
             Semicolon,
             EndOfFile,
         ];

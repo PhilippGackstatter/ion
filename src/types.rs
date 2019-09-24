@@ -1,6 +1,17 @@
 use std::fmt;
 
-pub type Value = i32;
+#[derive(Debug, PartialEq, Clone)]
+pub enum Value {
+    Bool(bool),
+    Int(i32),
+    Double(f32),
+    Obj(Box<Object>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Object {
+    StringObj(String),
+}
 
 #[derive(Debug)]
 #[repr(u8)]
@@ -12,7 +23,10 @@ pub enum Bytecode {
     OpNot,
     OpEqual,
     OpNegate,
+    OpGreater,
     OpConstant,
+    OpJump,
+    OpJumpIfFalse,
     OpPrint,
     OpReturn,
 }
@@ -78,11 +92,14 @@ pub enum TokenKind {
     Minus,
     Star,
     Slash,
+    Equal,
     Num(i32),
     String_(String),
     TrueToken,
     FalseToken,
     For,
+    VarToken,
+    IdToken(String),
     PrintToken,
     IfToken,
     ElseToken,
@@ -92,6 +109,7 @@ pub enum TokenKind {
 #[derive(Debug, PartialEq)]
 pub enum Declaration {
     StatementDecl(Statement),
+    VarDecl(String, Expression),
 }
 
 #[derive(Debug, PartialEq)]
@@ -110,6 +128,25 @@ pub enum Expression {
     Str(String),
     False,
     True,
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Int(int) => write!(f, "{}", int),
+            Value::Double(float) => write!(f, "{}", float),
+            Value::Obj(obj) => write!(f, "{}", obj),
+        }
+    }
+}
+
+impl fmt::Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Object::StringObj(str_) => write!(f, "{}", str_),
+        }
+    }
 }
 
 use Expression::*;
@@ -144,22 +181,25 @@ impl fmt::Display for Chunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "\nChunk")?;
         writeln!(f, "=====")?;
-        writeln!(f, "\nConstants")?;
-        for (i, con) in self.constants.iter().enumerate() {
-            writeln!(f, "{} -> {}", i, con)?;
-        }
+        // writeln!(f, "\nConstants")?;
+        // for (i, con) in self.constants.iter().enumerate() {
+        //     writeln!(f, "{} -> {}", i, con)?;
+        // }
 
-        writeln!(f, "\nBytecode")?;
-        let mut iter = self.code.iter();
-        while let Some(str_) = byte_to_opcode(&mut iter, &self.constants) {
-            writeln!(f, "{}", str_)?;
+        // writeln!(f, "\nBytecode")?;
+        let mut iter = self.code.iter().enumerate();
+        while let Some((i, str_)) = byte_to_opcode(&mut iter, &self.constants) {
+            writeln!(f, "{} {}", i, str_)?;
         }
         Ok(())
     }
 }
 
-fn byte_to_opcode(bytes: &mut std::slice::Iter<u8>, constants: &[Value]) -> Option<String> {
-    if let Some(byte_) = bytes.next() {
+fn byte_to_opcode(
+    bytes: &mut std::iter::Enumerate<std::slice::Iter<u8>>,
+    constants: &[Value],
+) -> Option<(usize, String)> {
+    if let Some((index, byte_)) = bytes.next() {
         let byte = unsafe { std::mem::transmute::<u8, Bytecode>(*byte_) };
         let res = match byte {
             Bytecode::OpMul => format!("{:?}", byte),
@@ -170,16 +210,29 @@ fn byte_to_opcode(bytes: &mut std::slice::Iter<u8>, constants: &[Value]) -> Opti
             Bytecode::OpEqual => format!("{:?}", byte),
             Bytecode::OpNegate => format!("{:?}", byte),
             Bytecode::OpReturn => format!("{:?}", byte),
+            Bytecode::OpGreater => format!("{:?}", byte),
             Bytecode::OpPrint => format!("{:?}", byte),
             Bytecode::OpConstant => {
-                let b1 = bytes.next().unwrap();
-                let b2 = bytes.next().unwrap();
-                let index = u16::from(*b1) << 8 | u16::from(*b2);
-                format!("{:?} {}", byte, constants[index as usize])
+                let index = read_u16(bytes);
+                format!("{:?} {:?}", byte, constants[index as usize])
+            }
+            Bytecode::OpJumpIfFalse => {
+                let index = read_u16(bytes);
+                format!("{:?} -> {}", byte, index)
+            }
+            Bytecode::OpJump => {
+                let index = read_u16(bytes);
+                format!("{:?} -> {}", byte, index)
             }
         };
-        Some(res)
+        Some((index, res))
     } else {
         None
     }
+}
+
+fn read_u16(bytes: &mut std::iter::Enumerate<std::slice::Iter<u8>>) -> u16 {
+    let (_, b1) = bytes.next().unwrap();
+    let (_, b2) = bytes.next().unwrap();
+    u16::from(*b1) << 8 | u16::from(*b2)
 }

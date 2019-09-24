@@ -21,9 +21,15 @@ fn pr(level: u32, is_child: bool, arg: &str) {
     }
 }
 
-fn pretty_print_decl(level: u32, is_child: bool, decl: &Declaration) {
+fn pretty_print_decl(mut level: u32, is_child: bool, decl: &Declaration) {
     match decl {
         StatementDecl(stmt) => pretty_print_stmt(level, is_child, stmt),
+        VarDecl(id, expr) => {
+            pr(level, is_child, "var");
+            level += 2;
+            pr(level, true, &format!("{}", id));
+            pretty_print_expr(level, true, expr);
+        }
     }
 }
 
