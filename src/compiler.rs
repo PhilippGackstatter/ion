@@ -2,7 +2,7 @@ use crate::types::{
     Bytecode, Chunk,
     Declaration::{self, *},
     Expression::{self, *},
-    Object,
+    Object, Program,
     Statement::{self, *},
     Token,
     TokenKind::*,
@@ -25,8 +25,11 @@ impl Compiler {
         &self.chunk
     }
 
-    pub fn compile(&mut self, decl: &Declaration) {
-        self.compile_decl(decl);
+    #[allow(clippy::ptr_arg)]
+    pub fn compile(&mut self, prog: &Program) {
+        for decl in prog.iter() {
+            self.compile_decl(decl);
+        }
         self.emit_op_byte(Bytecode::OpReturn);
     }
 

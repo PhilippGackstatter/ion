@@ -6,12 +6,12 @@ use ion::parser::Parser;
 use ion::util::pretty_print;
 
 fn main() {
-    let lexer = Lexer::new2();
+    let lexer = Lexer::new3();
     let mut parser = Parser::new(&lexer);
-    let decl = parser.parse();
-    println!("{:?}", decl);
-    pretty_print(&decl);
-    // let mut compiler = Compiler::new();
-    // compiler.compile_(&decl);
-    // println!("{}", compiler.chunk());
+    let prog = parser.parse();
+    println!("{:?}", prog);
+    pretty_print(&prog);
+    let mut compiler = Compiler::new();
+    compiler.compile(&prog);
+    println!("{}", compiler.chunk());
 }

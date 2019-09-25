@@ -1,13 +1,16 @@
 use crate::types::{
     Declaration::{self, *},
     Expression::{self, *},
+    Program,
     Statement::{self, *},
 };
 
-pub fn pretty_print(decl: &Declaration) {
+pub fn pretty_print(prog: &Program) {
     println!("\nAbstract Syntax Tree");
     println!("====================");
-    pretty_print_decl(0, false, decl);
+    for decl in prog.iter() {
+        pretty_print_decl(0, false, decl);
+    }
 }
 
 fn pr(level: u32, is_child: bool, arg: &str) {

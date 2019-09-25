@@ -59,9 +59,9 @@ impl Lexer {
             Equal,
             Num(5),
             Semicolon,
-            // PrintToken,
-            // IdToken("x".to_owned()),
-            // Semicolon,
+            PrintToken,
+            IdToken("x".to_owned()),
+            Semicolon,
             EndOfFile,
         ];
         Lexer::new_from_tokenkind(tokens)

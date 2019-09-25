@@ -4,6 +4,7 @@ use crate::types::TokenKind::{self, *};
 use crate::types::{
     Declaration::{self, *},
     Expression::{self, *},
+    Program,
     Statement::{self, *},
 };
 
@@ -18,6 +19,7 @@ struct ParserError {
 type StatementResult = Result<Statement, ParserError>;
 type ExpressionResult = Result<Expression, ParserError>;
 type DeclarationResult = Result<Declaration, ParserError>;
+type ProgramResult = Result<Program, ParserError>;
 
 pub struct Parser<'a> {
     lexer: &'a Lexer,
@@ -25,6 +27,19 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    pub fn parse(&mut self) -> Program {
+        self.program()
+            .unwrap_or_else(|err| panic!("ParserError {:?}", err))
+    }
+
+    fn program(&mut self) -> ProgramResult {
+        let mut prog = Vec::new();
+        while !self.is_at_end() {
+            prog.push(self.declaration()?);
+        }
+        Ok(prog)
+    }
+
     // Declarations
 
     fn declaration(&mut self) -> DeclarationResult {
@@ -266,11 +281,6 @@ impl<'a> Parser<'a> {
     pub fn new(lexer: &'a Lexer) -> Self {
         Parser { lexer, current: 0 }
     }
-
-    pub fn parse(&mut self) -> Declaration {
-        self.declaration()
-            .unwrap_or_else(|err| panic!("ParserError {:?}", err))
-    }
 }
 
 #[cfg(test)]
@@ -290,9 +300,9 @@ mod tests {
             EndOfFile,
         ]);
         let mut parser = Parser::new(&lexer);
-        if let StatementDecl(ExpressionStmt(expr)) = parser.parse() {
+        if let StatementDecl(ExpressionStmt(expr)) = &parser.parse()[0] {
             assert_eq!(
-                expr,
+                *expr,
                 Binary(
                     Box::new(Number(9)),
                     Token::new_debug(Plus),
@@ -313,9 +323,9 @@ mod tests {
         // Test "!!false"
         let lexer = Lexer::new_from_tokenkind(vec![Bang, Bang, FalseToken, Semicolon, EndOfFile]);
         let mut parser = Parser::new(&lexer);
-        if let StatementDecl(ExpressionStmt(expr)) = parser.parse() {
+        if let StatementDecl(ExpressionStmt(expr)) = &parser.parse()[0] {
             assert_eq!(
-                expr,
+                *expr,
                 Unary(
                     Token::new_debug(Bang),
                     Box::new(Unary(Token::new_debug(Bang), Box::new(False)))

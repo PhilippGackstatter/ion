@@ -9,11 +9,11 @@ use ion::vm::VM;
 fn main() {
     let lexer = Lexer::new3();
     let mut parser = Parser::new(&lexer);
-    let decl = parser.parse();
+    let prog = parser.parse();
     // println!("{:?}", decl);
-    pretty_print(&decl);
+    pretty_print(&prog);
     let mut compiler = Compiler::new();
-    compiler.compile(&decl);
+    compiler.compile(&prog);
     println!("{}", compiler.chunk());
     let mut vm = VM::new();
     vm.interpet(compiler.chunk());

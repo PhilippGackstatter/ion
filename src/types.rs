@@ -1,5 +1,7 @@
 use std::fmt;
 
+pub type Program = Vec<Declaration>;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Bool(bool),
