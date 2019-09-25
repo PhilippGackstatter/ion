@@ -39,7 +39,7 @@ impl Compiler {
             VarDecl(id, expr) => {
                 self.compile_expr(expr);
                 let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
-                self.emit_op_byte(Bytecode::OpSetGlobal);
+                self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index);
             }
         }
@@ -64,6 +64,15 @@ impl Compiler {
                     self.patch_jump(if_jump);
                 }
             }
+            While(cond, body) => {
+                // The beginning of the condition is our jump target
+                let cond_target = self.chunk.code.len();
+                self.compile_expr(cond);
+                let after_stmt = self.emit_jump(Bytecode::OpJumpIfFalse);
+                self.compile_stmt(body);
+                self.emit_loop(Bytecode::OpLoop, cond_target as u16);
+                self.patch_jump(after_stmt);
+            }
             Print(expr) => {
                 self.compile_expr(expr);
                 self.emit_op_byte(Bytecode::OpPrint);
@@ -82,6 +91,12 @@ impl Compiler {
                 self.compile_expr(rexpr);
                 self.unary_op(op);
             }
+            Assign(id, expr) => {
+                self.compile_expr(expr);
+                let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                self.emit_op_byte(Bytecode::OpSetGlobal);
+                self.emit_u16(index);
+            }
             Number(num) => {
                 let index = self.add_constant(Value::Int(*num));
                 self.emit_op_byte(Bytecode::OpConstant);
@@ -89,10 +104,10 @@ impl Compiler {
             }
             Identifier(id) => {
                 let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
-                self.emit_op_byte(Bytecode::OpConstant);
+                self.emit_op_byte(Bytecode::OpGetGlobal);
                 self.emit_u16(index);
             }
-            _ => (),
+            _ => unimplemented!(),
         }
     }
 
@@ -112,6 +127,9 @@ impl Compiler {
             }
             Greater => {
                 self.emit_op_byte(Bytecode::OpGreater);
+            }
+            Less => {
+                self.emit_op_byte(Bytecode::OpLess);
             }
             _ => unreachable!(),
         }
@@ -151,6 +169,11 @@ impl Compiler {
         self.chunk.code.push(0);
         self.chunk.code.push(0);
         self.chunk.code.len() - 2
+    }
+
+    fn emit_loop(&mut self, jump: Bytecode, target: u16) {
+        self.chunk.code.push(jump as u8);
+        self.emit_u16(target);
     }
 
     /// Emits the given OpCode and returns its index in the bytecode

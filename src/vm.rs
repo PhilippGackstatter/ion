@@ -35,21 +35,24 @@ impl VM {
                     let index = self.read_u16(chunk, &mut i);
                     self.push(chunk.constants[index as usize].clone());
                 }
-                OpSetGlobal => {
+                OpDefineGlobal => {
                     let index = self.read_u16(chunk, &mut i);
                     let assign = self.pop();
                     if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
                         self.globals.insert(str_.clone(), assign);
-                    } else {
-                        panic!("Type mismatch");
+                    }
+                }
+                OpSetGlobal => {
+                    let index = self.read_u16(chunk, &mut i);
+                    let new_val = self.pop();
+                    if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
+                        self.globals.insert(str_.clone(), new_val);
                     }
                 }
                 OpGetGlobal => {
-                    let id = self.pop();
-                    if let Value::Obj(Object::StringObj(str_)) = id {
-                        self.globals.get(&str_);
-                    } else {
-                        panic!("Type mismatch");
+                    let index = self.read_u16(chunk, &mut i);
+                    if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
+                        self.push(self.globals.get(str_).unwrap().clone());
                     }
                 }
                 OpJumpIfFalse => {
@@ -62,16 +65,18 @@ impl VM {
                     let index = self.read_u16(chunk, &mut i);
                     i = index as usize - 1;
                 }
+                OpLoop => {
+                    let index = self.read_u16(chunk, &mut i);
+                    i = index as usize - 1;
+                }
                 OpPrint => {
                     let arg = self.pop();
                     println!("{}", arg);
                 }
-                OpAdd | OpMul | OpSub | OpDiv | OpGreater => {
+                OpAdd | OpMul | OpSub | OpDiv | OpGreater | OpLess => {
                     self.apply_binary_op(byte);
                 }
-                OpReturn => {
-                    println!("{}", self.globals.get("x").unwrap());
-                }
+                OpReturn => {}
                 _ => panic!("Unkown opcode {}", byte as u8),
             }
 
@@ -110,6 +115,9 @@ impl VM {
                     }
                     OpGreater => {
                         self.push(Value::Bool(i1 > i2));
+                    }
+                    OpLess => {
+                        self.push(Value::Bool(i1 < i2));
                     }
                     _ => unimplemented!(),
                 }

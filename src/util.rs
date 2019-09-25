@@ -5,6 +5,7 @@ use crate::types::{
     Statement::{self, *},
 };
 
+#[allow(clippy::ptr_arg)]
 pub fn pretty_print(prog: &Program) {
     println!("\nAbstract Syntax Tree");
     println!("====================");
@@ -30,7 +31,7 @@ fn pretty_print_decl(mut level: u32, is_child: bool, decl: &Declaration) {
         VarDecl(id, expr) => {
             pr(level, is_child, "var");
             level += 2;
-            pr(level, true, &format!("{}", id));
+            pr(level, true, id);
             pretty_print_expr(level, true, expr);
         }
     }
@@ -47,6 +48,12 @@ fn pretty_print_stmt(mut level: u32, is_child: bool, stmt: &Statement) {
             if let Some(else_) = else_stmt {
                 pretty_print_stmt(level, true, else_);
             }
+        }
+        While(cond, body) => {
+            pr(level, is_child, "while");
+            level += 2;
+            pretty_print_expr(level, true, cond);
+            pretty_print_stmt(level, true, body);
         }
         Print(expr) => {
             pr(level, is_child, "print");
@@ -68,6 +75,12 @@ fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
             pr(level, is_child, &format!("{:?}", op.kind));
             level += 2;
             pretty_print_expr(level, true, rexpr);
+        }
+        Assign(id, expr) => {
+            pr(level, is_child, "Assign");
+            level += 2;
+            pr(level, is_child, id);
+            pretty_print_expr(level, true, expr);
         }
         Number(num) => {
             pr(level, is_child, &format!("{}", num));

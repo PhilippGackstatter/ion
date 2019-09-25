@@ -67,6 +67,36 @@ impl Lexer {
         Lexer::new_from_tokenkind(tokens)
     }
 
+    pub fn new4() -> Self {
+        // var i = 0;
+        // while (i < 5) x = x + 1;
+        // print i;
+        let tokens = vec![
+            VarToken,
+            IdToken("i".to_owned()),
+            Equal,
+            Num(0),
+            Semicolon,
+            WhileToken,
+            LeftParen,
+            IdToken("i".to_owned()),
+            Less,
+            Num(5),
+            RightParen,
+            IdToken("i".to_owned()),
+            Equal,
+            IdToken("i".to_owned()),
+            Plus,
+            Num(1),
+            Semicolon,
+            PrintToken,
+            IdToken("i".to_owned()),
+            Semicolon,
+            EndOfFile,
+        ];
+        Lexer::new_from_tokenkind(tokens)
+    }
+
     pub fn new_from_tokens(tokens: Vec<Token>) -> Self {
         Lexer { tokens }
     }

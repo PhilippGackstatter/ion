@@ -73,6 +73,7 @@ impl<'a> Parser<'a> {
         match self.peek().kind {
             PrintToken => self.print_statement(),
             IfToken => self.if_statement(),
+            WhileToken => self.while_statement(),
             _ => self.expression_statement(),
         }
     }
@@ -106,8 +107,36 @@ impl<'a> Parser<'a> {
         Ok(If(condition_expr, Box::new(if_stmt), else_branch))
     }
 
+    fn while_statement(&mut self) -> StatementResult {
+        self.advance();
+        self.consume(LeftParen, "Expected '(' after while.")?;
+        let condition_expr = self.expression()?;
+        self.consume(RightParen, "Expected ')' after condition.")?;
+        let body = self.statement()?;
+
+        Ok(While(condition_expr, Box::new(body)))
+    }
+
+    // Expressions
+
     fn expression(&mut self) -> ExpressionResult {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> ExpressionResult {
+        let left_hand = self.equality();
+
+        if self.match_(Equal) {
+            let equals = self.previous();
+            if let Identifier(id) = left_hand? {
+                let value = self.assignment()?;
+                return Ok(Assign(id, Box::new(value)));
+            } else {
+                return Err(self.error(equals.clone(), "Invalid assignment target."));
+            }
+        }
+
+        left_hand
     }
 
     fn equality(&mut self) -> ExpressionResult {
