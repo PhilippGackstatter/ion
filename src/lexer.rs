@@ -129,14 +129,18 @@ impl Lexer {
 
     fn string(&mut self, chars: &mut Peekable<CharIndices<'_>>) {
         let mut str_lit = String::new();
+        let mut reached_end_of_string = false;
         while let Some((_index, char_)) = chars.next() {
-            if char_ == '\0' {
-                panic!("Premature EOF");
-            } else if char_ != '"' {
+            if char_ != '"' {
                 str_lit.push(char_);
             } else {
+                reached_end_of_string = true;
                 break;
             }
+        }
+
+        if !reached_end_of_string {
+            panic!("Premature EOF");
         }
 
         self.add_token(str_lit.len() as u8, String_(str_lit));
@@ -148,7 +152,9 @@ impl Lexer {
         let mut is_float = false;
         while let Some((_index, char_)) = chars.peek() {
             if char_.is_ascii_digit() || *char_ == '.' {
-                is_float = *char_ == '.';
+                if *char_ == '.' {
+                    is_float = true;
+                }
                 num_str.push(*char_);
                 chars.next();
             } else {
@@ -282,5 +288,55 @@ impl Lexer {
             current: 0,
             keywords: HashMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_var_while_loop() {
+        let input = r#"
+            var i = 0;
+            while (i < 5) i = i + 1;
+            print i;
+        "#
+        .to_owned();
+        let mut lexer = Lexer::new();
+        lexer.lex(input);
+
+        let expected = vec![
+            VarToken,
+            IdToken("i".to_owned()),
+            Equal,
+            Num(0),
+            Semicolon,
+            WhileToken,
+            LeftParen,
+            IdToken("i".to_owned()),
+            Less,
+            Num(5),
+            RightParen,
+            IdToken("i".to_owned()),
+            Equal,
+            IdToken("i".to_owned()),
+            Plus,
+            Num(1),
+            Semicolon,
+            PrintToken,
+            IdToken("i".to_owned()),
+            Semicolon,
+            EndOfFile,
+        ];
+
+        assert_eq!(
+            lexer
+                .tokens
+                .iter()
+                .map(|tk| tk.kind.clone())
+                .collect::<Vec<TokenKind>>(),
+            expected
+        );
     }
 }
