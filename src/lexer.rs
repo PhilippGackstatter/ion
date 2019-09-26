@@ -83,7 +83,9 @@ impl Lexer {
                 }
                 '/' => {
                     if self.match_(&mut chars, '/') {
-                        while self.match_(&mut chars, '\n') {}
+                        while !self.match_(&mut chars, '\n') {
+                            chars.next();
+                        }
                     } else {
                         self.add_token(1, Slash);
                     }
@@ -168,18 +170,23 @@ impl Lexer {
         }
     }
 
+    // Check if the next character matches the given one, and consume if it does
     fn match_(&mut self, chars: &mut Peekable<CharIndices<'_>>, check: char) -> bool {
         if let Some((_, char_)) = chars.peek() {
-            check == *char_
-        } else {
-            false
+            if check == *char_ {
+                chars.next();
+                return true;
+            }
         }
+        false
     }
 
     fn add_token(&mut self, length: u8, kind: TokenKind) {
         self.tokens
             .push(Token::new(self.current as u32, length, kind));
     }
+
+    // Debug
 
     pub fn print_tokens(&self) {
         println!("\nTokens");
@@ -189,105 +196,13 @@ impl Lexer {
         }
     }
 
-    pub fn new1() -> Self {
-        // print 8 + 3 * 4 - 10 / 2;
-        let tokens = vec![
-            PrintToken,
-            Num(8),
-            Plus,
-            Num(3),
-            Star,
-            Num(4),
-            Minus,
-            Num(10),
-            Slash,
-            Num(2),
-            Semicolon,
-            PrintToken,
-            Num(55),
-            Semicolon,
-            EndOfFile,
-        ];
-        Lexer::new_from_tokenkind(tokens)
-    }
-
-    pub fn new2() -> Self {
-        // if (6 > 2) print 5; else print 9;
-        let tokens = vec![
-            IfToken,
-            LeftParen,
-            Num(1),
-            Greater,
-            Num(2),
-            RightParen,
-            PrintToken,
-            Num(5),
-            Semicolon,
-            ElseToken,
-            PrintToken,
-            Num(9),
-            Semicolon,
-            EndOfFile,
-        ];
-        Lexer::new_from_tokenkind(tokens)
-    }
-
-    pub fn new3() -> Self {
-        // var x = 5;
-        // print x;
-        let tokens = vec![
-            VarToken,
-            IdToken("x".to_owned()),
-            Equal,
-            Num(5),
-            Semicolon,
-            PrintToken,
-            IdToken("x".to_owned()),
-            Semicolon,
-            EndOfFile,
-        ];
-        Lexer::new_from_tokenkind(tokens)
-    }
-
-    pub fn new4() -> Self {
-        // var i = 0;
-        // while (i < 5) i = i + 1;
-        // print i;
-        let tokens = vec![
-            VarToken,
-            IdToken("i".to_owned()),
-            Equal,
-            Num(0),
-            Semicolon,
-            WhileToken,
-            LeftParen,
-            IdToken("i".to_owned()),
-            Less,
-            Num(5),
-            RightParen,
-            IdToken("i".to_owned()),
-            Equal,
-            IdToken("i".to_owned()),
-            Plus,
-            Num(1),
-            Semicolon,
-            PrintToken,
-            IdToken("i".to_owned()),
-            Semicolon,
-            EndOfFile,
-        ];
-        Lexer::new_from_tokenkind(tokens)
-    }
-
     pub fn new_from_tokenkind(tokens: Vec<TokenKind>) -> Self {
-        Lexer {
-            tokens: tokens
-                .iter()
-                .map(|tk| Token::new_debug(tk.clone()))
-                .collect(),
-            current: 0,
-            keywords: HashMap::new(),
-        }
+        let mut lex = Lexer::new();
+        lex.tokens = tokens
+            .iter()
+            .map(|tk| Token::new_debug(tk.clone()))
+            .collect();
+        lex
     }
 }
 
@@ -339,4 +254,74 @@ mod tests {
             expected
         );
     }
+
+    #[test]
+    fn test_if_print() {
+        // Comments need a newline
+        let input = "// Just a comment\nif (6 >= 2) print 5; else print 9;".to_owned();
+
+        let mut lexer = Lexer::new();
+        lexer.lex(input);
+
+        let expected = vec![
+            IfToken,
+            LeftParen,
+            Num(6),
+            GreaterEqual,
+            Num(2),
+            RightParen,
+            PrintToken,
+            Num(5),
+            Semicolon,
+            ElseToken,
+            PrintToken,
+            Num(9),
+            Semicolon,
+            EndOfFile,
+        ];
+
+        assert_eq!(
+            lexer
+                .tokens
+                .iter()
+                .map(|tk| tk.kind.clone())
+                .collect::<Vec<TokenKind>>(),
+            expected
+        );
+    }
+
+    #[test]
+    fn test_expression_precedence() {
+        let input = r#"
+            print 8 + 3 * 4 - 10 / 2;
+        "#
+        .to_owned();
+        let mut lexer = Lexer::new();
+        lexer.lex(input);
+
+        let expected = vec![
+            PrintToken,
+            Num(8),
+            Plus,
+            Num(3),
+            Star,
+            Num(4),
+            Minus,
+            Num(10),
+            Slash,
+            Num(2),
+            Semicolon,
+            EndOfFile,
+        ];
+
+        assert_eq!(
+            lexer
+                .tokens
+                .iter()
+                .map(|tk| tk.kind.clone())
+                .collect::<Vec<TokenKind>>(),
+            expected
+        );
+    }
+
 }

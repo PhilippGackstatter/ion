@@ -5,11 +5,7 @@ use std::io::prelude::*;
 
 fn main() {
     // Specify anything as the 1st arg to enable debug mode
-    let debug_enabled = if let Some(_) = env::args().nth(1) {
-        true
-    } else {
-        false
-    };
+    let debug_enabled = env::args().nth(1).is_some();
 
     println!("ion v0.1.0");
     loop {
@@ -20,32 +16,12 @@ fn main() {
         match io::stdin().read_line(&mut input) {
             Ok(_) => {
                 if debug_enabled {
-                    lexme(input);
+                    ion::util::lexit(input);
                 } else {
-                    run(input);
+                    ion::util::run(input);
                 }
             }
             Err(error) => println!("error: {}", error),
         }
     }
-}
-
-fn lexme(program: String) {
-    let mut lexer = ion::lexer::Lexer::new();
-    lexer.lex(program);
-    lexer.print_tokens();
-}
-
-fn run(program: String) {
-    let mut lexer = ion::lexer::Lexer::new();
-    lexer.lex(program);
-    lexer.print_tokens();
-    let mut parser = ion::parser::Parser::new(&lexer);
-    let prog = parser.parse();
-    ion::util::pretty_print(&prog);
-    let mut compiler = ion::compiler::Compiler::new();
-    compiler.compile(&prog);
-    println!("{}", compiler.chunk());
-    let mut vm = ion::vm::VM::new();
-    vm.interpet(compiler.chunk());
 }

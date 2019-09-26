@@ -99,3 +99,23 @@ fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
         }
     }
 }
+
+pub fn lexit(program: String) {
+    let mut lexer = crate::lexer::Lexer::new();
+    lexer.lex(program);
+    lexer.print_tokens();
+}
+
+pub fn run(program: String) {
+    let mut lexer = crate::lexer::Lexer::new();
+    lexer.lex(program);
+    lexer.print_tokens();
+    let mut parser = crate::parser::Parser::new(&lexer);
+    let prog = parser.parse();
+    crate::util::pretty_print(&prog);
+    let mut compiler = crate::compiler::Compiler::new();
+    compiler.compile(&prog);
+    println!("{}", compiler.chunk());
+    let mut vm = crate::vm::VM::new();
+    vm.interpet(compiler.chunk());
+}
