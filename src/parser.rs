@@ -43,6 +43,8 @@ impl<'a> Parser<'a> {
     // Declarations
 
     fn declaration(&mut self) -> DeclarationResult {
+        println!("Peek {:?}", self.peek().kind);
+
         match self.peek().kind {
             VarToken => self.variable_declaration(),
             _ => Ok(StatementDecl(self.statement()?)),
@@ -74,7 +76,28 @@ impl<'a> Parser<'a> {
             PrintToken => self.print_statement(),
             IfToken => self.if_statement(),
             WhileToken => self.while_statement(),
+            LeftBrace => self.block(),
             _ => self.expression_statement(),
+        }
+    }
+
+    fn block(&mut self) -> StatementResult {
+        self.advance();
+        let mut decls = Vec::new();
+        let mut unexpected_eof = false;
+
+        while !self.match_(RightBrace) {
+            if self.is_at_end() {
+                unexpected_eof = true;
+                break;
+            }
+            decls.push(self.declaration()?);
+        }
+
+        if unexpected_eof {
+            Err(self.error(self.previous().clone(), "Unclosed block, missing a '}'."))
+        } else {
+            Ok(Block(Box::new(decls)))
         }
     }
 

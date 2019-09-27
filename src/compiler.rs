@@ -12,12 +12,20 @@ use crate::types::{
 #[derive(Default)]
 pub struct Compiler {
     chunk: Chunk,
+
+    // Local Variables
+    locals: Vec<(Token, u8)>,
+    scope_depth: u8,
+    num_locals: u8,
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
             chunk: Chunk::new(),
+            locals: vec![],
+            scope_depth: 0,
+            num_locals: 0,
         }
     }
 
@@ -77,6 +85,7 @@ impl Compiler {
                 self.compile_expr(expr);
                 self.emit_op_byte(Bytecode::OpPrint);
             }
+            Block(decl) => {}
         }
     }
 

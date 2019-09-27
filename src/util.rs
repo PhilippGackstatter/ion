@@ -60,6 +60,13 @@ fn pretty_print_stmt(mut level: u32, is_child: bool, stmt: &Statement) {
             level += 2;
             pretty_print_expr(level, true, expr);
         }
+        Block(decls) => {
+            pr(level, is_child, "Block");
+            level += 2;
+            for decl in decls.iter() {
+                pretty_print_decl(level, true, decl);
+            }
+        }
     }
 }
 
