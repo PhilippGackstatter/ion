@@ -164,7 +164,7 @@ impl Lexer {
             }
         }
         if is_float {
-            self.add_token(num_str.len() as u8, Double(num_str.parse().unwrap()));
+            self.add_token(num_str.len() as u8, FloatNum(num_str.parse().unwrap()));
         } else {
             self.add_token(num_str.len() as u8, Num(num_str.parse().unwrap()));
         }

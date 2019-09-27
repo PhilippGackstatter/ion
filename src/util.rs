@@ -82,7 +82,10 @@ fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
             pr(level, is_child, id);
             pretty_print_expr(level, true, expr);
         }
-        Number(num) => {
+        Integer(num) => {
+            pr(level, is_child, &format!("{}", num));
+        }
+        Double(num) => {
             pr(level, is_child, &format!("{}", num));
         }
         Str(str_) => {

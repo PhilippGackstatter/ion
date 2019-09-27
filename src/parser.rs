@@ -212,7 +212,12 @@ impl<'a> Parser<'a> {
                 Ok(False)
             }
             Num(int) => {
-                let num = Number(*int);
+                let num = Integer(*int);
+                self.advance();
+                Ok(num)
+            }
+            FloatNum(float) => {
+                let num = Double(*float);
                 self.advance();
                 Ok(num)
             }
@@ -333,12 +338,12 @@ mod tests {
             assert_eq!(
                 *expr,
                 Binary(
-                    Box::new(Number(9)),
+                    Box::new(Integer(9)),
                     Token::new_debug(Plus),
                     Box::new(Binary(
-                        Box::new(Number(1)),
+                        Box::new(Integer(1)),
                         Token::new_debug(Slash),
-                        Box::new(Number(4))
+                        Box::new(Integer(4))
                     ))
                 )
             );

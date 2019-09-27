@@ -10,6 +10,16 @@ pub enum Value {
     Obj(Object),
 }
 
+impl Value {
+    pub fn unwrap_bool(&self) -> bool {
+        if let Value::Bool(b) = self {
+            *b
+        } else {
+            panic!("Expected bool.");
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     StringObj(String),
@@ -27,6 +37,8 @@ pub enum Bytecode {
     OpNegate,
     OpGreater,
     OpLess,
+    OpGreaterEqual,
+    OpLessEqual,
     OpConstant,
     OpDefineGlobal,
     OpSetGlobal,
@@ -105,7 +117,7 @@ pub enum TokenKind {
     Slash,
     Equal,
     Num(i32),
-    Double(f32),
+    FloatNum(f32),
     String_(String),
     TrueToken,
     FalseToken,
@@ -145,7 +157,8 @@ pub enum Expression {
     Binary(Box<Expression>, Token, Box<Expression>),
     Assign(String, Box<Expression>),
     Unary(Token, Box<Expression>),
-    Number(i32),
+    Integer(i32),
+    Double(f32),
     Str(String),
     Identifier(String),
     False,
@@ -170,36 +183,6 @@ impl fmt::Display for Object {
         }
     }
 }
-
-use Expression::*;
-
-// impl fmt::Display for TokenKind {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         let symbol = match self {
-//             TokenKind::Star => "*",
-//             TokenKind::Slash => "/",
-//             TokenKind::Plus => "+",
-//             TokenKind::Minus => "-",
-//             _ => "",
-//         };
-//         write!(f, "{}", symbol)
-//     }
-// }
-
-// impl fmt::Display for Expression {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Binary(rexpr, token, lexpr) => write!(f, "{} {} {}", *rexpr, token.kind, *lexpr),
-//             Unary(token, lexpr) => write!(f, "{} {}", token.kind, *lexpr),
-//             Number(int) => write!(f, "{}", int),
-//             Assign(str_, expr) => write!(f, "{} {}", str_, expr),
-//             Str(str_) => write!(f, r#""{}""#, str_),
-//             Identifier(str_) => write!(f, "{}", str_),
-//             False => write!(f, "false"),
-//             True => write!(f, "true"),
-//         }
-//     }
-// }
 
 impl fmt::Display for Chunk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -236,6 +219,8 @@ fn byte_to_opcode(
             Bytecode::OpReturn => format!("{:?}", byte),
             Bytecode::OpGreater => format!("{:?}", byte),
             Bytecode::OpLess => format!("{:?}", byte),
+            Bytecode::OpGreaterEqual => format!("{:?}", byte),
+            Bytecode::OpLessEqual => format!("{:?}", byte),
             Bytecode::OpPrint => format!("{:?}", byte),
             Bytecode::OpConstant => {
                 let index = read_u16(bytes);

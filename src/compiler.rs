@@ -97,8 +97,28 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpSetGlobal);
                 self.emit_u16(index);
             }
-            Number(num) => {
+            Integer(num) => {
                 let index = self.add_constant(Value::Int(*num));
+                self.emit_op_byte(Bytecode::OpConstant);
+                self.emit_u16(index);
+            }
+            Double(num) => {
+                let index = self.add_constant(Value::Double(*num));
+                self.emit_op_byte(Bytecode::OpConstant);
+                self.emit_u16(index);
+            }
+            Str(str_) => {
+                let index = self.add_constant(Value::Obj(Object::StringObj(str_.clone())));
+                self.emit_op_byte(Bytecode::OpConstant);
+                self.emit_u16(index);
+            }
+            True => {
+                let index = self.add_constant(Value::Bool(true));
+                self.emit_op_byte(Bytecode::OpConstant);
+                self.emit_u16(index);
+            }
+            False => {
+                let index = self.add_constant(Value::Bool(false));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
@@ -130,6 +150,22 @@ impl Compiler {
             }
             Less => {
                 self.emit_op_byte(Bytecode::OpLess);
+            }
+            GreaterEqual => {
+                self.emit_op_byte(Bytecode::OpGreaterEqual);
+            }
+            LessEqual => {
+                self.emit_op_byte(Bytecode::OpLessEqual);
+            }
+            Bang => {
+                self.emit_op_byte(Bytecode::OpNot);
+            }
+            EqualEqual => {
+                self.emit_op_byte(Bytecode::OpEqual);
+            }
+            BangEqual => {
+                self.emit_op_byte(Bytecode::OpEqual);
+                self.emit_op_byte(Bytecode::OpNot);
             }
             _ => unreachable!(),
         }

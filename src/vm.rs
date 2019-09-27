@@ -73,8 +73,12 @@ impl VM {
                     let arg = self.pop();
                     println!("{}", arg);
                 }
-                OpAdd | OpMul | OpSub | OpDiv | OpGreater | OpLess => {
-                    self.apply_binary_op(byte);
+                OpAdd | OpMul | OpSub | OpDiv | OpGreater | OpLess | OpGreaterEqual
+                | OpLessEqual => {
+                    self.apply_number_op(byte);
+                }
+                OpNot | OpEqual => {
+                    self.apply_bool_op(byte);
                 }
                 OpReturn => {}
                 _ => panic!("Unkown opcode {}", byte as u8),
@@ -95,7 +99,7 @@ impl VM {
             .unwrap_or_else(|| panic!("Nothing on the stack."))
     }
 
-    fn apply_binary_op(&mut self, byte: Bytecode) {
+    fn apply_number_op(&mut self, byte: Bytecode) {
         let second = self.pop();
         let first = self.pop();
         if let Value::Int(i1) = first {
@@ -116,17 +120,15 @@ impl VM {
                     OpGreater => {
                         self.push(Value::Bool(i1 > i2));
                     }
+                    OpGreaterEqual => {
+                        self.push(Value::Bool(i1 >= i2));
+                    }
                     OpLess => {
                         self.push(Value::Bool(i1 < i2));
                     }
-                    _ => unimplemented!(),
-                }
-            } else {
-                panic!("Operands must be of same type");
-            }
-        } else if let Value::Bool(b1) = first {
-            if let Value::Bool(b2) = second {
-                match byte {
+                    OpLessEqual => {
+                        self.push(Value::Bool(i1 <= i2));
+                    }
                     _ => unimplemented!(),
                 }
             } else {
@@ -134,6 +136,20 @@ impl VM {
             }
         } else {
             unimplemented!();
+        }
+    }
+
+    fn apply_bool_op(&mut self, byte: Bytecode) {
+        match byte {
+            OpEqual => {
+                let res = self.pop().unwrap_bool() == self.pop().unwrap_bool();
+                self.push(Value::Bool(res));
+            }
+            OpNot => {
+                let res = !self.pop().unwrap_bool();
+                self.push(Value::Bool(res));
+            }
+            _ => unimplemented!(),
         }
     }
 
