@@ -112,20 +112,76 @@ fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
 
 pub fn lexit(program: String) {
     let mut lexer = crate::lexer::Lexer::new();
-    lexer.lex(program);
+    lexer.lex(&program);
     lexer.print_tokens();
 }
 
 pub fn run(program: String) {
     let mut lexer = crate::lexer::Lexer::new();
-    lexer.lex(program);
+    lexer.lex(&program);
     lexer.print_tokens();
     let mut parser = crate::parser::Parser::new(&lexer);
-    let prog = parser.parse();
-    crate::util::pretty_print(&prog);
-    let mut compiler = crate::compiler::Compiler::new();
-    compiler.compile(&prog);
-    println!("{}", compiler.chunk());
-    let mut vm = crate::vm::VM::new();
-    vm.interpet(compiler.chunk());
+    match parser.parse() {
+        Ok(prog) => {
+            crate::util::pretty_print(&prog);
+            let mut compiler = crate::compiler::Compiler::new();
+            compiler.compile(&prog);
+            println!("{}", compiler.chunk());
+            let mut vm = crate::vm::VM::new();
+            vm.interpet(compiler.chunk());
+        }
+        Err(parser_err) => {
+            print_error(&program, parser_err.token, parser_err.message);
+        }
+    }
+}
+
+fn print_error(prog: &str, tk: crate::types::Token, msg: &str) {
+
+    let mut newline_before_token = 0;
+    // Initialized to prog len in case of last line
+    let mut newline_after_token = prog.len();
+    let mut line_count = 1;
+
+    let mut break_on_next_newline = false;
+    for (i, ch) in prog.bytes().enumerate() {
+        if i >= (tk.offset as usize) {
+            break_on_next_newline = true;
+        }
+        if ch == 10 {
+            if break_on_next_newline {
+                newline_after_token = i;
+                break;
+            } else {
+                line_count += 1;
+                newline_before_token = i;
+            }
+        }
+    }
+
+    println!();
+    
+    // Handle beginning of file
+    if newline_before_token != 0 { newline_before_token += 1 };
+
+    let token = prog[newline_before_token..newline_after_token].to_owned();
+
+    let token_start_index = (tk.offset as usize) - newline_before_token;
+    let token_end_index = token_start_index + (tk.length as usize);
+    let line_count_str = format!("{}", line_count);
+
+    println!("{}: {}", line_count_str, token);
+
+    for _ in 0..=(line_count_str.len()+1) {
+        print!(" ");
+    }
+
+    for i in 0..token_end_index {
+        if i >= token_start_index {
+            print!("^");
+        } else {
+            print!(" ");
+        }
+    }
+    println!(" {}", msg);
 }

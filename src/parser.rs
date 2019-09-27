@@ -11,15 +11,14 @@ use crate::types::{
 // TODO: Should be expanded to include the line and column directly,
 // since the parser (and thus the lexer and source code) are no longer accessible
 #[derive(Debug)]
-struct ParserError {
-    token: Token,
-    message: &'static str,
+pub struct ParserError {
+    pub token: Token,
+    pub message: &'static str,
 }
 
 type StatementResult = Result<Statement, ParserError>;
 type ExpressionResult = Result<Expression, ParserError>;
 type DeclarationResult = Result<Declaration, ParserError>;
-type ProgramResult = Result<Program, ParserError>;
 
 pub struct Parser<'a> {
     lexer: &'a Lexer,
@@ -27,12 +26,11 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse(&mut self) -> Program {
+    pub fn parse(&mut self) -> Result<Program, ParserError> {
         self.program()
-            .unwrap_or_else(|err| panic!("ParserError {:?}", err))
     }
 
-    fn program(&mut self) -> ProgramResult {
+    fn program(&mut self) -> Result<Program, ParserError> {
         let mut prog = Vec::new();
         while !self.is_at_end() {
             prog.push(self.declaration()?);
@@ -43,8 +41,6 @@ impl<'a> Parser<'a> {
     // Declarations
 
     fn declaration(&mut self) -> DeclarationResult {
-        println!("Peek {:?}", self.peek().kind);
-
         match self.peek().kind {
             VarToken => self.variable_declaration(),
             _ => Ok(StatementDecl(self.statement()?)),
@@ -357,7 +353,7 @@ mod tests {
             EndOfFile,
         ]);
         let mut parser = Parser::new(&lexer);
-        if let StatementDecl(ExpressionStmt(expr)) = &parser.parse()[0] {
+        if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
             assert_eq!(
                 *expr,
                 Binary(
@@ -380,7 +376,7 @@ mod tests {
         // Test "!!false"
         let lexer = Lexer::new_from_tokenkind(vec![Bang, Bang, FalseToken, Semicolon, EndOfFile]);
         let mut parser = Parser::new(&lexer);
-        if let StatementDecl(ExpressionStmt(expr)) = &parser.parse()[0] {
+        if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
             assert_eq!(
                 *expr,
                 Unary(

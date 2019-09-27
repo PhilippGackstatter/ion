@@ -37,7 +37,7 @@ impl Lexer {
         }
     }
 
-    pub fn lex(&mut self, program: String) {
+    pub fn lex(&mut self, program: &str) {
         let mut chars = program.char_indices().peekable();
 
         while let Some((index, char_)) = chars.next() {
@@ -216,8 +216,7 @@ mod tests {
             var i = 0;
             while (i < 5) i = i + 1;
             print i;
-        "#
-        .to_owned();
+        "#;
         let mut lexer = Lexer::new();
         lexer.lex(input);
 
@@ -258,7 +257,7 @@ mod tests {
     #[test]
     fn test_if_print() {
         // Comments need a newline
-        let input = "// Just a comment\nif (6 >= 2) print 5; else print 9;".to_owned();
+        let input = "// Just a comment\nif (6 >= 2) print 5; else print 9;";
 
         let mut lexer = Lexer::new();
         lexer.lex(input);
@@ -294,8 +293,7 @@ mod tests {
     fn test_expression_precedence() {
         let input = r#"
             print 8 + 3 * 4 - 10 / 2;
-        "#
-        .to_owned();
+        "#;
         let mut lexer = Lexer::new();
         lexer.lex(input);
 
