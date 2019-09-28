@@ -41,8 +41,9 @@ impl<'a> Parser<'a> {
     // Declarations
 
     fn declaration(&mut self) -> DeclarationResult {
-        match self.peek().kind {
+        match &self.peek().kind {
             VarToken => self.variable_declaration(),
+            Fun => self.function_declaration(),
             _ => Ok(StatementDecl(self.statement()?)),
         }
     }
@@ -63,6 +64,47 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         self.consume(Semicolon, "Expected ';' after expression.")?;
         Ok(VarDecl(id.clone(), expr))
+    }
+
+    fn function_declaration(&mut self) -> DeclarationResult {
+        self.advance();
+
+        let id = if let IdToken(id_) = &self.advance().kind {
+            Ok(id_.clone())
+        } else {
+            Err(self.error(
+                self.peek().clone(),
+                "Expected an identifier after function declaration.",
+            ))
+        }?;
+
+        self.consume(LeftParen, "Expected '(' after function name.")?;
+
+        let mut params = Vec::new();
+
+        if self.peek().kind != RightParen {
+            // Consume comma after parameter
+            while let IdToken(name) = &self.peek().kind {
+                params.push(name.clone());
+                self.advance();
+
+                if !self.match_(Comma) && self.peek().kind != RightParen {
+                    return Err(
+                        self.error(self.peek().clone(), "Expected ')' or ',' after parameter.")
+                    );
+                }
+            }
+
+            if params.is_empty() {
+                return Err(self.error(self.peek().clone(), "Expected identifier."));
+            }
+        }
+
+        self.consume(RightParen, "Expected ')' after function parameters.")?;
+
+        let body = self.block()?;
+
+        Ok(FnDecl(id, params, body))
     }
 
     // Statements
@@ -212,10 +254,40 @@ impl<'a> Parser<'a> {
         if self.match_(Bang) || self.match_(Minus) {
             let operator = self.previous().clone();
             let lexpr = self.unary()?;
-            return Ok(Unary(operator, Box::new(lexpr)));
+            Ok(Unary(operator, Box::new(lexpr)))
+        } else {
+            self.call()
+        }
+    }
+
+    fn call(&mut self) -> ExpressionResult {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.match_(LeftParen) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, expr: Expression) -> ExpressionResult {
+        let mut params = Vec::new();
+        while self.peek().kind != RightParen {
+            params.push(self.expression()?);
+
+            if self.peek().kind != Comma {
+                break;
+            } else {
+                self.advance();
+            }
         }
 
-        self.primary()
+        self.consume(RightParen, "Expected ')' to end function call.")?;
+
+        Ok(Call(Box::new(expr), params))
     }
 
     fn primary(&mut self) -> ExpressionResult {

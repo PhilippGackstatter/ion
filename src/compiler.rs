@@ -17,14 +17,14 @@ pub struct CompilerError {
     pub message: &'static str,
 }
 
+#[derive(PartialEq)]
 pub enum FunctionType {
     Script,
     Function,
 }
 
 pub struct Compiler {
-    function: Object,
-    fn_type: FunctionType,
+    chunk: Chunk,
 
     // Local Variables
     locals: Vec<(String, u8)>,
@@ -42,10 +42,13 @@ impl Default for Compiler {
 impl Compiler {
     pub fn new(fn_type: FunctionType) -> Self {
         Compiler {
-            function: Object::FnObj("".into(), Chunk::new(), 0),
-            fn_type,
+            chunk: Chunk::new(),
             locals: vec![],
-            scope_depth: 0,
+            scope_depth: if fn_type == FunctionType::Script {
+                0
+            } else {
+                1
+            },
             num_locals: 0,
         }
     }
@@ -79,6 +82,20 @@ impl Compiler {
                     self.locals.push((id.clone(), self.scope_depth));
                     self.num_locals += 1;
                 }
+            }
+            FnDecl(name, params, stmt) => {
+                let mut fn_compiler = Compiler::new(FunctionType::Function);
+                fn_compiler.compile_stmt(stmt);
+                fn_compiler.emit_op_byte(Bytecode::OpReturn);
+
+                let fn_obj = Object::FnObj(name.clone(), fn_compiler.chunk().clone(), 0);
+                let index = self.add_constant(Value::Obj(fn_obj));
+                self.emit_op_byte(Bytecode::OpConstant);
+                self.emit_u16(index);
+
+                let index_name = self.add_constant(Value::Obj(Object::StringObj(name.clone())));
+                self.emit_op_byte(Bytecode::OpDefineGlobal);
+                self.emit_u16(index_name);
             }
         }
     }
@@ -135,6 +152,10 @@ impl Compiler {
             Unary(op, rexpr) => {
                 self.compile_expr(rexpr);
                 self.unary_op(op);
+            }
+            Call(callee, params) => {
+                self.compile_expr(callee);
+                self.emit_op_byte(Bytecode::OpCall);
             }
             Assign(id, expr) => {
                 self.compile_expr(expr);
@@ -240,11 +261,7 @@ impl Compiler {
     // Helpers
 
     pub fn chunk(&mut self) -> &mut Chunk {
-        if let Object::FnObj(_name, chunk, _arity) = &mut self.function {
-            chunk
-        } else {
-            unreachable!();
-        }
+        &mut self.chunk
     }
 
     /// Patches a jumps placeholder at the given index with the given jump index

@@ -34,6 +34,15 @@ fn pretty_print_decl(mut level: u32, is_child: bool, decl: &Declaration) {
             pr(level, true, id);
             pretty_print_expr(level, true, expr);
         }
+        FnDecl(name, params, stmt) => {
+            pr(
+                level,
+                is_child,
+                &format!("fn {}({})", name, params.join(", ")),
+            );
+            level += 2;
+            pretty_print_stmt(level, true, stmt);
+        }
     }
 }
 
@@ -83,6 +92,14 @@ fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
             level += 2;
             pretty_print_expr(level, true, rexpr);
         }
+        Call(callee, params) => {
+            pr(level, is_child, "call");
+            level += 2;
+            for param in params.iter() {
+                pretty_print_expr(level, true, param);
+            }
+            pretty_print_expr(level, true, callee);
+        }
         Assign(id, expr) => {
             pr(level, is_child, "Assign");
             level += 2;
@@ -126,7 +143,6 @@ pub fn run(program: String) {
             crate::util::pretty_print(&prog);
             let mut compiler: crate::compiler::Compiler = Default::default();
             compiler.compile(&prog);
-            println!("{}", compiler.chunk());
             let mut vm = crate::vm::VM::new();
             vm.interpet(compiler.chunk());
         }

@@ -19,12 +19,14 @@ impl VM {
     }
 
     pub fn interpet(&mut self, chunk: &Chunk) {
+        println!("{}", chunk);
+
         let code = &chunk.code;
         let mut i = 0;
         println!("\nVirtual Machine");
         println!("===============");
 
-        while i < code.len() {
+        loop {
             self.debug_stack();
             let byte = unsafe { std::mem::transmute::<u8, Bytecode>(code[i]) };
             eprintln!("{:?}", byte);
@@ -78,6 +80,13 @@ impl VM {
                     let index = self.read_u16(chunk, &mut i);
                     i = index as usize - 1;
                 }
+                OpCall => {
+                    if let Value::Obj(Object::FnObj(name, chunk, arity)) = self.pop() {
+                        self.interpet(&chunk);
+                    } else {
+                        panic!("Expected function object on the stack.");
+                    }
+                }
                 OpPrint => {
                     let arg = self.pop();
                     println!("{}", arg);
@@ -89,7 +98,9 @@ impl VM {
                 OpNot | OpEqual => {
                     self.apply_bool_op(byte);
                 }
-                OpReturn => {}
+                OpReturn => {
+                    break;
+                }
                 _ => panic!("Unkown opcode {}", byte as u8),
             }
 

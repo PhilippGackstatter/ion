@@ -19,7 +19,7 @@ impl Lexer {
         keywords.insert("else".to_owned(), ElseToken);
         keywords.insert("false".to_owned(), FalseToken);
         keywords.insert("for".to_owned(), For);
-        keywords.insert("fun".to_owned(), Fun);
+        keywords.insert("fn".to_owned(), Fun);
         keywords.insert("if".to_owned(), IfToken);
         keywords.insert("or".to_owned(), Or);
         keywords.insert("print".to_owned(), PrintToken);
@@ -113,7 +113,7 @@ impl Lexer {
         while let Some((_index, char_)) = chars.peek() {
             if *char_ == '\0' {
                 panic!("Premature EOF");
-            } else if char_.is_alphanumeric() {
+            } else if char_.is_alphanumeric() || *char_ == '_' {
                 identifier.push(*char_);
                 chars.next();
             } else {

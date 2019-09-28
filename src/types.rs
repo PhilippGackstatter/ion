@@ -50,6 +50,7 @@ pub enum Bytecode {
     OpJump,
     OpJumpIfFalse,
     OpLoop,
+    OpCall,
     OpPrint,
     OpReturn,
 }
@@ -146,6 +147,7 @@ pub enum TokenKind {
 pub enum Declaration {
     StatementDecl(Statement),
     VarDecl(String, Expression),
+    FnDecl(String, Vec<String>, Statement),
 }
 
 #[derive(Debug, PartialEq)]
@@ -162,6 +164,7 @@ pub enum Expression {
     Binary(Box<Expression>, Token, Box<Expression>),
     Assign(String, Box<Expression>),
     Unary(Token, Box<Expression>),
+    Call(Box<Expression>, Vec<Expression>),
     Integer(i32),
     Double(f32),
     Str(String),
@@ -265,6 +268,7 @@ fn byte_to_opcode(
                 let index = read_u16(bytes);
                 format!("{:?} -> {}", byte, index)
             }
+            Bytecode::OpCall => format!("{:?}", byte),
         };
         Some((index, res))
     } else {
