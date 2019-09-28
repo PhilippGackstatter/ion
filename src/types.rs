@@ -28,6 +28,7 @@ pub enum Object {
 #[derive(Debug)]
 #[repr(u8)]
 pub enum Bytecode {
+    OpPop,
     OpMul,
     OpAdd,
     OpDiv,
@@ -43,6 +44,8 @@ pub enum Bytecode {
     OpDefineGlobal,
     OpSetGlobal,
     OpGetGlobal,
+    OpSetLocal,
+    OpGetLocal,
     OpJump,
     OpJumpIfFalse,
     OpLoop,
@@ -210,6 +213,7 @@ fn byte_to_opcode(
     if let Some((index, byte_)) = bytes.next() {
         let byte = unsafe { std::mem::transmute::<u8, Bytecode>(*byte_) };
         let res = match byte {
+            Bytecode::OpPop => format!("{:?}", byte),
             Bytecode::OpMul => format!("{:?}", byte),
             Bytecode::OpAdd => format!("{:?}", byte),
             Bytecode::OpDiv => format!("{:?}", byte),
@@ -239,6 +243,14 @@ fn byte_to_opcode(
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])
             }
+            Bytecode::OpSetLocal => {
+                let index = read_u8(bytes);
+                format!("{:?} {}", byte, index)
+            }
+            Bytecode::OpGetLocal => {
+                let index = read_u8(bytes);
+                format!("{:?} {}", byte, index)
+            }
             Bytecode::OpJumpIfFalse => {
                 let index = read_u16(bytes);
                 format!("{:?} -> {}", byte, index)
@@ -256,6 +268,11 @@ fn byte_to_opcode(
     } else {
         None
     }
+}
+
+fn read_u8(bytes: &mut std::iter::Enumerate<std::slice::Iter<u8>>) -> u8 {
+    let (_, b1) = bytes.next().unwrap();
+    *b1
 }
 
 fn read_u16(bytes: &mut std::iter::Enumerate<std::slice::Iter<u8>>) -> u16 {

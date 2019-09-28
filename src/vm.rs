@@ -29,8 +29,11 @@ impl VM {
         while i < code.len() {
             self.debug_stack();
             let byte = unsafe { std::mem::transmute::<u8, Bytecode>(code[i]) };
-            println!("{:?}", byte);
+            eprintln!("{:?}", byte);
             match byte {
+                OpPop => {
+                    self.pop();
+                }
                 OpConstant => {
                     let index = self.read_u16(chunk, &mut i);
                     self.push(chunk.constants[index as usize].clone());
@@ -54,6 +57,14 @@ impl VM {
                     if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
                         self.push(self.globals.get(str_).unwrap().clone());
                     }
+                }
+                OpGetLocal => {
+                    let index = self.read_u8(chunk, &mut i);
+                    self.push(self.stack[index as usize].clone());
+                }
+                OpSetLocal => {
+                    let index = self.read_u8(chunk, &mut i) as usize;
+                    self.stack[index] = self.pop();
                 }
                 OpJumpIfFalse => {
                     let index = self.read_u16(chunk, &mut i);
@@ -153,6 +164,11 @@ impl VM {
         }
     }
 
+    fn read_u8(&self, chunk: &Chunk, i: &mut usize) -> u8 {
+        *i += 1;
+        chunk.code[*i]
+    }
+
     fn read_u16(&self, chunk: &Chunk, i: &mut usize) -> u16 {
         *i += 1;
         let b1 = chunk.code[*i];
@@ -166,11 +182,11 @@ impl VM {
     fn debug_stack(&self) {
         if !self.stack.is_empty() {
             for elem in self.stack.iter() {
-                print!("[{}] ", elem);
+                eprint!("[{}] ", elem);
             }
         } else {
-            print!("[ ]");
+            eprint!("[ ]");
         }
-        println!();
+        eprintln!();
     }
 }

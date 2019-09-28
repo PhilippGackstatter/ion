@@ -137,7 +137,6 @@ pub fn run(program: String) {
 }
 
 fn print_error(prog: &str, tk: crate::types::Token, msg: &str) {
-
     let mut newline_before_token = 0;
     // Initialized to prog len in case of last line
     let mut newline_after_token = prog.len();
@@ -160,9 +159,11 @@ fn print_error(prog: &str, tk: crate::types::Token, msg: &str) {
     }
 
     println!();
-    
+
     // Handle beginning of file
-    if newline_before_token != 0 { newline_before_token += 1 };
+    if newline_before_token != 0 {
+        newline_before_token += 1
+    };
 
     let token = prog[newline_before_token..newline_after_token].to_owned();
 
@@ -172,7 +173,7 @@ fn print_error(prog: &str, tk: crate::types::Token, msg: &str) {
 
     println!("{}: {}", line_count_str, token);
 
-    for _ in 0..=(line_count_str.len()+1) {
+    for _ in 0..=(line_count_str.len() + 1) {
         print!(" ");
     }
 

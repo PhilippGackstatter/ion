@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use crate::types::{
     Bytecode, Chunk,
     Declaration::{self, *},
@@ -14,7 +16,7 @@ pub struct Compiler {
     chunk: Chunk,
 
     // Local Variables
-    locals: Vec<(Token, u8)>,
+    locals: Vec<(String, u8)>,
     scope_depth: u8,
     num_locals: u8,
 }
@@ -46,9 +48,22 @@ impl Compiler {
             StatementDecl(stmt) => self.compile_stmt(stmt),
             VarDecl(id, expr) => {
                 self.compile_expr(expr);
-                let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
-                self.emit_op_byte(Bytecode::OpDefineGlobal);
-                self.emit_u16(index);
+
+                if self.scope_depth == 0 {
+                    let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                    self.emit_op_byte(Bytecode::OpDefineGlobal);
+                    self.emit_u16(index);
+                } else {
+                    if self
+                        .locals
+                        .iter()
+                        .any(|elem| elem.1 == self.scope_depth && elem.0 == *id)
+                    {
+                        panic!("This variable is already declared in this scope.");
+                    }
+                    self.locals.push((id.clone(), self.scope_depth));
+                    self.num_locals += 1;
+                }
             }
         }
     }
@@ -85,7 +100,13 @@ impl Compiler {
                 self.compile_expr(expr);
                 self.emit_op_byte(Bytecode::OpPrint);
             }
-            Block(decl) => {}
+            Block(decls) => {
+                self.begin_scope();
+                for decl in decls.iter() {
+                    self.compile_decl(decl);
+                }
+                self.end_scope();
+            }
         }
     }
 
@@ -102,9 +123,14 @@ impl Compiler {
             }
             Assign(id, expr) => {
                 self.compile_expr(expr);
-                let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
-                self.emit_op_byte(Bytecode::OpSetGlobal);
-                self.emit_u16(index);
+                if let Some(index) = self.find_local_variable(&id) {
+                    self.emit_op_byte(Bytecode::OpSetLocal);
+                    self.emit_byte(index);
+                } else {
+                    let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                    self.emit_op_byte(Bytecode::OpSetGlobal);
+                    self.emit_u16(index);
+                }
             }
             Integer(num) => {
                 let index = self.add_constant(Value::Int(*num));
@@ -132,11 +158,15 @@ impl Compiler {
                 self.emit_u16(index);
             }
             Identifier(id) => {
-                let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
-                self.emit_op_byte(Bytecode::OpGetGlobal);
-                self.emit_u16(index);
+                if let Some(index) = self.find_local_variable(&id) {
+                    self.emit_op_byte(Bytecode::OpGetLocal);
+                    self.emit_byte(index);
+                } else {
+                    let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                    self.emit_op_byte(Bytecode::OpGetGlobal);
+                    self.emit_u16(index);
+                }
             }
-            _ => unimplemented!(),
         }
     }
 
@@ -235,5 +265,36 @@ impl Compiler {
         // TODO: Check u16 overflow?
         self.chunk.constants.push(constant);
         (self.chunk.constants.len() - 1) as u16
+    }
+
+    fn find_local_variable(&mut self, id: &str) -> Option<u8> {
+        if let Some(pos) = self.locals.iter().rev().position(|elem| elem.0 == *id) {
+            Some((self.locals.len() - 1 - pos).try_into().unwrap())
+        } else {
+            None
+        }
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        let mut i = self.locals.len();
+
+        while i > 0 {
+            i -= 1;
+
+            // Since we iterate backwards, once we hit a variable
+            // that's not in the current scope, we've popped all
+            // the locals in this scope.
+            if self.locals[i].1 != self.scope_depth {
+                break;
+            }
+            self.emit_op_byte(Bytecode::OpPop);
+            self.locals.pop().unwrap();
+        }
+
+        self.scope_depth -= 1;
     }
 }
