@@ -124,7 +124,7 @@ pub fn run(program: String) {
     match parser.parse() {
         Ok(prog) => {
             crate::util::pretty_print(&prog);
-            let mut compiler = crate::compiler::Compiler::new();
+            let mut compiler: crate::compiler::Compiler = Default::default();
             compiler.compile(&prog);
             println!("{}", compiler.chunk());
             let mut vm = crate::vm::VM::new();

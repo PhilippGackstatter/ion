@@ -11,28 +11,43 @@ use crate::types::{
     Value,
 };
 
-#[derive(Default)]
+#[derive(Debug)]
+pub struct CompilerError {
+    pub token: Token,
+    pub message: &'static str,
+}
+
+pub enum FunctionType {
+    Script,
+    Function,
+}
+
 pub struct Compiler {
-    chunk: Chunk,
+    function: Object,
+    fn_type: FunctionType,
 
     // Local Variables
     locals: Vec<(String, u8)>,
     scope_depth: u8,
     num_locals: u8,
+    // Functions
+}
+
+impl Default for Compiler {
+    fn default() -> Self {
+        Self::new(FunctionType::Script)
+    }
 }
 
 impl Compiler {
-    pub fn new() -> Self {
+    pub fn new(fn_type: FunctionType) -> Self {
         Compiler {
-            chunk: Chunk::new(),
+            function: Object::FnObj("".into(), Chunk::new(), 0),
+            fn_type,
             locals: vec![],
             scope_depth: 0,
             num_locals: 0,
         }
-    }
-
-    pub fn chunk(&self) -> &Chunk {
-        &self.chunk
     }
 
     #[allow(clippy::ptr_arg)]
@@ -89,7 +104,7 @@ impl Compiler {
             }
             While(cond, body) => {
                 // The beginning of the condition is our jump target
-                let cond_target = self.chunk.code.len();
+                let cond_target = self.chunk().code.len();
                 self.compile_expr(cond);
                 let after_stmt = self.emit_jump(Bytecode::OpJumpIfFalse);
                 self.compile_stmt(body);
@@ -224,12 +239,20 @@ impl Compiler {
 
     // Helpers
 
+    pub fn chunk(&mut self) -> &mut Chunk {
+        if let Object::FnObj(_name, chunk, _arity) = &mut self.function {
+            chunk
+        } else {
+            unreachable!();
+        }
+    }
+
     /// Patches a jumps placeholder at the given index with the given jump index
     fn patch_jump(&mut self, placeholder_index: usize) {
         // We want to jump one past the last instruction
-        let jump_index = self.chunk.code.len();
-        self.chunk.code[placeholder_index] = (jump_index >> 8) as u8;
-        self.chunk.code[placeholder_index + 1] = (jump_index & 0xff) as u8;
+        let jump_index = self.chunk().code.len();
+        self.chunk().code[placeholder_index] = (jump_index >> 8) as u8;
+        self.chunk().code[placeholder_index + 1] = (jump_index & 0xff) as u8;
     }
 
     fn emit_u16(&mut self, short: u16) {
@@ -240,31 +263,31 @@ impl Compiler {
     /// Emits the given (jump) OpCode and two u8 placeholders.
     /// Returns the first placeholders index in the bytecode.
     fn emit_jump(&mut self, byte: Bytecode) -> usize {
-        self.chunk.code.push(byte as u8);
-        self.chunk.code.push(0);
-        self.chunk.code.push(0);
-        self.chunk.code.len() - 2
+        self.chunk().code.push(byte as u8);
+        self.chunk().code.push(0);
+        self.chunk().code.push(0);
+        self.chunk().code.len() - 2
     }
 
     fn emit_loop(&mut self, jump: Bytecode, target: u16) {
-        self.chunk.code.push(jump as u8);
+        self.chunk().code.push(jump as u8);
         self.emit_u16(target);
     }
 
     /// Emits the given OpCode and returns its index in the bytecode
     fn emit_op_byte(&mut self, byte: Bytecode) -> usize {
-        self.chunk.code.push(byte as u8);
-        self.chunk.code.len() - 1
+        self.chunk().code.push(byte as u8);
+        self.chunk().code.len() - 1
     }
 
     fn emit_byte(&mut self, byte: u8) {
-        self.chunk.code.push(byte);
+        self.chunk().code.push(byte);
     }
 
     fn add_constant(&mut self, constant: Value) -> u16 {
         // TODO: Check u16 overflow?
-        self.chunk.constants.push(constant);
-        (self.chunk.constants.len() - 1) as u16
+        self.chunk().constants.push(constant);
+        (self.chunk().constants.len() - 1) as u16
     }
 
     fn find_local_variable(&mut self, id: &str) -> Option<u8> {

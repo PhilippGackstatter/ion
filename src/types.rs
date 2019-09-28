@@ -23,6 +23,7 @@ impl Value {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     StringObj(String),
+    FnObj(String, Chunk, u8),
 }
 
 #[derive(Debug)]
@@ -53,7 +54,7 @@ pub enum Bytecode {
     OpReturn,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Chunk {
     pub constants: Vec<Value>,
     pub code: Vec<u8>,
@@ -184,6 +185,7 @@ impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
+            Object::FnObj(name, chunk, arity) => write!(f, "{} ({})", name, arity),
         }
     }
 }
