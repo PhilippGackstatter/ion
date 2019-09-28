@@ -132,7 +132,8 @@ impl Lexer {
     fn string(&mut self, chars: &mut Peekable<CharIndices<'_>>) {
         let mut str_lit = String::new();
         let mut reached_end_of_string = false;
-        while let Some((_index, char_)) = chars.next() {
+        // while let Some((_index, char_)) = chars.next() {
+        for (_index, char_) in chars {
             if char_ != '"' {
                 str_lit.push(char_);
             } else {

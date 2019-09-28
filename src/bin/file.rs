@@ -9,6 +9,7 @@ fn main() {
         .expect("Please specify the path to a file as the 1st arg.");
 
     // Specify anything as the 2nd arg to enable debug mode
+    #[allow(clippy::redundant_pattern_matching)]
     let debug_enabled = if let Some(_) = env::args().nth(2) {
         true
     } else {

@@ -93,7 +93,7 @@ impl<'a> Parser<'a> {
         if unexpected_eof {
             Err(self.error(self.previous().clone(), "Unclosed block, missing a '}'."))
         } else {
-            Ok(Block(Box::new(decls)))
+            Ok(Block(decls))
         }
     }
 

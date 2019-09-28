@@ -152,7 +152,7 @@ pub enum Statement {
     Print(Expression),
     If(Expression, Box<Statement>, Option<Box<Statement>>),
     While(Expression, Box<Statement>),
-    Block(Box<Vec<Declaration>>),
+    Block(Vec<Declaration>),
     ExpressionStmt(Expression),
 }
 
