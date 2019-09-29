@@ -1,7 +1,14 @@
-var x = 0;
-fn print_something() {
-    print "hello!";
-    x = 20;
+fn bar(first, second, third) {
+    first = "Modified!";
+    print first;
+    print second;
+    print third;
 }
-print_something();
-print x;
+
+fn foo(myglob) {
+    var myarg = "Hello!";
+    bar(myarg, myglob, myarg);
+}
+
+var myglob = "global!";
+foo(myglob);

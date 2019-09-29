@@ -8,6 +8,7 @@ use std::collections::HashMap;
 pub struct VM {
     stack: Vec<Value>,
     globals: HashMap<String, Value>,
+    frame_pointer: usize,
 }
 
 impl VM {
@@ -15,6 +16,9 @@ impl VM {
         VM {
             stack: Vec::with_capacity(16),
             globals: HashMap::new(),
+            // An index into the stack where the frame for the
+            // currently executing function starts
+            frame_pointer: 0,
         }
     }
 
@@ -60,11 +64,11 @@ impl VM {
                 }
                 OpGetLocal => {
                     let index = self.read_u8(chunk, &mut i);
-                    self.push(self.stack[index as usize].clone());
+                    self.push(self.stack[self.frame_pointer + index as usize].clone());
                 }
                 OpSetLocal => {
                     let index = self.read_u8(chunk, &mut i) as usize;
-                    self.stack[index] = self.pop();
+                    self.stack[self.frame_pointer + index] = self.pop();
                 }
                 OpJumpIfFalse => {
                     let index = self.read_u16(chunk, &mut i);
@@ -81,8 +85,17 @@ impl VM {
                     i = index as usize - 1;
                 }
                 OpCall => {
-                    if let Value::Obj(Object::FnObj(name, chunk, arity)) = self.pop() {
+                    if let Value::Obj(Object::FnObj(_name, chunk, arity)) = self.pop() {
+                        // Save the position of the current frame pointer
+                        let current_frame_pointer = self.frame_pointer;
+
+                        // The frame pointer points to the first parameter of the function on the stack
+                        self.frame_pointer = self.stack.len() - arity as usize;
+
                         self.interpet(&chunk);
+
+                        // And restore it after the function returns
+                        self.frame_pointer = current_frame_pointer;
                     } else {
                         panic!("Expected function object on the stack.");
                     }
@@ -106,7 +119,6 @@ impl VM {
 
             i += 1;
         }
-        self.debug_stack();
     }
 
     fn push(&mut self, value: Value) {

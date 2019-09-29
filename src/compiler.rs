@@ -79,20 +79,33 @@ impl Compiler {
                     {
                         panic!("This variable is already declared in this scope.");
                     }
-                    self.locals.push((id.clone(), self.scope_depth));
-                    self.num_locals += 1;
+                    self.add_local(id.clone(), self.scope_depth);
                 }
             }
             FnDecl(name, params, stmt) => {
                 let mut fn_compiler = Compiler::new(FunctionType::Function);
+
+                for param in params {
+                    // Add params as locals (scope = 1)
+                    fn_compiler.add_local(param.clone(), 1);
+                }
+
                 fn_compiler.compile_stmt(stmt);
+
                 fn_compiler.emit_op_byte(Bytecode::OpReturn);
 
-                let fn_obj = Object::FnObj(name.clone(), fn_compiler.chunk().clone(), 0);
+                // Create the function object as constant, load it on the stack at runtime
+                let fn_obj = Object::FnObj(
+                    name.clone(),
+                    fn_compiler.chunk().clone(),
+                    params.len() as u8,
+                );
                 let index = self.add_constant(Value::Obj(fn_obj));
+
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
 
+                // Declare the fn obj on the stack as a global variable associated with its name
                 let index_name = self.add_constant(Value::Obj(Object::StringObj(name.clone())));
                 self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index_name);
@@ -154,8 +167,19 @@ impl Compiler {
                 self.unary_op(op);
             }
             Call(callee, params) => {
+                // Put the arguments on the stack, s.t. they're available as locals for the callee
+                for param in params {
+                    self.compile_expr(param);
+                }
+
                 self.compile_expr(callee);
+
                 self.emit_op_byte(Bytecode::OpCall);
+
+                // Pop the arguments off the stack
+                for _ in 0..params.len() {
+                    self.emit_op_byte(Bytecode::OpPop);
+                }
             }
             Assign(id, expr) => {
                 self.compile_expr(expr);
@@ -280,20 +304,20 @@ impl Compiler {
     /// Emits the given (jump) OpCode and two u8 placeholders.
     /// Returns the first placeholders index in the bytecode.
     fn emit_jump(&mut self, byte: Bytecode) -> usize {
-        self.chunk().code.push(byte as u8);
-        self.chunk().code.push(0);
-        self.chunk().code.push(0);
+        self.emit_byte(byte as u8);
+        self.emit_byte(0);
+        self.emit_byte(0);
         self.chunk().code.len() - 2
     }
 
     fn emit_loop(&mut self, jump: Bytecode, target: u16) {
-        self.chunk().code.push(jump as u8);
+        self.emit_byte(jump as u8);
         self.emit_u16(target);
     }
 
     /// Emits the given OpCode and returns its index in the bytecode
     fn emit_op_byte(&mut self, byte: Bytecode) -> usize {
-        self.chunk().code.push(byte as u8);
+        self.emit_byte(byte as u8);
         self.chunk().code.len() - 1
     }
 
@@ -313,6 +337,11 @@ impl Compiler {
         } else {
             None
         }
+    }
+
+    fn add_local(&mut self, name: String, scope_depth: u8) {
+        self.locals.push((name, self.scope_depth));
+        self.num_locals += 1;
     }
 
     fn begin_scope(&mut self) {

@@ -188,7 +188,7 @@ impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
-            Object::FnObj(name, chunk, arity) => write!(f, "{} ({})", name, arity),
+            Object::FnObj(name, _chunk, arity) => write!(f, "{} ({})", name, arity),
         }
     }
 }
