@@ -69,6 +69,14 @@ fn pretty_print_stmt(mut level: u32, is_child: bool, stmt: &Statement) {
             level += 2;
             pretty_print_expr(level, true, expr);
         }
+        Ret(expr) => {
+            pr(level, is_child, "return");
+            level += 2;
+            match expr {
+                Some(expr_) => pretty_print_expr(level, true, expr_),
+                None => pr(level, true, "None"),
+            }
+        }
         Block(decls) => {
             pr(level, is_child, "Block");
             level += 2;

@@ -1,6 +1,4 @@
-var myvar = 0;
+var myvar = 0
 
-if myvar > 2)
+if (myvar > 2)
     print myvar;
-
-    var l = 0;

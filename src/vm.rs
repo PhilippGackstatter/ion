@@ -112,6 +112,20 @@ impl VM {
                     self.apply_bool_op(byte);
                 }
                 OpReturn => {
+                    let return_value = if self.read_u8(&chunk, &mut i) == 1 {
+                        Some(self.pop())
+                    } else {
+                        None
+                    };
+
+                    let num_locals = self.read_u8(&chunk, &mut i);
+                    for _ in 0..num_locals {
+                        self.pop();
+                    }
+
+                    if let Some(ret_val) = return_value {
+                        self.push(ret_val);
+                    }
                     break;
                 }
                 _ => panic!("Unkown opcode {}", byte as u8),

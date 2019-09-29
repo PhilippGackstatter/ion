@@ -25,6 +25,7 @@ pub enum FunctionType {
 
 pub struct Compiler {
     chunk: Chunk,
+    fn_type: FunctionType,
 
     // Local Variables
     locals: Vec<(String, u8)>,
@@ -49,6 +50,7 @@ impl Compiler {
             } else {
                 1
             },
+            fn_type,
             num_locals: 0,
         }
     }
@@ -59,6 +61,8 @@ impl Compiler {
             self.compile_decl(decl);
         }
         self.emit_op_byte(Bytecode::OpReturn);
+        self.emit_byte(0);
+        self.emit_byte(0);
     }
 
     fn compile_decl(&mut self, decl: &Declaration) {
@@ -92,7 +96,17 @@ impl Compiler {
 
                 fn_compiler.compile_stmt(stmt);
 
-                fn_compiler.emit_op_byte(Bytecode::OpReturn);
+                let last_instruction_index = fn_compiler.chunk().code.len() - 1;
+                // TODO: This might be a bug, if the second to last byte is data but happens to be OpReturn as u8
+                // Read the byte before the last one. If it's OpReturn, this function returns a value.
+                // If not, it doesn't so we have to add an implicit return and indicate to the vm that no value is returned.
+                if fn_compiler.chunk().code[last_instruction_index - 1] != Bytecode::OpReturn as u8
+                {
+                    fn_compiler.emit_op_byte(Bytecode::OpReturn);
+                    fn_compiler.emit_byte(0);
+                }
+
+                fn_compiler.emit_byte(fn_compiler.locals.len() as u8);
 
                 // Create the function object as constant, load it on the stack at runtime
                 let fn_obj = Object::FnObj(
@@ -145,12 +159,22 @@ impl Compiler {
                 self.compile_expr(expr);
                 self.emit_op_byte(Bytecode::OpPrint);
             }
+            Ret(expr_opt) => {
+                if let Some(expr) = expr_opt {
+                    self.compile_expr(expr);
+                }
+
+                self.emit_op_byte(Bytecode::OpReturn);
+                self.emit_byte(1);
+            }
             Block(decls) => {
                 self.begin_scope();
                 for decl in decls.iter() {
                     self.compile_decl(decl);
                 }
-                self.end_scope();
+                if self.fn_type != FunctionType::Function {
+                    self.end_scope();
+                }
             }
         }
     }
@@ -175,11 +199,6 @@ impl Compiler {
                 self.compile_expr(callee);
 
                 self.emit_op_byte(Bytecode::OpCall);
-
-                // Pop the arguments off the stack
-                for _ in 0..params.len() {
-                    self.emit_op_byte(Bytecode::OpPop);
-                }
             }
             Assign(id, expr) => {
                 self.compile_expr(expr);
@@ -350,7 +369,6 @@ impl Compiler {
 
     fn end_scope(&mut self) {
         let mut i = self.locals.len();
-
         while i > 0 {
             i -= 1;
 

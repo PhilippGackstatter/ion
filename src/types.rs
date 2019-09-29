@@ -155,6 +155,7 @@ pub enum Statement {
     Print(Expression),
     If(Expression, Box<Statement>, Option<Box<Statement>>),
     While(Expression, Box<Statement>),
+    Ret(Option<Expression>),
     Block(Vec<Declaration>),
     ExpressionStmt(Expression),
 }
@@ -226,7 +227,6 @@ fn byte_to_opcode(
             Bytecode::OpNot => format!("{:?}", byte),
             Bytecode::OpEqual => format!("{:?}", byte),
             Bytecode::OpNegate => format!("{:?}", byte),
-            Bytecode::OpReturn => format!("{:?}", byte),
             Bytecode::OpGreater => format!("{:?}", byte),
             Bytecode::OpLess => format!("{:?}", byte),
             Bytecode::OpGreaterEqual => format!("{:?}", byte),
@@ -267,6 +267,11 @@ fn byte_to_opcode(
             Bytecode::OpLoop => {
                 let index = read_u16(bytes);
                 format!("{:?} -> {}", byte, index)
+            }
+            Bytecode::OpReturn => {
+                let retvals = read_u8(bytes);
+                let pop = read_u8(bytes);
+                format!("Return {} values, pop {}", retvals, pop)
             }
             Bytecode::OpCall => format!("{:?}", byte),
         };

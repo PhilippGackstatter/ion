@@ -115,6 +115,7 @@ impl<'a> Parser<'a> {
             IfToken => self.if_statement(),
             WhileToken => self.while_statement(),
             LeftBrace => self.block(),
+            Return => self.return_statement(),
             _ => self.expression_statement(),
         }
     }
@@ -150,6 +151,17 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         self.consume(Semicolon, "Expected ';' after expression.")?;
         Ok(Print(expr))
+    }
+
+    fn return_statement(&mut self) -> StatementResult {
+        self.advance();
+        if self.match_(Semicolon) {
+            Ok(Ret(None))
+        } else {
+            let expr = self.expression()?;
+            self.consume(Semicolon, "Expected ';' after return statement.")?;
+            Ok(Ret(Some(expr)))
+        }
     }
 
     fn if_statement(&mut self) -> StatementResult {
