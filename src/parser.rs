@@ -102,7 +102,15 @@ impl<'a> Parser<'a> {
 
         self.consume(RightParen, "Expected ')' after function parameters.")?;
 
-        let body = self.block()?;
+        let mut body = self.block()?;
+
+        // Add a return statement if it does not exist
+        if let Block(decls) = &mut body {
+            if let StatementDecl(Ret(_)) = &decls[decls.len() - 1] {
+            } else {
+                decls.push(StatementDecl(Ret(None)));
+            }
+        }
 
         Ok(FnDecl(id, params, body))
     }

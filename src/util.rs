@@ -151,6 +151,11 @@ pub fn run(program: String) {
             crate::util::pretty_print(&prog);
             let mut compiler: crate::compiler::Compiler = Default::default();
             compiler.compile(&prog);
+
+            println!("{}", compiler.chunk());
+            println!("\nVirtual Machine");
+            println!("===============");
+
             let mut vm = crate::vm::VM::new();
             vm.interpet(compiler.chunk());
         }

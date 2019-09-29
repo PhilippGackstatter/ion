@@ -189,7 +189,7 @@ impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
-            Object::FnObj(name, _chunk, arity) => write!(f, "{} ({})", name, arity),
+            Object::FnObj(name, _chunk, arity) => write!(f, "{} (args: {})", name, arity),
         }
     }
 }
@@ -271,7 +271,7 @@ fn byte_to_opcode(
             Bytecode::OpReturn => {
                 let retvals = read_u8(bytes);
                 let pop = read_u8(bytes);
-                format!("Return {} values, pop {}", retvals, pop)
+                format!("{:?} {} vals, pop {}", byte, retvals, pop)
             }
             Bytecode::OpCall => format!("{:?}", byte),
         };

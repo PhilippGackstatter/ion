@@ -31,7 +31,6 @@ pub struct Compiler {
     locals: Vec<(String, u8)>,
     scope_depth: u8,
     num_locals: u8,
-    // Functions
 }
 
 impl Default for Compiler {
@@ -83,29 +82,19 @@ impl Compiler {
                     {
                         panic!("This variable is already declared in this scope.");
                     }
-                    self.add_local(id.clone(), self.scope_depth);
+                    self.add_local(id.clone());
                 }
             }
             FnDecl(name, params, stmt) => {
                 let mut fn_compiler = Compiler::new(FunctionType::Function);
 
                 for param in params {
-                    // Add params as locals (scope = 1)
-                    fn_compiler.add_local(param.clone(), 1);
+                    fn_compiler.add_local(param.clone());
                 }
 
                 fn_compiler.compile_stmt(stmt);
 
-                let last_instruction_index = fn_compiler.chunk().code.len() - 1;
-                // TODO: This might be a bug, if the second to last byte is data but happens to be OpReturn as u8
-                // Read the byte before the last one. If it's OpReturn, this function returns a value.
-                // If not, it doesn't so we have to add an implicit return and indicate to the vm that no value is returned.
-                if fn_compiler.chunk().code[last_instruction_index - 1] != Bytecode::OpReturn as u8
-                {
-                    fn_compiler.emit_op_byte(Bytecode::OpReturn);
-                    fn_compiler.emit_byte(0);
-                }
-
+                // Provide the final parameter to OpReturn: number of arguments to pop
                 fn_compiler.emit_byte(fn_compiler.locals.len() as u8);
 
                 // Create the function object as constant, load it on the stack at runtime
@@ -358,7 +347,7 @@ impl Compiler {
         }
     }
 
-    fn add_local(&mut self, name: String, scope_depth: u8) {
+    fn add_local(&mut self, name: String) {
         self.locals.push((name, self.scope_depth));
         self.num_locals += 1;
     }
