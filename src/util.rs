@@ -5,7 +5,6 @@ use crate::types::{
     Statement::{self, *},
 };
 
-#[allow(clippy::ptr_arg)]
 pub fn pretty_print(prog: &Program) {
     println!("\nAbstract Syntax Tree");
     println!("====================");
@@ -114,13 +113,13 @@ fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
             pr(level, is_child, id);
             pretty_print_expr(level, true, expr);
         }
-        Integer(num) => {
+        Integer(num, _) => {
             pr(level, is_child, &format!("{}", num));
         }
-        Double(num) => {
+        Double(num, _) => {
             pr(level, is_child, &format!("{}", num));
         }
-        Str(str_) => {
+        Str(str_, _) => {
             pr(level, is_child, &format!(r#""{}""#, str_));
         }
         Identifier(str_) => {
@@ -149,15 +148,23 @@ pub fn run(program: String) {
     match parser.parse() {
         Ok(prog) => {
             crate::util::pretty_print(&prog);
-            let mut compiler: crate::compiler::Compiler = Default::default();
-            compiler.compile(&prog);
+            let checker = crate::type_checker::TypeChecker::new(&lexer.tokens);
+            match checker.check(&prog) {
+                Ok(()) => {
+                    let mut compiler: crate::compiler::Compiler = Default::default();
+                    compiler.compile(&prog);
 
-            println!("{}", compiler.chunk());
-            println!("\nVirtual Machine");
-            println!("===============");
+                    println!("{}", compiler.chunk());
+                    println!("\nVirtual Machine");
+                    println!("===============");
 
-            let mut vm = crate::vm::VM::new();
-            vm.interpet(compiler.chunk());
+                    let mut vm = crate::vm::VM::new();
+                    vm.interpet(compiler.chunk());
+                }
+                Err(err) => {
+                    print_error(&program, err.token, &err.message);
+                }
+            }
         }
         Err(parser_err) => {
             print_error(&program, parser_err.token, parser_err.message);

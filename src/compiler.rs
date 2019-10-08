@@ -54,7 +54,6 @@ impl Compiler {
         }
     }
 
-    #[allow(clippy::ptr_arg)]
     pub fn compile(&mut self, prog: &Program) {
         for decl in prog.iter() {
             self.compile_decl(decl);
@@ -202,17 +201,17 @@ impl Compiler {
                     self.emit_u16(index);
                 }
             }
-            Integer(num) => {
+            Integer(num, _) => {
                 let index = self.add_constant(Value::Int(*num));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            Double(num) => {
+            Double(num, _) => {
                 let index = self.add_constant(Value::Double(*num));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            Str(str_) => {
+            Str(str_, _) => {
                 let index = self.add_constant(Value::Obj(Object::StringObj(str_.clone())));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);

@@ -323,17 +323,17 @@ impl<'a> Parser<'a> {
                 Ok(False)
             }
             Num(int) => {
-                let num = Integer(*int);
+                let num = Integer(*int, self.current);
                 self.advance();
                 Ok(num)
             }
             FloatNum(float) => {
-                let num = Double(*float);
+                let num = Double(*float, self.current);
                 self.advance();
                 Ok(num)
             }
             String_(str_) => {
-                let string = Str(str_.clone());
+                let string = Str(str_.clone(), self.current);
                 self.advance();
                 Ok(string)
             }
@@ -449,12 +449,12 @@ mod tests {
             assert_eq!(
                 *expr,
                 Binary(
-                    Box::new(Integer(9)),
+                    Box::new(Integer(9, 0)),
                     Token::new_debug(Plus),
                     Box::new(Binary(
-                        Box::new(Integer(1)),
+                        Box::new(Integer(1, 0)),
                         Token::new_debug(Slash),
-                        Box::new(Integer(4))
+                        Box::new(Integer(4, 0))
                     ))
                 )
             );
