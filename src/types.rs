@@ -115,7 +115,6 @@ pub enum TokenKind {
     Less,
     LessEqual,
     Bang,
-    Negate,
     Plus,
     Minus,
     Star,

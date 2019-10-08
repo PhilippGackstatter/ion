@@ -284,7 +284,7 @@ impl Compiler {
             Bang => {
                 self.emit_op_byte(Bytecode::OpNot);
             }
-            Negate => {
+            Minus => {
                 self.emit_op_byte(Bytecode::OpNegate);
             }
             _ => unreachable!(),
