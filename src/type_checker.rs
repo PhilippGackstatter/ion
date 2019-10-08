@@ -1,4 +1,4 @@
-use crate::types::{Declaration, Expression, Program, Statement, Token};
+use crate::types::{Declaration, Expression, Program, Statement, Token, TokenKind};
 
 #[derive(Debug)]
 pub struct TypeCheckerError {
@@ -10,6 +10,7 @@ pub struct TypeCheckerError {
 enum Type {
     Integer(usize),
     Str(usize),
+    Bool(usize),
 }
 
 impl PartialEq for Type {
@@ -19,6 +20,7 @@ impl PartialEq for Type {
         match (self, other) {
             (&Integer(_), &Integer(_)) => true,
             (&Str(_), &Str(_)) => true,
+            (&Bool(_), &Bool(_)) => true,
             _ => false,
         }
     }
@@ -29,6 +31,7 @@ impl Type {
         match self {
             Type::Integer(index) => *index,
             Type::Str(index) => *index,
+            Type::Bool(index) => *index,
         }
     }
 }
@@ -77,7 +80,7 @@ impl<'a> TypeChecker<'a> {
                 let ltype = self.check_expr(lexpr)?;
                 let rtype = self.check_expr(rexpr)?;
                 if ltype == rtype {
-                    Ok(Type::Integer(0))
+                    Ok(rtype)
                 } else {
                     Err(TypeCheckerError {
                         token: self.tokens[rtype.get_token_index()].clone(),
@@ -88,8 +91,43 @@ impl<'a> TypeChecker<'a> {
                     })
                 }
             }
+            Expression::Unary(op, rexpr) => {
+                println!("op {:?}, expr {:?}", op, rexpr);
+                let expr_type = self.check_expr(rexpr)?;
+                match op.kind {
+                    TokenKind::Bang => {
+                        if expr_type == Type::Bool(0) {
+                            Ok(Type::Bool(expr_type.get_token_index()))
+                        } else {
+                            Err(TypeCheckerError {
+                                token: self.tokens[expr_type.get_token_index()].clone(),
+                                message: format!(
+                                    "Type {:?} can not be used with a ! operator",
+                                    expr_type
+                                ),
+                            })
+                        }
+                    }
+                    TokenKind::Minus => {
+                        if expr_type == Type::Integer(0) {
+                            Ok(Type::Integer(expr_type.get_token_index()))
+                        } else {
+                            Err(TypeCheckerError {
+                                token: self.tokens[expr_type.get_token_index()].clone(),
+                                message: format!(
+                                    "Type {:?} can not be used with a - operator",
+                                    expr_type
+                                ),
+                            })
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+            }
             Expression::Integer(_, token_index) => Ok(Type::Integer(*token_index)),
             Expression::Str(_, token_index) => Ok(Type::Str(*token_index)),
+            Expression::True(token_index) => Ok(Type::Bool(*token_index)),
+            Expression::False(token_index) => Ok(Type::Bool(*token_index)),
             _ => unimplemented!(),
         }
     }

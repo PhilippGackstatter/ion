@@ -169,8 +169,8 @@ pub enum Expression {
     Double(f32, usize),
     Str(String, usize),
     Identifier(String),
-    False,
-    True,
+    False(usize),
+    True(usize),
 }
 
 impl fmt::Display for Value {

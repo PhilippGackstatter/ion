@@ -125,10 +125,10 @@ fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
         Identifier(str_) => {
             pr(level, is_child, str_);
         }
-        True => {
+        True(_) => {
             pr(level, is_child, "true");
         }
-        False => {
+        False(_) => {
             pr(level, is_child, "false");
         }
     }

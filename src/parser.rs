@@ -315,12 +315,14 @@ impl<'a> Parser<'a> {
         //           | "(" expression ")" ;
         match &self.peek().kind {
             TrueToken => {
+                let tok = True(self.current);
                 self.advance();
-                Ok(True)
+                Ok(tok)
             }
             FalseToken => {
+                let tok = False(self.current);
                 self.advance();
-                Ok(False)
+                Ok(tok)
             }
             Num(int) => {
                 let num = Integer(*int, self.current);
@@ -473,7 +475,7 @@ mod tests {
                 *expr,
                 Unary(
                     Token::new_debug(Bang),
-                    Box::new(Unary(Token::new_debug(Bang), Box::new(False)))
+                    Box::new(Unary(Token::new_debug(Bang), Box::new(False(0))))
                 )
             );
         } else {

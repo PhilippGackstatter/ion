@@ -216,12 +216,12 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            True => {
+            True(_) => {
                 let index = self.add_constant(Value::Bool(true));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            False => {
+            False(_) => {
                 let index = self.add_constant(Value::Bool(false));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
