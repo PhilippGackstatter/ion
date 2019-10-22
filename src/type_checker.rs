@@ -193,7 +193,6 @@ impl<'a> TypeChecker<'a> {
                     } else {
                         Ok(expr_type)
                     }
-
                 } else {
                     // TODO: Assignment to global var
                     Ok(expr_type)
@@ -232,7 +231,12 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn find_local_variable(&self, id: &str) -> Option<u8> {
-        if let Some(pos) = self.locals.iter().rev().position(|elem| elem.identifier == *id) {
+        if let Some(pos) = self
+            .locals
+            .iter()
+            .rev()
+            .position(|elem| elem.identifier == *id)
+        {
             Some((self.locals.len() - 1 - pos).try_into().unwrap())
         } else {
             None

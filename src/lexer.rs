@@ -29,6 +29,7 @@ impl Lexer {
         keywords.insert("true".to_owned(), TrueToken);
         keywords.insert("var".to_owned(), VarToken);
         keywords.insert("while".to_owned(), WhileToken);
+        keywords.insert("struct".to_owned(), StructToken);
 
         Lexer {
             tokens: vec![],
@@ -53,6 +54,7 @@ impl Lexer {
                 ',' => self.add_token(1, Comma),
                 '.' => self.add_token(1, Dot),
                 ';' => self.add_token(1, Semicolon),
+                ':' => self.add_token(1, Colon),
                 '!' => {
                     if self.match_(&mut chars, '=') {
                         self.add_token(2, BangEqual);

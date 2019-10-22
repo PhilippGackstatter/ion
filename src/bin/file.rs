@@ -9,11 +9,14 @@ fn main() {
         .expect("Please specify the path to a file as the 1st arg.");
 
     // Specify anything as the 2nd arg to enable debug mode
-    #[allow(clippy::redundant_pattern_matching)]
-    let debug_enabled = if let Some(_) = env::args().nth(2) {
-        true
+    let run_until = if let Some(until) = env::args().nth(2) {
+        Some(
+            until
+                .parse()
+                .unwrap_or_else(|_| panic!("Provide a number as argument.")),
+        )
     } else {
-        false
+        None
     };
 
     let full_path = env::current_dir().unwrap().join(path);
@@ -24,9 +27,9 @@ fn main() {
     let input = String::from_utf8(file_buf)
         .unwrap_or_else(|_| panic!("Please provide a valid UTF-8 encoded file."));
 
-    if debug_enabled {
-        ion::util::lexit(input);
+    if let Some(till) = run_until {
+        ion::util::run(input, till);
     } else {
-        ion::util::run(input);
+        ion::util::run(input, 5);
     }
 }

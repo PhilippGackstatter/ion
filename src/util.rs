@@ -42,6 +42,13 @@ fn pretty_print_decl(mut level: u32, is_child: bool, decl: &Declaration) {
             level += 2;
             pretty_print_stmt(level, true, stmt);
         }
+        StructDecl(name, fields) => {
+            pr(level, is_child, &format!("struct {}", name.get_id()));
+            level += 2;
+            for (field, ty) in fields {
+                pr(level, true, &format!("{}: {}", field.get_id(), ty.get_id()));
+            }
+        }
     }
 }
 
@@ -140,24 +147,35 @@ pub fn lexit(program: String) {
     lexer.print_tokens();
 }
 
-pub fn run(program: String) {
+pub fn run(program: String, until: u8) {
     let mut lexer = crate::lexer::Lexer::new();
     lexer.lex(&program);
     lexer.print_tokens();
+    if until == 1 {
+        return;
+    }
     let mut parser = crate::parser::Parser::new(&lexer);
     match parser.parse() {
         Ok(prog) => {
             crate::util::pretty_print(&prog);
+            if until == 2 {
+                return;
+            }
             let mut checker = crate::type_checker::TypeChecker::new(&lexer.tokens);
             match checker.check(&prog) {
                 Ok(()) => {
+                    if until == 3 {
+                        return;
+                    }
                     let mut compiler: crate::compiler::Compiler = Default::default();
                     compiler.compile(&prog);
 
                     println!("{}", compiler.chunk());
                     println!("\nVirtual Machine");
                     println!("===============");
-
+                    if until == 4 {
+                        return;
+                    }
                     let mut vm = crate::vm::VM::new();
                     vm.interpet(compiler.chunk());
                 }

@@ -44,8 +44,62 @@ impl<'a> Parser<'a> {
         match &self.peek().kind {
             VarToken => self.variable_declaration(),
             Fun => self.function_declaration(),
+            StructToken => self.struct_declaration(),
             _ => Ok(StatementDecl(self.statement()?)),
         }
+    }
+
+    fn struct_declaration(&mut self) -> DeclarationResult {
+        self.advance();
+
+        if !self.peek().is_id_token() {
+            return Err(self.error(
+                self.peek().clone(),
+                "Expected an identifier as struct name.",
+            ));
+        }
+        let name = self.advance().clone();
+
+        self.consume(LeftBrace, "Expected '{' after struct.")?;
+        let mut fields = Vec::new();
+
+        while self.peek().kind != RightBrace {
+            if !self.peek().is_id_token() {
+                return Err(
+                    self.error(self.peek().clone(), "Expected an identifier as field name.")
+                );
+            }
+
+            let name_token = self.advance().clone();
+
+            self.consume(Colon, "Expected ':' after name.")?;
+
+            if !self.peek().is_id_token() {
+                return Err(self.error(
+                    self.peek().clone(),
+                    "Expected a type identifier after field name.",
+                ));
+            }
+
+            let type_token = self.advance().clone();
+
+            if self.peek().kind != RightBrace {
+                if self.peek().kind == Comma {
+                    self.advance();
+                } else {
+                    return Err(self.error(self.peek().clone(), "Expected a ',' inbetween fields."));
+                }
+            } else if self.peek().kind == Comma {
+                // Allow trailing comma
+                self.advance();
+            }
+
+            fields.push((name_token, type_token));
+        }
+        // Consume }
+        self.advance();
+
+        Ok(StructDecl(name, fields))
     }
 
     fn variable_declaration(&mut self) -> DeclarationResult {

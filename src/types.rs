@@ -97,11 +97,28 @@ impl Token {
             kind,
         }
     }
+
+    pub fn is_id_token(&self) -> bool {
+        if let TokenKind::IdToken(_) = self.kind {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn get_id(&self) -> String {
+        if let TokenKind::IdToken(id) = &self.kind {
+            id.clone()
+        } else {
+            panic!("Expected IdToken");
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
     Semicolon,
+    Colon,
     LeftParen,
     RightParen,
     LeftBrace,
@@ -128,6 +145,7 @@ pub enum TokenKind {
     For,
     VarToken,
     WhileToken,
+    StructToken,
     IdToken(String),
     PrintToken,
     IfToken,
@@ -146,6 +164,7 @@ pub enum TokenKind {
 pub enum Declaration {
     StatementDecl(Statement),
     VarDecl(String, Expression),
+    StructDecl(Token, Vec<(Token, Token)>),
     FnDecl(String, Vec<String>, Statement),
 }
 
