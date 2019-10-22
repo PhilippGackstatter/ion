@@ -146,7 +146,7 @@ impl Lexer {
             panic!("Premature EOF");
         }
 
-        self.add_token(str_lit.len() as u8, String_(str_lit));
+        self.add_token((str_lit.len() + 2) as u8, String_(str_lit));
     }
 
     fn number(&mut self, first: char, chars: &mut Peekable<CharIndices<'_>>) {

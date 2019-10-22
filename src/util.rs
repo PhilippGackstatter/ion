@@ -148,7 +148,7 @@ pub fn run(program: String) {
     match parser.parse() {
         Ok(prog) => {
             crate::util::pretty_print(&prog);
-            let checker = crate::type_checker::TypeChecker::new(&lexer.tokens);
+            let mut checker = crate::type_checker::TypeChecker::new(&lexer.tokens);
             match checker.check(&prog) {
                 Ok(()) => {
                     let mut compiler: crate::compiler::Compiler = Default::default();

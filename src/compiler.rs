@@ -30,7 +30,6 @@ pub struct Compiler {
     // Local Variables
     locals: Vec<(String, u8)>,
     scope_depth: u8,
-    num_locals: u8,
 }
 
 impl Default for Compiler {
@@ -50,7 +49,6 @@ impl Compiler {
                 1
             },
             fn_type,
-            num_locals: 0,
         }
     }
 
@@ -350,7 +348,6 @@ impl Compiler {
 
     fn add_local(&mut self, name: String) {
         self.locals.push((name, self.scope_depth));
-        self.num_locals += 1;
     }
 
     fn begin_scope(&mut self) {
