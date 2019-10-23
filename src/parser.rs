@@ -144,9 +144,10 @@ impl<'a> Parser<'a> {
                 self.consume(Colon, "Expected ':' for type annotation.")?;
 
                 if !self.peek().is_id_token() {
-                    return Err(
-                        self.error(self.peek().clone(), "Expected type identifier after parameter.")
-                    );
+                    return Err(self.error(
+                        self.peek().clone(),
+                        "Expected type identifier after parameter.",
+                    ));
                 }
 
                 let type_token = self.advance().clone();
@@ -177,7 +178,7 @@ impl<'a> Parser<'a> {
 
         // Add a return statement if it does not exist
         if let Block(decls) = &mut body {
-            if let StatementDecl(Ret(_)) = &decls[decls.len() - 1] {
+            if let Some(StatementDecl(Ret(_))) = &decls.last() {
             } else {
                 decls.push(StatementDecl(Ret(None)));
             }

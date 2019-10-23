@@ -113,6 +113,7 @@ impl<'a> TypeChecker<'a> {
         for decl in prog.iter() {
             self.build_symbol_table(decl)?;
         }
+        self.print_symbol_table();
         for decl in prog.iter() {
             self.check_decl(decl)?;
         }
@@ -191,6 +192,50 @@ impl<'a> TypeChecker<'a> {
                         });
                     }
                     self.add_local(id.clone(), expr_type);
+                }
+            }
+            Declaration::FnDecl(_name, params_tokens, return_token, body) => {
+                for (_, param_token) in params_tokens {
+                    self.lookup_type(param_token)?;
+                }
+                self.check_stmt(body)?;
+                if let Statement::Block(decls) = body {
+                    if let Some(Declaration::StatementDecl(Statement::Ret(ret_expr_opt))) =
+                        decls.last()
+                    {
+                        if let Some(ret_expr) = ret_expr_opt {
+                            if let Some(decl_ret_token) = return_token {
+                                let ret_type = self.check_expr(ret_expr)?;
+                                if ret_type != self.lookup_type(decl_ret_token)? {
+                                    return Err(TypeCheckerError {
+                                        token: decl_ret_token.clone(),
+                                        message:
+                                            "Returned type does not match declared return type."
+                                                .into(),
+                                    });
+                                }
+                            } else {
+                                return Err(TypeCheckerError {
+                                    token: self.tokens[0].clone(),
+                                    message: "This function does not return a type.".into(),
+                                });
+                            }
+                        } else {
+                            if let Some(ret_tok) = return_token {
+                                return Err(TypeCheckerError {
+                                    token: ret_tok.clone(),
+                                    message: format!(
+                                        "This function has to return a type {}.",
+                                        self.lookup_type(ret_tok)?
+                                    ),
+                                });
+                            }
+                        }
+                    } else {
+                        unreachable!();
+                    }
+                } else {
+                    unreachable!();
                 }
             }
             _ => (),
@@ -384,6 +429,14 @@ impl<'a> TypeChecker<'a> {
             Some((self.locals.len() - 1 - pos).try_into().unwrap())
         } else {
             None
+        }
+    }
+
+    fn print_symbol_table(&self) {
+        println!("Symbol Table");
+        println!("============");
+        for (name, symbol) in self.symbol_table.iter() {
+            println!("{}:{}", name, symbol);
         }
     }
 }
