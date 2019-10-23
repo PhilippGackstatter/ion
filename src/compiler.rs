@@ -151,10 +151,12 @@ impl Compiler {
             Ret(expr_opt) => {
                 if let Some(expr) = expr_opt {
                     self.compile_expr(expr);
+                    self.emit_op_byte(Bytecode::OpReturn);
+                    self.emit_byte(1);
+                } else {
+                    self.emit_op_byte(Bytecode::OpReturn);
+                    self.emit_byte(0);
                 }
-
-                self.emit_op_byte(Bytecode::OpReturn);
-                self.emit_byte(1);
             }
             Block(decls) => {
                 self.begin_scope();
