@@ -119,6 +119,7 @@ impl Token {
 pub enum TokenKind {
     Semicolon,
     Colon,
+    Arrow,
     LeftParen,
     RightParen,
     LeftBrace,
@@ -165,7 +166,7 @@ pub enum Declaration {
     StatementDecl(Statement),
     VarDecl(String, Expression),
     StructDecl(Token, Vec<(Token, Token)>),
-    FnDecl(String, Vec<String>, Statement),
+    FnDecl(String, Vec<(Token, Token)>, Option<Token>, Statement),
 }
 
 #[derive(Debug, PartialEq)]

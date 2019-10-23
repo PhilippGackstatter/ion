@@ -47,7 +47,6 @@ impl Lexer {
                 '(' => self.add_token(1, LeftParen),
                 ')' => self.add_token(1, RightParen),
                 '+' => self.add_token(1, Plus),
-                '-' => self.add_token(1, Minus),
                 '*' => self.add_token(1, Star),
                 '{' => self.add_token(1, LeftBrace),
                 '}' => self.add_token(1, RightBrace),
@@ -55,6 +54,13 @@ impl Lexer {
                 '.' => self.add_token(1, Dot),
                 ';' => self.add_token(1, Semicolon),
                 ':' => self.add_token(1, Colon),
+                '-' => {
+                    if self.match_(&mut chars, '>') {
+                        self.add_token(2, Arrow);
+                    } else {
+                        self.add_token(1, Minus);
+                    }
+                }
                 '!' => {
                     if self.match_(&mut chars, '=') {
                         self.add_token(2, BangEqual);

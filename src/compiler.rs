@@ -82,11 +82,11 @@ impl Compiler {
                     self.add_local(id.clone());
                 }
             }
-            FnDecl(name, params, stmt) => {
+            FnDecl(name, params, _, stmt) => {
                 let mut fn_compiler = Compiler::new(FunctionType::Function);
 
                 for param in params {
-                    fn_compiler.add_local(param.clone());
+                    fn_compiler.add_local(param.0.get_id().clone());
                 }
 
                 fn_compiler.compile_stmt(stmt);

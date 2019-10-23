@@ -33,11 +33,25 @@ fn pretty_print_decl(mut level: u32, is_child: bool, decl: &Declaration) {
             pr(level, true, id);
             pretty_print_expr(level, true, expr);
         }
-        FnDecl(name, params, stmt) => {
+        FnDecl(name, params, return_ty, stmt) => {
+            let ret = if return_ty.is_some() {
+                return_ty.as_ref().unwrap().get_id()
+            } else {
+                "void".to_owned()
+            };
             pr(
                 level,
                 is_child,
-                &format!("fn {}({})", name, params.join(", ")),
+                &format!(
+                    "fn {}({}) -> {}",
+                    name,
+                    params
+                        .iter()
+                        .map(|p| p.0.get_id())
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                    ret
+                ),
             );
             level += 2;
             pretty_print_stmt(level, true, stmt);

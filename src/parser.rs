@@ -138,9 +138,20 @@ impl<'a> Parser<'a> {
 
         if self.peek().kind != RightParen {
             // Consume comma after parameter
-            while let IdToken(name) = &self.peek().kind {
-                params.push(name.clone());
-                self.advance();
+            while self.peek().kind != RightParen {
+                let name_token = self.advance().clone();
+
+                self.consume(Colon, "Expected ':' for type annotation.")?;
+
+                if !self.peek().is_id_token() {
+                    return Err(
+                        self.error(self.peek().clone(), "Expected type identifier after parameter.")
+                    );
+                }
+
+                let type_token = self.advance().clone();
+
+                params.push((name_token, type_token));
 
                 if !self.match_(Comma) && self.peek().kind != RightParen {
                     return Err(
@@ -156,6 +167,12 @@ impl<'a> Parser<'a> {
 
         self.consume(RightParen, "Expected ')' after function parameters.")?;
 
+        let return_token = if self.match_(Arrow) {
+            Some(self.advance().clone())
+        } else {
+            None
+        };
+
         let mut body = self.block()?;
 
         // Add a return statement if it does not exist
@@ -166,7 +183,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(FnDecl(id, params, body))
+        Ok(FnDecl(id, params, return_token, body))
     }
 
     // Statements
