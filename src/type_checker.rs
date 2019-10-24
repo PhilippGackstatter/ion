@@ -26,6 +26,8 @@ impl PartialEq for Type {
             (&Integer(_), &Integer(_)) => true,
             (&Str(_), &Str(_)) => true,
             (&Bool(_), &Bool(_)) => true,
+            (Void, Void) => true,
+            (Struct(s1), Struct(s2)) => s1.name == s2.name,
             _ => false,
         }
     }
@@ -49,8 +51,29 @@ impl std::fmt::Display for Type {
             Type::Str(_) => write!(f, "str"),
             Type::Bool(_) => write!(f, "bool"),
             Type::Void => write!(f, "void"),
-            Type::Struct(strct) => write!(f, "{}", strct.name),
-            Type::Func(fun) => write!(f, "{}", fun.name),
+            Type::Struct(strct) => {
+                write!(f, "{}", strct.name)?;
+                write!(f, "(")?;
+                for field in strct.fields.iter() {
+                    write!(f, "{}: {}, ", field.0, field.1)?;
+                }
+                write!(f, ")")
+            }
+            Type::Func(fun) => {
+                write!(f, "{} (", fun.name)?;
+                for param in fun.params.iter() {
+                    write!(f, "{}, ", param)?;
+                }
+                write!(
+                    f,
+                    ") -> {}",
+                    if let Some(ret_ty) = &fun.result {
+                        format!("{}", ret_ty)
+                    } else {
+                        format!("{}", Type::Void)
+                    }
+                )
+            }
         }
     }
 }
@@ -224,7 +247,10 @@ impl<'a> TypeChecker<'a> {
                     if return_type != declared_ret_type {
                         return Err(TypeCheckerError {
                             token: self.tokens[0].clone(),
-                            message: "Returned type does not match declared return type.".into(),
+                            message: format!(
+                                "Returned type {} does not match declared return type {}.",
+                                return_type, declared_ret_type
+                            ),
                         });
                     }
                 }
@@ -284,12 +310,24 @@ impl<'a> TypeChecker<'a> {
                 let ltype = self.check_expr(lexpr)?;
                 let rtype = self.check_expr(rexpr)?;
                 if ltype == rtype {
-                    Ok(rtype)
+                    if [
+                        TokenKind::EqualEqual,
+                        TokenKind::Greater,
+                        TokenKind::Less,
+                        TokenKind::LessEqual,
+                        TokenKind::GreaterEqual,
+                    ]
+                    .contains(&op_token.kind)
+                    {
+                        Ok(Type::Bool(0))
+                    } else {
+                        Ok(rtype)
+                    }
                 } else {
                     Err(TypeCheckerError {
                         token: op_token.clone(),
                         message: format!(
-                            "Types {:?} and {:?} are not compatible in binary operation",
+                            "Types {} and {} are not compatible in binary operation",
                             ltype, rtype
                         ),
                     })
@@ -355,14 +393,10 @@ impl<'a> TypeChecker<'a> {
             Expression::Identifier(id) => {
                 if let Some(index) = self.find_local_variable(id) {
                     Ok(self.locals[index as usize].dtype.clone())
+                } else if let Some(ty) = self.symbol_table.get(id) {
+                    Ok(ty.clone())
                 } else {
-                    // Make Type the parent of Symbol, return Symbol::Func from here
-                    // then type check it in Call
-                    if let Some(ty) = self.symbol_table.get(id) {
-                        Ok(ty.clone())
-                    } else {
-                        panic!("Globals unimplemented, looking for {}", id);
-                    }
+                    panic!("Globals unimplemented, looking for {}", id);
                 }
             }
             Expression::Call(callee, params) => {
@@ -456,10 +490,10 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn print_symbol_table(&self) {
-        println!("Symbol Table");
+        println!("\nSymbol Table");
         println!("============");
-        for (name, symbol) in self.symbol_table.iter() {
-            println!("{}:{}", name, symbol);
+        for (_name, symbol) in self.symbol_table.iter() {
+            println!("{}", symbol);
         }
     }
 }
