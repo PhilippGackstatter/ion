@@ -55,6 +55,7 @@ impl std::fmt::Display for Type {
     }
 }
 
+#[derive(Debug)]
 struct Variable {
     identifier: String,
     scope_depth: u8,
@@ -171,10 +172,10 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn check_decl(&mut self, decl: &Declaration) -> Result<(), TypeCheckerError> {
+    fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<Type>, TypeCheckerError> {
         match decl {
             Declaration::StatementDecl(stmt) => {
-                self.check_stmt(stmt)?;
+                return self.check_stmt(stmt);
             }
             Declaration::VarDecl(id, expr) => {
                 let expr_type = self.check_expr(expr)?;
@@ -195,69 +196,86 @@ impl<'a> TypeChecker<'a> {
                 }
             }
             Declaration::FnDecl(_name, params_tokens, return_token, body) => {
-                for (_, param_token) in params_tokens {
-                    self.lookup_type(param_token)?;
+                for (name_token, param_token) in params_tokens {
+                    let expr_type = self.lookup_type(param_token)?;
+                    // Make the parameters available as locals to the function body
+                    // so that they can be found & type checked
+                    self.add_local_to_next_scope(name_token.get_id(), expr_type);
                 }
-                self.check_stmt(body)?;
-                if let Statement::Block(decls) = body {
-                    if let Some(Declaration::StatementDecl(Statement::Ret(ret_expr_opt))) =
-                        decls.last()
-                    {
-                        if let Some(ret_expr) = ret_expr_opt {
-                            if let Some(decl_ret_token) = return_token {
-                                let ret_type = self.check_expr(ret_expr)?;
-                                if ret_type != self.lookup_type(decl_ret_token)? {
-                                    return Err(TypeCheckerError {
-                                        token: decl_ret_token.clone(),
-                                        message:
-                                            "Returned type does not match declared return type."
-                                                .into(),
-                                    });
-                                }
-                            } else {
-                                return Err(TypeCheckerError {
-                                    token: self.tokens[0].clone(),
-                                    message: "This function does not return a type.".into(),
-                                });
-                            }
-                        } else {
-                            if let Some(ret_tok) = return_token {
-                                return Err(TypeCheckerError {
-                                    token: ret_tok.clone(),
-                                    message: format!(
-                                        "This function has to return a type {}.",
-                                        self.lookup_type(ret_tok)?
-                                    ),
-                                });
-                            }
-                        }
-                    } else {
-                        unreachable!();
-                    }
+                let return_types = self.check_stmt(body)?;
+
+                let declared_ret_type = if let Some(return_type) = return_token {
+                    self.lookup_type(return_type)?
                 } else {
-                    unreachable!();
+                    Type::Void
+                };
+
+                if declared_ret_type != Type::Void && return_types.is_empty() {
+                    return Err(TypeCheckerError {
+                        token: self.tokens[0].clone(),
+                        message: format!(
+                            "This function has to return a type {}.",
+                            declared_ret_type
+                        ),
+                    });
+                }
+
+                for return_type in return_types {
+                    if return_type != declared_ret_type {
+                        return Err(TypeCheckerError {
+                            token: self.tokens[0].clone(),
+                            message: "Returned type does not match declared return type.".into(),
+                        });
+                    }
                 }
             }
             _ => (),
         }
-        Ok(())
+        Ok(vec![])
     }
 
-    fn check_stmt(&mut self, stmt: &Statement) -> Result<(), TypeCheckerError> {
+    fn check_stmt(&mut self, stmt: &Statement) -> Result<Vec<Type>, TypeCheckerError> {
         match stmt {
             Statement::ExpressionStmt(expr) => {
                 self.check_expr(expr)?;
+                Ok(vec![])
             }
             Statement::Block(decls) => {
                 self.begin_scope();
+                let mut return_types = Vec::new();
                 for decl in decls.iter() {
-                    self.check_decl(decl)?;
+                    return_types.extend(self.check_decl(decl)?);
                 }
                 self.end_scope();
+                Ok(return_types)
             }
-            _ => (),
+            Statement::Ret(expr_opt) => {
+                if let Some(expr) = expr_opt {
+                    let expr_type = self.check_expr(expr)?;
+                    Ok(vec![expr_type])
+                } else {
+                    Ok(vec![Type::Void])
+                }
+            }
+            Statement::If(condition, if_branch, else_branch_opt) => {
+                let cond_type = self.check_expr(condition)?;
+                if cond_type != Type::Bool(0) {
+                    return Err(TypeCheckerError {
+                        token: self.tokens[0].clone(),
+                        message: format!("Condition must be of type bool, got {}", cond_type),
+                    });
+                }
+
+                let mut return_types = self.check_stmt(if_branch)?;
+
+                if let Some(else_branch) = else_branch_opt {
+                    return_types.extend(self.check_stmt(else_branch)?);
+                }
+
+                Ok(return_types)
+            }
+            _ => Ok(vec![]),
         }
-        Ok(())
     }
 
     fn check_expr(&self, expr: &Expression) -> Result<Type, TypeCheckerError> {
@@ -397,19 +415,18 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn end_scope(&mut self) {
-        // let mut i = self.locals.len();
-        // while i > 0 {
-        //     i -= 1;
+        let mut i = self.locals.len();
+        while i > 0 {
+            i -= 1;
 
-        //     // Since we iterate backwards, once we hit a variable
-        //     // that's not in the current scope, we've popped all
-        //     // the locals in this scope.
-        //     if self.locals[i].1 != self.scope_depth {
-        //         break;
-        //     }
-        //     self.emit_op_byte(Bytecode::OpPop);
-        //     self.locals.pop().unwrap();
-        // }
+            // Since we iterate backwards, once we hit a variable
+            // that's not in the current scope, we've popped all
+            // the locals in this scope.
+            if self.locals[i].scope_depth != self.scope_depth {
+                break;
+            }
+            self.locals.pop().unwrap();
+        }
 
         self.scope_depth -= 1;
     }
@@ -417,6 +434,12 @@ impl<'a> TypeChecker<'a> {
     fn add_local(&mut self, name: String, dtype: Type) {
         self.locals
             .push(Variable::new(name, self.scope_depth, dtype));
+    }
+
+    fn add_local_to_next_scope(&mut self, name: String, dtype: Type) {
+        self.scope_depth += 1;
+        self.add_local(name, dtype);
+        self.scope_depth -= 1;
     }
 
     fn find_local_variable(&self, id: &str) -> Option<u8> {
