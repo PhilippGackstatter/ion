@@ -1,6 +1,7 @@
 use crate::types::{Declaration, Expression, Program, Statement, Token, TokenKind};
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::ops::Range;
 
 #[derive(Debug)]
 pub struct TypeCheckerError {
@@ -8,11 +9,38 @@ pub struct TypeCheckerError {
     pub message: String,
 }
 
+#[derive(Debug)]
+pub struct TypeError {
+    /// The indexes in the source string that are erroneous
+    pub token_range: Range<usize>,
+    /// The error message
+    pub message: String,
+}
+
 #[derive(Debug, Clone)]
-enum Type {
-    Integer(usize),
-    Str(usize),
-    Bool(usize),
+struct Type {
+    pub token_range: Range<usize>,
+    pub kind: TypeKind,
+}
+
+impl Type {
+    fn new(token_range: Range<usize>, kind: TypeKind) -> Self {
+        Type { token_range, kind }
+    }
+
+    fn new_empty_range(kind: TypeKind) -> Self {
+        Type {
+            token_range: 0..0,
+            kind,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum TypeKind {
+    Integer,
+    Str,
+    Bool,
     Void,
     Func(Function),
     Struct(Struct),
@@ -20,38 +48,18 @@ enum Type {
 
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
-        use Type::*;
-
-        match (self, other) {
-            (&Integer(_), &Integer(_)) => true,
-            (&Str(_), &Str(_)) => true,
-            (&Bool(_), &Bool(_)) => true,
-            (Void, Void) => true,
-            (Struct(s1), Struct(s2)) => s1.name == s2.name,
-            _ => false,
-        }
-    }
-}
-
-impl Type {
-    fn get_token_index(&self) -> usize {
-        match self {
-            Type::Integer(index) => *index,
-            Type::Str(index) => *index,
-            Type::Bool(index) => *index,
-            _ => 0,
-        }
+        self.kind == other.kind
     }
 }
 
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Type::Integer(_) => write!(f, "i32"),
-            Type::Str(_) => write!(f, "str"),
-            Type::Bool(_) => write!(f, "bool"),
-            Type::Void => write!(f, "void"),
-            Type::Struct(strct) => {
+        match &self.kind {
+            TypeKind::Integer => write!(f, "i32"),
+            TypeKind::Str => write!(f, "str"),
+            TypeKind::Bool => write!(f, "bool"),
+            TypeKind::Void => write!(f, "void"),
+            TypeKind::Struct(strct) => {
                 write!(f, "{}", strct.name)?;
                 write!(f, "(")?;
                 for field in strct.fields.iter() {
@@ -59,7 +67,7 @@ impl std::fmt::Display for Type {
                 }
                 write!(f, ")")
             }
-            Type::Func(fun) => {
+            TypeKind::Func(fun) => {
                 write!(f, "{} (", fun.name)?;
                 for param in fun.params.iter() {
                     write!(f, "{}, ", param)?;
@@ -70,7 +78,7 @@ impl std::fmt::Display for Type {
                     if let Some(ret_ty) = &fun.result {
                         format!("{}", ret_ty)
                     } else {
-                        format!("{}", Type::Void)
+                        "void".into()
                     }
                 )
             }
@@ -121,9 +129,9 @@ impl<'a> TypeChecker<'a> {
     pub fn new(tokens: &'a Vec<Token>) -> Self {
         let mut hmap: HashMap<String, Type> = HashMap::new();
 
-        hmap.insert("str".to_owned(), Type::Str(0));
-        hmap.insert("bool".to_owned(), Type::Bool(0));
-        hmap.insert("i32".to_owned(), Type::Integer(0));
+        hmap.insert("str".to_owned(), Type::new_empty_range(TypeKind::Str));
+        hmap.insert("bool".to_owned(), Type::new_empty_range(TypeKind::Bool));
+        hmap.insert("i32".to_owned(), Type::new_empty_range(TypeKind::Integer));
 
         TypeChecker {
             tokens,
@@ -133,18 +141,21 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub fn check(&mut self, prog: &Program) -> Result<(), TypeCheckerError> {
+    pub fn check(&mut self, prog: &Program) -> Result<(), TypeError> {
         for decl in prog.iter() {
             self.build_symbol_table(decl)?;
         }
         self.print_symbol_table();
         for decl in prog.iter() {
-            self.check_decl(decl)?;
+            if let Declaration::StatementDecl(Statement::ExpressionStmt(expr)) = decl {
+                self.check_expr(expr)?;
+            }
+            // self.check_decl(decl)?;
         }
         Ok(())
     }
 
-    fn build_symbol_table(&mut self, decl: &Declaration) -> Result<(), TypeCheckerError> {
+    fn build_symbol_table(&mut self, decl: &Declaration) -> Result<(), TypeError> {
         match decl {
             Declaration::FnDecl(name, params_tokens, return_token, _stmt) => {
                 let mut params = Vec::new();
@@ -159,11 +170,11 @@ impl<'a> TypeChecker<'a> {
                 };
                 self.symbol_table.insert(
                     name.clone(),
-                    Type::Func(Function {
+                    Type::new_empty_range(TypeKind::Func(Function {
                         name: name.clone(),
                         params,
                         result,
-                    }),
+                    })),
                 );
             }
             Declaration::StructDecl(name, token_fields) => {
@@ -172,10 +183,10 @@ impl<'a> TypeChecker<'a> {
                     fields.push((name.get_id(), self.lookup_type(ty)?));
                 }
 
-                let st = Type::Struct(Struct {
+                let st = Type::new_empty_range(TypeKind::Struct(Struct {
                     name: name.get_id(),
                     fields,
-                });
+                }));
                 self.symbol_table.insert(name.get_id(), st);
             }
             _ => (),
@@ -183,128 +194,130 @@ impl<'a> TypeChecker<'a> {
         Ok(())
     }
 
-    fn lookup_type(&self, token: &Token) -> Result<Type, TypeCheckerError> {
+    fn lookup_type(&self, token: &Token) -> Result<Type, TypeError> {
         let type_name = token.get_id();
         if let Some(symbol) = self.symbol_table.get(&type_name) {
             Ok(symbol.clone())
         } else {
-            Err(TypeCheckerError {
-                token: token.clone(),
+            Err(TypeError {
+                token_range: token.clone().into(),
                 message: format!("Type {} not declared in this scope.", type_name),
             })
         }
     }
 
-    fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<Type>, TypeCheckerError> {
-        match decl {
-            Declaration::StatementDecl(stmt) => {
-                return self.check_stmt(stmt);
-            }
-            Declaration::VarDecl(id, expr) => {
-                let expr_type = self.check_expr(expr)?;
-                if self.scope_depth == 0 {
-                    // Global
-                } else {
-                    if self
-                        .locals
-                        .iter()
-                        .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
-                    {
-                        return Err(TypeCheckerError {
-                            token: self.tokens[expr_type.get_token_index()].clone(),
-                            message: "Variable is already declared in this scope.".into(),
-                        });
-                    }
-                    self.add_local(id.clone(), expr_type);
-                }
-            }
-            Declaration::FnDecl(_name, params_tokens, return_token, body) => {
-                for (name_token, param_token) in params_tokens {
-                    let expr_type = self.lookup_type(param_token)?;
-                    // Make the parameters available as locals to the function body
-                    // so that they can be found & type checked
-                    self.add_local_to_next_scope(name_token.get_id(), expr_type);
-                }
-                let return_types = self.check_stmt(body)?;
+    // fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<Type>, TypeCheckerError> {
+    //     match decl {
+    //         Declaration::StatementDecl(stmt) => {
+    //             return self.check_stmt(stmt);
+    //         }
+    //         Declaration::VarDecl(id, expr) => {
+    //             let expr_type = self.check_expr(expr)?;
+    //             if self.scope_depth == 0 {
+    //                 // Global
+    //             } else {
+    //                 if self
+    //                     .locals
+    //                     .iter()
+    //                     .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
+    //                 {
+    //                     return Err(TypeCheckerError {
+    //                         token: self.tokens[expr_type.token_range.start].clone(),
+    //                         message: "Variable is already declared in this scope.".into(),
+    //                     });
+    //                 }
+    //                 self.add_local(id.clone(), expr_type);
+    //             }
+    //         }
+    //         Declaration::FnDecl(_name, params_tokens, return_token, body) => {
+    //             for (name_token, param_token) in params_tokens {
+    //                 let expr_type = self.lookup_type(param_token)?;
+    //                 // Make the parameters available as locals to the function body
+    //                 // so that they can be found & type checked
+    //                 self.add_local_to_next_scope(name_token.get_id(), expr_type);
+    //             }
+    //             let return_types = self.check_stmt(body)?;
 
-                let declared_ret_type = if let Some(return_type) = return_token {
-                    self.lookup_type(return_type)?
-                } else {
-                    Type::Void
-                };
+    //             let declared_ret_type = if let Some(return_type) = return_token {
+    //                 self.lookup_type(return_type)?
+    //             } else {
+    //                 Type::new_empty_range(TypeKind::Void)
+    //             };
 
-                if declared_ret_type != Type::Void && return_types.is_empty() {
-                    return Err(TypeCheckerError {
-                        token: self.tokens[0].clone(),
-                        message: format!(
-                            "This function has to return a type {}.",
-                            declared_ret_type
-                        ),
-                    });
-                }
+    //             if declared_ret_type != Type::new_empty_range(TypeKind::Void)
+    //                 && return_types.is_empty()
+    //             {
+    //                 return Err(TypeCheckerError {
+    //                     token: self.tokens[0].clone(),
+    //                     message: format!(
+    //                         "This function has to return a type {}.",
+    //                         declared_ret_type
+    //                     ),
+    //                 });
+    //             }
 
-                for return_type in return_types {
-                    if return_type != declared_ret_type {
-                        return Err(TypeCheckerError {
-                            token: self.tokens[0].clone(),
-                            message: format!(
-                                "Returned type {} does not match declared return type {}.",
-                                return_type, declared_ret_type
-                            ),
-                        });
-                    }
-                }
-            }
-            _ => (),
-        }
-        Ok(vec![])
-    }
+    //             for return_type in return_types {
+    //                 if return_type != declared_ret_type {
+    //                     return Err(TypeCheckerError {
+    //                         token: self.tokens[0].clone(),
+    //                         message: format!(
+    //                             "Returned type {} does not match declared return type {}.",
+    //                             return_type, declared_ret_type
+    //                         ),
+    //                     });
+    //                 }
+    //             }
+    //         }
+    //         _ => (),
+    //     }
+    //     Ok(vec![])
+    // }
 
-    fn check_stmt(&mut self, stmt: &Statement) -> Result<Vec<Type>, TypeCheckerError> {
-        match stmt {
-            Statement::ExpressionStmt(expr) => {
-                self.check_expr(expr)?;
-                Ok(vec![])
-            }
-            Statement::Block(decls) => {
-                self.begin_scope();
-                let mut return_types = Vec::new();
-                for decl in decls.iter() {
-                    return_types.extend(self.check_decl(decl)?);
-                }
-                self.end_scope();
-                Ok(return_types)
-            }
-            Statement::Ret(expr_opt) => {
-                if let Some(expr) = expr_opt {
-                    let expr_type = self.check_expr(expr)?;
-                    Ok(vec![expr_type])
-                } else {
-                    Ok(vec![Type::Void])
-                }
-            }
-            Statement::If(condition, if_branch, else_branch_opt) => {
-                let cond_type = self.check_expr(condition)?;
-                if cond_type != Type::Bool(0) {
-                    return Err(TypeCheckerError {
-                        token: self.tokens[0].clone(),
-                        message: format!("Condition must be of type bool, got {}", cond_type),
-                    });
-                }
+    // fn check_stmt(&mut self, stmt: &Statement) -> Result<Vec<Type>, TypeCheckerError> {
+    //     match stmt {
+    //         Statement::ExpressionStmt(expr) => {
+    //             self.check_expr(expr)?;
+    //             Ok(vec![])
+    //         }
+    //         Statement::Block(decls) => {
+    //             self.begin_scope();
+    //             let mut return_types = Vec::new();
+    //             for decl in decls.iter() {
+    //                 return_types.extend(self.check_decl(decl)?);
+    //             }
+    //             self.end_scope();
+    //             Ok(return_types)
+    //         }
+    //         Statement::Ret(expr_opt) => {
+    //             if let Some(expr) = expr_opt {
+    //                 let expr_type = self.check_expr(expr)?;
+    //                 Ok(vec![expr_type])
+    //             } else {
+    //                 Ok(vec![Type::new_empty_range(TypeKind::Void)])
+    //             }
+    //         }
+    //         Statement::If(condition, if_branch, else_branch_opt) => {
+    //             let cond_type = self.check_expr(condition)?;
+    //             if cond_type != Type::new_empty_range(TypeKind::Bool) {
+    //                 return Err(TypeCheckerError {
+    //                     token: self.tokens[0].clone(),
+    //                     message: format!("Condition must be of type bool, got {}", cond_type),
+    //                 });
+    //             }
 
-                let mut return_types = self.check_stmt(if_branch)?;
+    //             let mut return_types = self.check_stmt(if_branch)?;
 
-                if let Some(else_branch) = else_branch_opt {
-                    return_types.extend(self.check_stmt(else_branch)?);
-                }
+    //             if let Some(else_branch) = else_branch_opt {
+    //                 return_types.extend(self.check_stmt(else_branch)?);
+    //             }
 
-                Ok(return_types)
-            }
-            _ => Ok(vec![]),
-        }
-    }
+    //             Ok(return_types)
+    //         }
+    //         _ => Ok(vec![]),
+    //     }
+    // }
 
-    fn check_expr(&self, expr: &Expression) -> Result<Type, TypeCheckerError> {
+    fn check_expr(&self, expr: &Expression) -> Result<Type, TypeError> {
         match expr {
             Expression::Binary(lexpr, op_token, rexpr) => {
                 let ltype = self.check_expr(lexpr)?;
@@ -319,13 +332,13 @@ impl<'a> TypeChecker<'a> {
                     ]
                     .contains(&op_token.kind)
                     {
-                        Ok(Type::Bool(0))
+                        Ok(Type::new(ltype.token_range.start..rtype.token_range.end, TypeKind::Bool))
                     } else {
-                        Ok(rtype)
+                        Ok(Type::new(ltype.token_range.start..rtype.token_range.end, rtype.kind))
                     }
                 } else {
-                    Err(TypeCheckerError {
-                        token: op_token.clone(),
+                    Err(TypeError {
+                        token_range: op_token.clone().into(),
                         message: format!(
                             "Types {} and {} are not compatible in binary operation",
                             ltype, rtype
@@ -337,11 +350,11 @@ impl<'a> TypeChecker<'a> {
                 let expr_type = self.check_expr(rexpr)?;
                 match op.kind {
                     TokenKind::Bang => {
-                        if expr_type == Type::Bool(0) {
-                            Ok(Type::Bool(expr_type.get_token_index()))
+                        if expr_type.kind == TypeKind::Bool {
+                            Ok(Type::new(expr_type.token_range.clone(), TypeKind::Bool))
                         } else {
-                            Err(TypeCheckerError {
-                                token: self.tokens[expr_type.get_token_index()].clone(),
+                            Err(TypeError {
+                                token_range: expr_type.token_range.clone(),
                                 message: format!(
                                     "Type {} can not be used with a ! operator",
                                     expr_type
@@ -350,11 +363,11 @@ impl<'a> TypeChecker<'a> {
                         }
                     }
                     TokenKind::Minus => {
-                        if expr_type == Type::Integer(0) {
-                            Ok(Type::Integer(expr_type.get_token_index()))
+                        if expr_type.kind == TypeKind::Integer {
+                            Ok(Type::new(expr_type.token_range.clone(), TypeKind::Integer))
                         } else {
-                            Err(TypeCheckerError {
-                                token: self.tokens[expr_type.get_token_index()].clone(),
+                            Err(TypeError {
+                                token_range: expr_type.token_range.clone(),
                                 message: format!(
                                     "Type {} can not be used with a - operator",
                                     expr_type
@@ -365,18 +378,18 @@ impl<'a> TypeChecker<'a> {
                     _ => unimplemented!(),
                 }
             }
-            Expression::Integer(_, token_index) => Ok(Type::Integer(*token_index)),
-            Expression::Str(_, token_index) => Ok(Type::Str(*token_index)),
-            Expression::True(token_index) => Ok(Type::Bool(*token_index)),
-            Expression::False(token_index) => Ok(Type::Bool(*token_index)),
+            Expression::Integer { tokens, .. } => Ok(Type::new(tokens.clone(), TypeKind::Integer)),
+            Expression::Str { tokens, .. } => Ok(Type::new(tokens.clone(), TypeKind::Str)),
+            Expression::True { tokens } => Ok(Type::new(tokens.clone(), TypeKind::Bool)),
+            Expression::False { tokens } => Ok(Type::new(tokens.clone(), TypeKind::Bool)),
             Expression::Assign(id, expr) => {
                 let expr_type = self.check_expr(expr)?;
 
                 if let Some(index) = self.find_local_variable(&id) {
                     // Assignment to local var
                     if self.locals[index as usize].dtype != expr_type {
-                        Err(TypeCheckerError {
-                            token: self.tokens[expr_type.get_token_index()].clone(),
+                        Err(TypeError {
+                            token_range: expr_type.token_range.clone(),
                             message: format!(
                                 "Expression of type {} can not be assigned to variable with type {}",
                                 expr_type, self.locals[index as usize].dtype
@@ -401,13 +414,13 @@ impl<'a> TypeChecker<'a> {
             }
             Expression::Call(callee, params) => {
                 let callee_type = self.check_expr(callee)?;
-                if let Type::Func(fun) = callee_type {
+                if let TypeKind::Func(fun) = callee_type.kind {
                     for (index, param) in fun.params.iter().enumerate() {
                         if let Some(call_param) = params.get(index) {
                             let call_param_type = self.check_expr(call_param)?;
                             if *param != call_param_type {
-                                return Err(TypeCheckerError {
-                                    token: self.tokens[call_param_type.get_token_index()].clone(),
+                                return Err(TypeError {
+                                    token_range: call_param_type.token_range.clone(),
                                     message: format!(
                                         "Function parameters have incompatible type. Expected: {}, Supplied: {}.",
                                         param,
@@ -416,8 +429,8 @@ impl<'a> TypeChecker<'a> {
                                 });
                             }
                         } else {
-                            return Err(TypeCheckerError {
-                                token: self.tokens[0].clone(),
+                            return Err(TypeError {
+                                token_range: callee_type.token_range.clone(),
                                 message: format!(
                                     "Function needs {} parameters, but only {} were supplied.",
                                     fun.params.len(),
@@ -430,11 +443,11 @@ impl<'a> TypeChecker<'a> {
                     Ok(if let Some(res) = &fun.result {
                         res.as_ref().clone()
                     } else {
-                        Type::Void
+                        Type::new_empty_range(TypeKind::Void)
                     })
                 } else {
-                    Err(TypeCheckerError {
-                        token: self.tokens[0].clone(),
+                    Err(TypeError {
+                        token_range: callee_type.token_range.clone(),
                         message: "Cannot call anything other than a function.".to_owned(),
                     })
                 }

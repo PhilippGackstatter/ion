@@ -134,22 +134,22 @@ fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
             pr(level, is_child, id);
             pretty_print_expr(level, true, expr);
         }
-        Integer(num, _) => {
-            pr(level, is_child, &format!("{}", num));
+        Integer { int, .. } => {
+            pr(level, is_child, &format!("{}", int));
         }
         Double(num, _) => {
             pr(level, is_child, &format!("{}", num));
         }
-        Str(str_, _) => {
-            pr(level, is_child, &format!(r#""{}""#, str_));
+        Str { string, .. } => {
+            pr(level, is_child, &format!(r#""{}""#, string));
         }
         Identifier(str_) => {
             pr(level, is_child, str_);
         }
-        True(_) => {
+        True { .. } => {
             pr(level, is_child, "true");
         }
-        False(_) => {
+        False { .. } => {
             pr(level, is_child, "false");
         }
     }
@@ -194,17 +194,17 @@ pub fn run(program: String, until: u8) {
                     vm.interpet(compiler.chunk());
                 }
                 Err(err) => {
-                    print_error(&program, err.token, &err.message);
+                    print_error(&program, err.token_range, &err.message);
                 }
             }
         }
         Err(parser_err) => {
-            print_error(&program, parser_err.token, parser_err.message);
+            print_error(&program, parser_err.token.into(), parser_err.message);
         }
     }
 }
 
-fn print_error(prog: &str, tk: crate::types::Token, msg: &str) {
+fn print_error(prog: &str, range: std::ops::Range<usize>, msg: &str) {
     let mut newline_before_token = 0;
     // Initialized to prog len in case of last line
     let mut newline_after_token = prog.len();
@@ -212,7 +212,7 @@ fn print_error(prog: &str, tk: crate::types::Token, msg: &str) {
 
     let mut break_on_next_newline = false;
     for (i, ch) in prog.bytes().enumerate() {
-        if i >= (tk.offset as usize) {
+        if i >= range.start {
             break_on_next_newline = true;
         }
         if ch == 10 {
@@ -235,8 +235,8 @@ fn print_error(prog: &str, tk: crate::types::Token, msg: &str) {
 
     let token = prog[newline_before_token..newline_after_token].to_owned();
 
-    let token_start_index = (tk.offset as usize) - newline_before_token;
-    let token_end_index = token_start_index + (tk.length as usize);
+    let token_start_index = range.start - newline_before_token;
+    let token_end_index = range.end;
     let line_count_str = format!("{}", line_count);
 
     println!("{}: {}", line_count_str, token);

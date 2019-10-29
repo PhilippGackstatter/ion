@@ -1,4 +1,5 @@
 use std::fmt;
+use std::ops::Range;
 
 pub type Program = Vec<Declaration>;
 
@@ -115,6 +116,13 @@ impl Token {
     }
 }
 
+impl Into<std::ops::Range<usize>> for Token {
+    fn into(self) -> std::ops::Range<usize> {
+        let off = self.offset as usize;
+        off..(off + (self.length as usize))
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
     Semicolon,
@@ -185,12 +193,12 @@ pub enum Expression {
     Assign(String, Box<Expression>),
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
-    Integer(i32, usize),
+    Integer{ tokens: Range<usize>, int: i32 },
     Double(f32, usize),
-    Str(String, usize),
+    Str{ tokens: Range<usize>, string: String },
     Identifier(String),
-    False(usize),
-    True(usize),
+    False { tokens: Range<usize> },
+    True { tokens: Range<usize> },
 }
 
 impl fmt::Display for Value {

@@ -200,8 +200,8 @@ impl Compiler {
                     self.emit_u16(index);
                 }
             }
-            Integer(num, _) => {
-                let index = self.add_constant(Value::Int(*num));
+            Integer { int, ..} => {
+                let index = self.add_constant(Value::Int(*int));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
@@ -210,17 +210,17 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            Str(str_, _) => {
-                let index = self.add_constant(Value::Obj(Object::StringObj(str_.clone())));
+            Str { string, .. } => {
+                let index = self.add_constant(Value::Obj(Object::StringObj(string.clone())));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            True(_) => {
+            Expression::True { .. } => {
                 let index = self.add_constant(Value::Bool(true));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            False(_) => {
+            False { .. } => {
                 let index = self.add_constant(Value::Bool(false));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
