@@ -1,3 +1,5 @@
+use argparse::{ArgumentParser, Store, StoreTrue};
+
 use crate::types::{
     Declaration::{self, *},
     Expression,
@@ -5,8 +7,73 @@ use crate::types::{
     Program,
     Statement::{self, *},
 };
-
 use std::fmt::{self, Debug, Formatter};
+
+pub struct Options {
+    // Whether to debug print the following data structures
+    pub tokens: bool,
+    pub ast: bool,
+    pub symbols: bool,
+    pub chunk: bool,
+    pub vm: bool,
+    /// Until what stage to run the compiler
+    pub until: u8,
+}
+
+impl Options {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Options {
+            tokens: false,
+            ast: false,
+            symbols: false,
+            chunk: false,
+            vm: false,
+            until: 5,
+        }
+    }
+}
+
+pub fn get_repl_parser(opt: &mut Options) -> ArgumentParser {
+    let mut parser = ArgumentParser::new();
+
+    parser.set_description("ion language");
+    parser.refer(&mut opt.tokens).add_option(
+        &["-t", "--tokens"],
+        StoreTrue,
+        "Print the tokens produced by the Lexer.",
+    );
+
+    parser.refer(&mut opt.ast).add_option(
+        &["-a", "--ast"],
+        StoreTrue,
+        "Print the abstract syntax tree produced by the Parser.",
+    );
+
+    parser.refer(&mut opt.symbols).add_option(
+        &["-s", "--symbols"],
+        StoreTrue,
+        "Print the symbol table produced by the Type Checker.",
+    );
+
+    parser.refer(&mut opt.chunk).add_option(
+        &["-c", "--chunk"],
+        StoreTrue,
+        "Print the Chunk (Constants + Bytecode) produced by the Compiler.",
+    );
+
+    parser.refer(&mut opt.vm).add_option(
+        &["-v", "--vm"],
+        StoreTrue,
+        "Print the execution trace by the VM.",
+    );
+
+    parser
+        .refer(&mut opt.until)
+        .add_option(&["-u", "--until"], Store, "Until what stage to run: 1 Lexer, 2 Parser, 3 Type Checker, 4 Compiler, 5 Virtual Machine.");
+
+    parser
+}
 
 fn write(f: &mut Formatter<'_>, level: u32, is_child: bool, arg: &str) -> fmt::Result {
     for _ in 0..level {
@@ -194,36 +261,49 @@ pub fn lexit(program: String) {
     lexer.print_tokens();
 }
 
-pub fn run(program: String, until: u8) {
+pub fn run(program: String, options: &Options) {
     let mut lexer = crate::lexer::Lexer::new();
     lexer.lex(&program);
-    lexer.print_tokens();
-    if until == 1 {
+    if options.tokens {
+        lexer.print_tokens();
+    }
+
+    if options.until == 1 {
         return;
     }
     let mut parser = crate::parser::Parser::new(&lexer);
     match parser.parse() {
         Ok(prog) => {
-            crate::util::pretty_print(&prog);
-            if until == 2 {
+            if options.ast {
+                crate::util::pretty_print(&prog);
+            }
+
+            if options.until == 2 {
                 return;
             }
             let mut checker = crate::type_checker::TypeChecker::new();
-            match checker.check(&prog) {
+            match checker.check(&prog, options.symbols) {
                 Ok(()) => {
-                    if until == 3 {
+                    if options.until == 3 {
                         return;
                     }
                     let mut compiler: crate::compiler::Compiler = Default::default();
                     compiler.compile(&prog);
 
-                    println!("{}", compiler.chunk());
-                    println!("\nVirtual Machine");
-                    println!("===============");
-                    if until == 4 {
+                    if options.chunk {
+                        println!("{}", compiler.chunk());
+                    }
+
+                    if options.vm {
+                        println!("\nVirtual Machine");
+                        println!("===============");
+                    }
+
+                    if options.until == 4 {
                         return;
                     }
-                    let mut vm = crate::vm::VM::new();
+
+                    let mut vm = crate::vm::VM::new(options.vm);
                     vm.interpet(compiler.chunk());
                 }
                 Err(err) => {

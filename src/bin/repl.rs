@@ -1,19 +1,15 @@
 extern crate ion;
-use std::env;
+use ion::util::Options;
 use std::io;
 use std::io::prelude::*;
 
 fn main() {
-    // Specify anything as the 1st arg to enable debug mode
-    let run_until = if let Some(until) = env::args().nth(1) {
-        Some(
-            until
-                .parse()
-                .unwrap_or_else(|_| panic!("Provide a number as argument.")),
-        )
-    } else {
-        None
-    };
+    let mut opt = Options::new();
+
+    {
+        let parser = ion::util::get_repl_parser(&mut opt);
+        parser.parse_args_or_exit();
+    }
 
     println!("ion v0.1.0");
     loop {
@@ -23,11 +19,7 @@ fn main() {
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
             Ok(_) => {
-                if let Some(till) = run_until {
-                    ion::util::run(input, till);
-                } else {
-                    ion::util::run(input, 5);
-                }
+                ion::util::run(input, &opt);
             }
             Err(error) => println!("error: {}", error),
         }

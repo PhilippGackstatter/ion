@@ -1,35 +1,32 @@
+extern crate argparse;
 extern crate ion;
+use argparse::Store;
+use ion::util::Options;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::path::Path;
 
 fn main() {
-    let path = env::args()
-        .nth(1)
-        .expect("Please specify the path to a file as the 1st arg.");
+    let mut file_path = String::new();
+    let mut opt = Options::new();
 
-    // Specify anything as the 2nd arg to enable debug mode
-    let run_until = if let Some(until) = env::args().nth(2) {
-        Some(
-            until
-                .parse()
-                .unwrap_or_else(|_| panic!("Provide a number as argument.")),
-        )
-    } else {
-        None
-    };
+    {
+        let mut parser = ion::util::get_repl_parser(&mut opt);
+        parser
+            .refer(&mut file_path)
+            .add_argument("file", Store, "The ion file to execute.");
+        parser.parse_args_or_exit();
+    }
 
+    let path: &Path = file_path.as_ref();
     let full_path = env::current_dir().unwrap().join(path);
-    println!("Opening {:?}", full_path);
     let mut file = File::open(full_path).unwrap();
     let mut file_buf = Vec::new();
     file.read_to_end(&mut file_buf).unwrap();
+
     let input = String::from_utf8(file_buf)
         .unwrap_or_else(|_| panic!("Please provide a valid UTF-8 encoded file."));
 
-    if let Some(till) = run_until {
-        ion::util::run(input, till);
-    } else {
-        ion::util::run(input, 5);
-    }
+    ion::util::run(input, &opt);
 }

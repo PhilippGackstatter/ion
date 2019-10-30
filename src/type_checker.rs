@@ -133,11 +133,13 @@ impl TypeChecker {
         }
     }
 
-    pub fn check(&mut self, prog: &Program) -> Result<(), TypeError> {
+    pub fn check(&mut self, prog: &Program, print_symbol_table: bool) -> Result<(), TypeError> {
         for decl in prog.iter() {
             self.build_symbol_table(decl)?;
         }
-        self.print_symbol_table();
+        if print_symbol_table {
+            self.print_symbol_table();
+        }
         for decl in prog.iter() {
             self.check_decl(decl)?;
         }

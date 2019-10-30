@@ -6,14 +6,16 @@ use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct VM {
+    print_debug: bool,
     stack: Vec<Value>,
     globals: HashMap<String, Value>,
     frame_pointer: usize,
 }
 
 impl VM {
-    pub fn new() -> Self {
+    pub fn new(print_debug: bool) -> Self {
         VM {
+            print_debug,
             stack: Vec::with_capacity(16),
             globals: HashMap::new(),
             // An index into the stack where the frame for the
@@ -27,9 +29,16 @@ impl VM {
         let mut i = 0;
 
         loop {
-            self.debug_stack();
+            if self.print_debug {
+                self.debug_stack();
+            }
+
             let byte = unsafe { std::mem::transmute::<u8, Bytecode>(code[i]) };
-            eprintln!("{:?}", byte);
+
+            if self.print_debug {
+                eprintln!("{:?}", byte);
+            }
+
             match byte {
                 OpPop => {
                     self.pop();
