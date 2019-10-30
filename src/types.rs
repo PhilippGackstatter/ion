@@ -71,7 +71,7 @@ impl Chunk {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct Token {
     /// The offset in bytes in the source file where the lexeme begins
     pub offset: u32,
@@ -79,6 +79,12 @@ pub struct Token {
     pub length: u8,
     /// The kind of the token
     pub kind: TokenKind,
+}
+
+impl fmt::Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.kind)
+    }
 }
 
 impl Token {
@@ -187,25 +193,20 @@ pub enum Statement {
     ExpressionStmt(Expression),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum ExpressionKind {
     Binary(Box<Expression>, Token, Box<Expression>),
     Assign(String, Box<Expression>),
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
-    Integer {
-        int: i32,
-    },
+    Integer { int: i32 },
     Double { float: f32 },
-    Str {
-        string: String,
-    },
+    Str { string: String },
     Identifier(String),
     False,
     True,
 }
 
-#[derive(Debug)]
 pub struct Expression {
     pub tokens: Range<usize>,
     pub kind: ExpressionKind,
@@ -213,15 +214,11 @@ pub struct Expression {
 
 impl Expression {
     pub fn new(tokens: Range<usize>, kind: ExpressionKind) -> Self {
-        Expression {
-            tokens, kind
-        }
+        Expression { tokens, kind }
     }
 
     pub fn new_debug(kind: ExpressionKind) -> Self {
-        Expression {
-            tokens: 0..1, kind
-        }
+        Expression { tokens: 0..1, kind }
     }
 }
 

@@ -3,8 +3,8 @@ use std::convert::TryInto;
 use crate::types::{
     Bytecode, Chunk,
     Declaration::{self, *},
-    ExpressionKind::*,
     Expression,
+    ExpressionKind::*,
     Object, Program,
     Statement::{self, *},
     Token,

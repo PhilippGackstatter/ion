@@ -1,10 +1,73 @@
 use crate::types::{
     Declaration::{self, *},
     Expression,
-    ExpressionKind::{self, *},
+    ExpressionKind::*,
     Program,
     Statement::{self, *},
 };
+
+fn write(
+    f: &mut std::fmt::Formatter<'_>,
+    level: u32,
+    is_child: bool,
+    arg: &str,
+) -> std::fmt::Result {
+    for _ in 0..level {
+        write!(f, " ")?;
+    }
+    if is_child {
+        writeln!(f, "└─ {}", arg)
+    } else {
+        writeln!(f, "\n─ {}", arg)
+    }
+}
+
+pub fn pretty_write_expr(
+    f: &mut std::fmt::Formatter<'_>,
+    mut level: u32,
+    is_child: bool,
+    expr: &Expression,
+) -> std::fmt::Result {
+    match &expr.kind {
+        Binary(lexpr, op, rexpr) => {
+            write(f, level, is_child, &format!("{:?}", op))?;
+            level += 2;
+            pretty_write_expr(f, level, true, rexpr)?;
+            pretty_write_expr(f, level, true, lexpr)
+        }
+        Unary(op, rexpr) => {
+            write(f, level, is_child, &format!("{:?}", op.kind))?;
+            level += 2;
+            pretty_write_expr(f, level, true, rexpr)
+        }
+        Call(callee, params) => {
+            write(f, level, is_child, "call")?;
+            level += 2;
+            for param in params.iter() {
+                pretty_write_expr(f, level, true, param)?;
+            }
+            pretty_write_expr(f, level, true, callee)
+        }
+        Assign(id, expr) => {
+            write(f, level, is_child, "Assign")?;
+            level += 2;
+            write(f, level, is_child, id)?;
+            pretty_write_expr(f, level, true, expr)
+        }
+        Integer { int } => write(f, level, is_child, &format!("{}", int)),
+        Double { float } => write(f, level, is_child, &format!("{}", float)),
+        Str { string } => write(f, level, is_child, &format!("\"{}\"", string)),
+        Identifier(str_) => write(f, level, is_child, str_),
+        True { .. } => write(f, level, is_child, "true"),
+        False { .. } => write(f, level, is_child, "false"),
+    }
+}
+
+impl std::fmt::Debug for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        pretty_write_expr(f, 0, false, &self)
+    }
+}
 
 pub fn pretty_print(prog: &Program) {
     println!("\nAbstract Syntax Tree");
@@ -108,7 +171,7 @@ fn pretty_print_stmt(mut level: u32, is_child: bool, stmt: &Statement) {
     }
 }
 
-fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
+pub fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
     match &expr.kind {
         Binary(lexpr, op, rexpr) => {
             pr(level, is_child, &format!("{:?}", op.kind));

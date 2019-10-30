@@ -285,7 +285,10 @@ impl<'a> Parser<'a> {
             let equals = self.previous().clone();
             if let Identifier(id) = &left_hand?.kind {
                 let value = self.assignment()?;
-                return Ok(Expression::new(equals.into(), Assign(id.clone(), Box::new(value))));
+                return Ok(Expression::new(
+                    equals.into(),
+                    Assign(id.clone(), Box::new(value)),
+                ));
             } else {
                 return Err(self.error(equals, "Invalid assignment target."));
             }
@@ -300,7 +303,10 @@ impl<'a> Parser<'a> {
         while self.match_(BangEqual) || self.match_(EqualEqual) {
             let operator = self.previous().clone();
             let right = self.comparison()?;
-            expr = Expression::new(expr.tokens.start..right.tokens.end, Binary(Box::new(expr), operator, Box::new(right)));
+            expr = Expression::new(
+                expr.tokens.start..right.tokens.end,
+                Binary(Box::new(expr), operator, Box::new(right)),
+            );
         }
         Ok(expr)
     }
@@ -315,7 +321,10 @@ impl<'a> Parser<'a> {
         {
             let operator = self.previous().clone();
             let right = self.addition()?;
-            expr = Expression::new(expr.tokens.start..right.tokens.end, Binary(Box::new(expr), operator, Box::new(right)));
+            expr = Expression::new(
+                expr.tokens.start..right.tokens.end,
+                Binary(Box::new(expr), operator, Box::new(right)),
+            );
         }
         Ok(expr)
     }
@@ -326,7 +335,10 @@ impl<'a> Parser<'a> {
         while self.match_(Plus) || self.match_(Minus) {
             let operator = self.previous().clone();
             let right = self.multiplication()?;
-            expr = Expression::new(expr.tokens.start..right.tokens.end, Binary(Box::new(expr), operator, Box::new(right)));
+            expr = Expression::new(
+                expr.tokens.start..right.tokens.end,
+                Binary(Box::new(expr), operator, Box::new(right)),
+            );
         }
         Ok(expr)
     }
@@ -337,7 +349,10 @@ impl<'a> Parser<'a> {
         while self.match_(Slash) || self.match_(Star) {
             let operator = self.previous().clone();
             let right = self.unary()?;
-            expr = Expression::new(expr.tokens.start..right.tokens.end, Binary(Box::new(expr), operator, Box::new(right)));
+            expr = Expression::new(
+                expr.tokens.start..right.tokens.end,
+                Binary(Box::new(expr), operator, Box::new(right)),
+            );
         }
         Ok(expr)
     }
@@ -348,7 +363,10 @@ impl<'a> Parser<'a> {
         if self.match_(Bang) || self.match_(Minus) {
             let operator = self.previous().clone();
             let lexpr = self.unary()?;
-            Ok(Expression::new((operator.offset as usize)..lexpr.tokens.end, Unary(operator, Box::new(lexpr))))
+            Ok(Expression::new(
+                (operator.offset as usize)..lexpr.tokens.end,
+                Unary(operator, Box::new(lexpr)),
+            ))
         } else {
             self.call()
         }
@@ -381,7 +399,10 @@ impl<'a> Parser<'a> {
 
         self.consume(RightParen, "Expected ')' to end function call.")?;
 
-        Ok(Expression::new(expr.tokens.start..self.current, Call(Box::new(expr), params)))
+        Ok(Expression::new(
+            expr.tokens.start..self.current,
+            Call(Box::new(expr), params),
+        ))
     }
 
     fn primary(&mut self) -> ExpressionResult {
@@ -399,22 +420,27 @@ impl<'a> Parser<'a> {
                 Ok(tok)
             }
             Num(int) => {
-                let num = Expression::new(self.current_range(), Integer { int: *int});
+                let num = Expression::new(self.current_range(), Integer { int: *int });
                 self.advance();
                 Ok(num)
             }
             FloatNum(float) => {
-                let num = Expression::new(self.current_range(), Double { float: *float});
+                let num = Expression::new(self.current_range(), Double { float: *float });
                 self.advance();
                 Ok(num)
             }
             String_(str_) => {
-                let string = Expression::new(self.current_range(), Str { string: str_.clone() });
+                let string = Expression::new(
+                    self.current_range(),
+                    Str {
+                        string: str_.clone(),
+                    },
+                );
                 self.advance();
                 Ok(string)
             }
             IdToken(str_) => {
-                let id = Expression::new(self.current_range(), Identifier (str_.clone()));
+                let id = Expression::new(self.current_range(), Identifier(str_.clone()));
                 self.advance();
                 Ok(id)
             }
@@ -526,19 +552,16 @@ mod tests {
         ]);
         let mut parser = Parser::new(&lexer);
         if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
-            assert_eq!(
-                expr.kind,
-                Binary(
-                    Box::new(Expression::new_debug(Integer {
-                        int: 9
-                    })),
-                    Token::new_debug(Plus),
-                    Box::new(Expression::new_debug(Binary(Box::new(Expression::new_debug(Integer { int: 1 })),
-                        Token::new_debug(Slash),
-                        Box::new(Expression::new_debug( Integer { int: 1 }))
-                    )))
-                )
-            );
+            let expected = Expression::new_debug(Binary(
+                Box::new(Expression::new_debug(Integer { int: 9 })),
+                Token::new_debug(Plus),
+                Box::new(Expression::new_debug(Binary(
+                    Box::new(Expression::new_debug(Integer { int: 1 })),
+                    Token::new_debug(Slash),
+                    Box::new(Expression::new_debug(Integer { int: 4 })),
+                ))),
+            ));
+            assert_eq!(*expr, expected,);
         } else {
             panic!();
         }

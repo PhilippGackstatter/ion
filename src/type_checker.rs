@@ -378,8 +378,8 @@ impl TypeChecker {
             }
             ExpressionKind::Integer { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Integer)),
             ExpressionKind::Str { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Str)),
-            ExpressionKind::True { ..  } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
-            ExpressionKind::False { ..  } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
+            ExpressionKind::True { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
+            ExpressionKind::False { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
             ExpressionKind::Assign(id, expr) => {
                 let expr_type = self.check_expr(&expr)?;
 
