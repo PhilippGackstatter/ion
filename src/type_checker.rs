@@ -354,7 +354,7 @@ impl TypeChecker {
                             Ok(Type::new(expr_type.token_range.clone(), TypeKind::Bool))
                         } else {
                             Err(TypeError {
-                                token_range: expr_type.token_range.clone(),
+                                token_range: rexpr.tokens.clone(),
                                 message: format!(
                                     "Type {} can not be used with a ! operator",
                                     expr_type
@@ -508,5 +508,113 @@ impl TypeChecker {
         for (_name, symbol) in self.symbol_table.iter() {
             println!("{}", symbol);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{lexer::Lexer, parser::Parser, util};
+    use std::path::Path;
+
+    fn lex_parse_check(path: &str) -> Result<(), TypeError> {
+        let test_path: &Path = "src/test_input/type_checker/".as_ref();
+        let input = util::file_to_string(&test_path.join(&path));
+        let mut lexer = Lexer::new();
+        lexer.lex(&input);
+        let mut parser = Parser::new(&lexer);
+        let tree = parser.parse().unwrap();
+        let mut checker = crate::type_checker::TypeChecker::new();
+        checker.check(&tree, false)
+    }
+
+    #[test]
+    fn test_no_return() {
+        let res = lex_parse_check("no_return.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("does not match declared return type"));
+    }
+
+    #[test]
+    fn test_multiple_returns() {
+        let res = lex_parse_check("multiple_returns.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("does not match declared return type"));
+    }
+
+    #[test]
+    fn test_return_type_void() {
+        let res = lex_parse_check("return_type_void.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("does not match declared return type"));
+    }
+
+    #[test]
+    fn test_empty_return() {
+        let res = lex_parse_check("empty_return.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("does not match declared return type"));
+    }
+
+    #[test]
+    fn test_fn_arg() {
+        let res = lex_parse_check("fn_arg.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("Function parameters have incompatible type"));
+    }
+
+    #[test]
+    fn test_if_condition() {
+        let res = lex_parse_check("if_condition.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("Condition must be of type bool"));
+    }
+
+    #[test]
+    fn test_local_binary_plus() {
+        let res = lex_parse_check("local_binary_plus.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("Condition must be of type bool"));
+    }
+
+    #[test]
+    fn test_local_binary_greater() {
+        let res = lex_parse_check("local_binary_greater.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("not compatible in binary operation"));
+    }
+
+    #[test]
+    fn test_local_unary_bang() {
+        let res = lex_parse_check("local_unary_bang.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("can not be used with a ! operator"));
     }
 }

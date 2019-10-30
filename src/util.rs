@@ -1,4 +1,8 @@
 use argparse::{ArgumentParser, Store, StoreTrue};
+use std::env;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
 use crate::types::{
     Declaration::{self, *},
@@ -255,10 +259,14 @@ fn pretty_write_stmt(
     }
 }
 
-pub fn lexit(program: String) {
-    let mut lexer = crate::lexer::Lexer::new();
-    lexer.lex(&program);
-    lexer.print_tokens();
+pub fn file_to_string<P: AsRef<Path>>(path: &P) -> String {
+    let full_path = env::current_dir().unwrap().join(path);
+    let mut file = File::open(full_path).unwrap();
+    let mut file_buf = Vec::new();
+    file.read_to_end(&mut file_buf).unwrap();
+
+    String::from_utf8(file_buf)
+        .unwrap_or_else(|_| panic!("Please provide a valid UTF-8 encoded file."))
 }
 
 pub fn run(program: String, options: &Options) {
