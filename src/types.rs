@@ -175,7 +175,7 @@ pub enum TokenKind {
     EndOfFile,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum Declaration {
     StatementDecl(Statement),
     VarDecl(String, Expression),
@@ -183,7 +183,7 @@ pub enum Declaration {
     FnDecl(String, Vec<(Token, Token)>, Option<Token>, Statement),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum Statement {
     Print(Expression),
     If(Expression, Box<Statement>, Option<Box<Statement>>),

@@ -6,28 +6,25 @@ use crate::types::{
     Statement::{self, *},
 };
 
-fn write(
-    f: &mut std::fmt::Formatter<'_>,
-    level: u32,
-    is_child: bool,
-    arg: &str,
-) -> std::fmt::Result {
+use std::fmt::{self, Debug, Formatter};
+
+fn write(f: &mut Formatter<'_>, level: u32, is_child: bool, arg: &str) -> fmt::Result {
     for _ in 0..level {
         write!(f, " ")?;
     }
     if is_child {
         writeln!(f, "└─ {}", arg)
     } else {
-        writeln!(f, "\n─ {}", arg)
+        writeln!(f, "─ {}", arg)
     }
 }
 
 pub fn pretty_write_expr(
-    f: &mut std::fmt::Formatter<'_>,
+    f: &mut Formatter<'_>,
     mut level: u32,
     is_child: bool,
     expr: &Expression,
-) -> std::fmt::Result {
+) -> fmt::Result {
     match &expr.kind {
         Binary(lexpr, op, rexpr) => {
             write(f, level, is_child, &format!("{:?}", op))?;
@@ -63,9 +60,21 @@ pub fn pretty_write_expr(
     }
 }
 
-impl std::fmt::Debug for Expression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for Expression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         pretty_write_expr(f, 0, false, &self)
+    }
+}
+
+impl Debug for Statement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        pretty_write_stmt(f, 0, false, &self)
+    }
+}
+
+impl Debug for Declaration {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        pretty_write_decl(f, 0, false, &self)
     }
 }
 
@@ -73,29 +82,23 @@ pub fn pretty_print(prog: &Program) {
     println!("\nAbstract Syntax Tree");
     println!("====================");
     for decl in prog.iter() {
-        pretty_print_decl(0, false, decl);
+        println!("{:?}", decl);
     }
 }
 
-fn pr(level: u32, is_child: bool, arg: &str) {
-    for _ in 0..level {
-        print!(" ");
-    }
-    if is_child {
-        println!("└─ {}", arg);
-    } else {
-        println!("─ {}", arg);
-    }
-}
-
-fn pretty_print_decl(mut level: u32, is_child: bool, decl: &Declaration) {
+fn pretty_write_decl(
+    f: &mut Formatter<'_>,
+    mut level: u32,
+    is_child: bool,
+    decl: &Declaration,
+) -> fmt::Result {
     match decl {
-        StatementDecl(stmt) => pretty_print_stmt(level, is_child, stmt),
+        StatementDecl(stmt) => pretty_write_stmt(f, level, is_child, stmt),
         VarDecl(id, expr) => {
-            pr(level, is_child, "var");
+            write(f, level, is_child, "var")?;
             level += 2;
-            pr(level, true, id);
-            pretty_print_expr(level, true, expr);
+            write(f, level, true, id)?;
+            pretty_write_expr(f, level, true, expr)
         }
         FnDecl(name, params, return_ty, stmt) => {
             let ret = if return_ty.is_some() {
@@ -103,7 +106,8 @@ fn pretty_print_decl(mut level: u32, is_child: bool, decl: &Declaration) {
             } else {
                 "void".to_owned()
             };
-            pr(
+            write(
+                f,
                 level,
                 is_child,
                 &format!(
@@ -116,105 +120,70 @@ fn pretty_print_decl(mut level: u32, is_child: bool, decl: &Declaration) {
                         .join(", "),
                     ret
                 ),
-            );
+            )?;
             level += 2;
-            pretty_print_stmt(level, true, stmt);
+            pretty_write_stmt(f, level, true, stmt)
         }
         StructDecl(name, fields) => {
-            pr(level, is_child, &format!("struct {}", name.get_id()));
+            write(f, level, is_child, &format!("struct {}", name.get_id()))?;
             level += 2;
             for (field, ty) in fields {
-                pr(level, true, &format!("{}: {}", field.get_id(), ty.get_id()));
+                write(
+                    f,
+                    level,
+                    true,
+                    &format!("{}: {}", field.get_id(), ty.get_id()),
+                )?;
             }
+            Ok(())
         }
     }
 }
 
-fn pretty_print_stmt(mut level: u32, is_child: bool, stmt: &Statement) {
+fn pretty_write_stmt(
+    f: &mut Formatter<'_>,
+    mut level: u32,
+    is_child: bool,
+    stmt: &Statement,
+) -> fmt::Result {
     match stmt {
-        ExpressionStmt(expr) => pretty_print_expr(level, is_child, expr),
+        ExpressionStmt(expr) => pretty_write_expr(f, level, is_child, expr),
         If(cond, then_stmt, else_stmt) => {
-            pr(level, is_child, "if");
+            write(f, level, is_child, "if")?;
             level += 2;
-            pretty_print_expr(level, true, cond);
-            pretty_print_stmt(level, true, then_stmt);
+            pretty_write_expr(f, level, true, cond)?;
+            pretty_write_stmt(f, level, true, then_stmt)?;
             if let Some(else_) = else_stmt {
-                pretty_print_stmt(level, true, else_);
+                pretty_write_stmt(f, level, true, else_)?;
             }
+            Ok(())
         }
         While(cond, body) => {
-            pr(level, is_child, "while");
+            write(f, level, is_child, "while")?;
             level += 2;
-            pretty_print_expr(level, true, cond);
-            pretty_print_stmt(level, true, body);
+            pretty_write_expr(f, level, true, cond)?;
+            pretty_write_stmt(f, level, true, body)
         }
         Print(expr) => {
-            pr(level, is_child, "print");
+            write(f, level, is_child, "print")?;
             level += 2;
-            pretty_print_expr(level, true, expr);
+            pretty_write_expr(f, level, true, expr)
         }
         Ret(expr) => {
-            pr(level, is_child, "return");
+            write(f, level, is_child, "return")?;
             level += 2;
             match expr {
-                Some(expr_) => pretty_print_expr(level, true, expr_),
-                None => pr(level, true, "None"),
+                Some(expr_) => pretty_write_expr(f, level, true, expr_),
+                None => write(f, level, true, "None"),
             }
         }
         Block(decls) => {
-            pr(level, is_child, "Block");
+            write(f, level, is_child, "Block")?;
             level += 2;
             for decl in decls.iter() {
-                pretty_print_decl(level, true, decl);
+                pretty_write_decl(f, level, true, decl)?;
             }
-        }
-    }
-}
-
-pub fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
-    match &expr.kind {
-        Binary(lexpr, op, rexpr) => {
-            pr(level, is_child, &format!("{:?}", op.kind));
-            level += 2;
-            pretty_print_expr(level, true, rexpr);
-            pretty_print_expr(level, true, lexpr);
-        }
-        Unary(op, rexpr) => {
-            pr(level, is_child, &format!("{:?}", op.kind));
-            level += 2;
-            pretty_print_expr(level, true, rexpr);
-        }
-        Call(callee, params) => {
-            pr(level, is_child, "call");
-            level += 2;
-            for param in params.iter() {
-                pretty_print_expr(level, true, param);
-            }
-            pretty_print_expr(level, true, callee);
-        }
-        Assign(id, expr) => {
-            pr(level, is_child, "Assign");
-            level += 2;
-            pr(level, is_child, id);
-            pretty_print_expr(level, true, expr);
-        }
-        Integer { int } => {
-            pr(level, is_child, &format!("{}", int));
-        }
-        Double { float } => {
-            pr(level, is_child, &format!("{}", float));
-        }
-        Str { string } => {
-            pr(level, is_child, &format!(r#""{}""#, string));
-        }
-        Identifier(str_) => {
-            pr(level, is_child, str_);
-        }
-        True { .. } => {
-            pr(level, is_child, "true");
-        }
-        False { .. } => {
-            pr(level, is_child, "false");
+            Ok(())
         }
     }
 }
