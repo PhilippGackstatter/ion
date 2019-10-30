@@ -175,7 +175,7 @@ pub fn run(program: String, until: u8) {
             if until == 2 {
                 return;
             }
-            let mut checker = crate::type_checker::TypeChecker::new(&lexer.tokens);
+            let mut checker = crate::type_checker::TypeChecker::new();
             match checker.check(&prog) {
                 Ok(()) => {
                     if until == 3 {

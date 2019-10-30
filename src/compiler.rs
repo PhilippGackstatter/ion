@@ -200,7 +200,7 @@ impl Compiler {
                     self.emit_u16(index);
                 }
             }
-            Integer { int, ..} => {
+            Integer { int, .. } => {
                 let index = self.add_constant(Value::Int(*int));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);

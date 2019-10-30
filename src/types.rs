@@ -193,12 +193,22 @@ pub enum Expression {
     Assign(String, Box<Expression>),
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
-    Integer{ tokens: Range<usize>, int: i32 },
+    Integer {
+        tokens: Range<usize>,
+        int: i32,
+    },
     Double(f32, usize),
-    Str{ tokens: Range<usize>, string: String },
+    Str {
+        tokens: Range<usize>,
+        string: String,
+    },
     Identifier(String),
-    False { tokens: Range<usize> },
-    True { tokens: Range<usize> },
+    False {
+        tokens: Range<usize>,
+    },
+    True {
+        tokens: Range<usize>,
+    },
 }
 
 impl fmt::Display for Value {

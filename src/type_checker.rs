@@ -4,12 +4,6 @@ use std::convert::TryInto;
 use std::ops::Range;
 
 #[derive(Debug)]
-pub struct TypeCheckerError {
-    pub token: Token,
-    pub message: String,
-}
-
-#[derive(Debug)]
 pub struct TypeError {
     /// The indexes in the source string that are erroneous
     pub token_range: Range<usize>,
@@ -116,17 +110,16 @@ struct Struct {
     fields: Vec<(String, Type)>,
 }
 
-pub struct TypeChecker<'a> {
-    tokens: &'a Vec<Token>,
-
+pub struct TypeChecker {
     locals: Vec<Variable>,
     scope_depth: u8,
 
     symbol_table: HashMap<String, Type>,
 }
 
-impl<'a> TypeChecker<'a> {
-    pub fn new(tokens: &'a Vec<Token>) -> Self {
+impl TypeChecker {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
         let mut hmap: HashMap<String, Type> = HashMap::new();
 
         hmap.insert("str".to_owned(), Type::new_empty_range(TypeKind::Str));
@@ -134,7 +127,6 @@ impl<'a> TypeChecker<'a> {
         hmap.insert("i32".to_owned(), Type::new_empty_range(TypeKind::Integer));
 
         TypeChecker {
-            tokens,
             locals: vec![],
             scope_depth: 0,
             symbol_table: hmap,
@@ -147,10 +139,7 @@ impl<'a> TypeChecker<'a> {
         }
         self.print_symbol_table();
         for decl in prog.iter() {
-            if let Declaration::StatementDecl(Statement::ExpressionStmt(expr)) = decl {
-                self.check_expr(expr)?;
-            }
-            // self.check_decl(decl)?;
+            self.check_decl(decl)?;
         }
         Ok(())
     }
@@ -183,10 +172,13 @@ impl<'a> TypeChecker<'a> {
                     fields.push((name.get_id(), self.lookup_type(ty)?));
                 }
 
-                let st = Type::new_empty_range(TypeKind::Struct(Struct {
-                    name: name.get_id(),
-                    fields,
-                }));
+                let st = Type::new(
+                    name.clone().into(),
+                    TypeKind::Struct(Struct {
+                        name: name.get_id(),
+                        fields,
+                    }),
+                );
                 self.symbol_table.insert(name.get_id(), st);
             }
             _ => (),
@@ -197,7 +189,9 @@ impl<'a> TypeChecker<'a> {
     fn lookup_type(&self, token: &Token) -> Result<Type, TypeError> {
         let type_name = token.get_id();
         if let Some(symbol) = self.symbol_table.get(&type_name) {
-            Ok(symbol.clone())
+            let mut ty = symbol.clone();
+            ty.token_range = token.clone().into();
+            Ok(ty)
         } else {
             Err(TypeError {
                 token_range: token.clone().into(),
@@ -206,116 +200,115 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    // fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<Type>, TypeCheckerError> {
-    //     match decl {
-    //         Declaration::StatementDecl(stmt) => {
-    //             return self.check_stmt(stmt);
-    //         }
-    //         Declaration::VarDecl(id, expr) => {
-    //             let expr_type = self.check_expr(expr)?;
-    //             if self.scope_depth == 0 {
-    //                 // Global
-    //             } else {
-    //                 if self
-    //                     .locals
-    //                     .iter()
-    //                     .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
-    //                 {
-    //                     return Err(TypeCheckerError {
-    //                         token: self.tokens[expr_type.token_range.start].clone(),
-    //                         message: "Variable is already declared in this scope.".into(),
-    //                     });
-    //                 }
-    //                 self.add_local(id.clone(), expr_type);
-    //             }
-    //         }
-    //         Declaration::FnDecl(_name, params_tokens, return_token, body) => {
-    //             for (name_token, param_token) in params_tokens {
-    //                 let expr_type = self.lookup_type(param_token)?;
-    //                 // Make the parameters available as locals to the function body
-    //                 // so that they can be found & type checked
-    //                 self.add_local_to_next_scope(name_token.get_id(), expr_type);
-    //             }
-    //             let return_types = self.check_stmt(body)?;
+    fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<Type>, TypeError> {
+        match decl {
+            Declaration::StatementDecl(stmt) => {
+                return self.check_stmt(stmt);
+            }
+            Declaration::VarDecl(id, expr) => {
+                let expr_type = self.check_expr(expr)?;
+                if self.scope_depth == 0 {
+                    // Global
+                } else {
+                    if self
+                        .locals
+                        .iter()
+                        .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
+                    {
+                        return Err(TypeError {
+                            token_range: expr_type.token_range.clone(),
+                            message: "Variable is already declared in this scope.".into(),
+                        });
+                    }
+                    self.add_local(id.clone(), expr_type);
+                }
+            }
+            Declaration::FnDecl(_name, params_tokens, return_token, body) => {
+                for (name_token, param_token) in params_tokens {
+                    let expr_type = self.lookup_type(param_token)?;
+                    // Make the parameters available as locals to the function body
+                    // so that they can be found & type checked
+                    self.add_local_to_next_scope(name_token.get_id(), expr_type);
+                }
+                let return_types = self.check_stmt(body)?;
 
-    //             let declared_ret_type = if let Some(return_type) = return_token {
-    //                 self.lookup_type(return_type)?
-    //             } else {
-    //                 Type::new_empty_range(TypeKind::Void)
-    //             };
+                let declared_ret_type = if let Some(return_type) = return_token {
+                    self.lookup_type(return_type)?
+                } else {
+                    Type::new_empty_range(TypeKind::Void)
+                };
 
-    //             if declared_ret_type != Type::new_empty_range(TypeKind::Void)
-    //                 && return_types.is_empty()
-    //             {
-    //                 return Err(TypeCheckerError {
-    //                     token: self.tokens[0].clone(),
-    //                     message: format!(
-    //                         "This function has to return a type {}.",
-    //                         declared_ret_type
-    //                     ),
-    //                 });
-    //             }
+                if declared_ret_type.kind != TypeKind::Void && return_types.is_empty() {
+                    return Err(TypeError {
+                        token_range: declared_ret_type.token_range.clone(),
+                        message: format!(
+                            "This function has to return a type {}.",
+                            declared_ret_type
+                        ),
+                    });
+                }
 
-    //             for return_type in return_types {
-    //                 if return_type != declared_ret_type {
-    //                     return Err(TypeCheckerError {
-    //                         token: self.tokens[0].clone(),
-    //                         message: format!(
-    //                             "Returned type {} does not match declared return type {}.",
-    //                             return_type, declared_ret_type
-    //                         ),
-    //                     });
-    //                 }
-    //             }
-    //         }
-    //         _ => (),
-    //     }
-    //     Ok(vec![])
-    // }
+                for return_type in return_types {
+                    if return_type != declared_ret_type {
+                        return Err(TypeError {
+                            token_range: return_type.token_range.clone(),
+                            message: format!(
+                                "Returned type {} does not match declared return type {}.",
+                                return_type, declared_ret_type
+                            ),
+                        });
+                    }
+                }
+            }
+            _ => (),
+        }
+        Ok(vec![])
+    }
 
-    // fn check_stmt(&mut self, stmt: &Statement) -> Result<Vec<Type>, TypeCheckerError> {
-    //     match stmt {
-    //         Statement::ExpressionStmt(expr) => {
-    //             self.check_expr(expr)?;
-    //             Ok(vec![])
-    //         }
-    //         Statement::Block(decls) => {
-    //             self.begin_scope();
-    //             let mut return_types = Vec::new();
-    //             for decl in decls.iter() {
-    //                 return_types.extend(self.check_decl(decl)?);
-    //             }
-    //             self.end_scope();
-    //             Ok(return_types)
-    //         }
-    //         Statement::Ret(expr_opt) => {
-    //             if let Some(expr) = expr_opt {
-    //                 let expr_type = self.check_expr(expr)?;
-    //                 Ok(vec![expr_type])
-    //             } else {
-    //                 Ok(vec![Type::new_empty_range(TypeKind::Void)])
-    //             }
-    //         }
-    //         Statement::If(condition, if_branch, else_branch_opt) => {
-    //             let cond_type = self.check_expr(condition)?;
-    //             if cond_type != Type::new_empty_range(TypeKind::Bool) {
-    //                 return Err(TypeCheckerError {
-    //                     token: self.tokens[0].clone(),
-    //                     message: format!("Condition must be of type bool, got {}", cond_type),
-    //                 });
-    //             }
+    fn check_stmt(&mut self, stmt: &Statement) -> Result<Vec<Type>, TypeError> {
+        match stmt {
+            Statement::ExpressionStmt(expr) => {
+                self.check_expr(expr)?;
+                Ok(vec![])
+            }
+            Statement::Block(decls) => {
+                self.begin_scope();
+                let mut return_types = Vec::new();
+                for decl in decls.iter() {
+                    return_types.extend(self.check_decl(decl)?);
+                }
+                self.end_scope();
+                Ok(return_types)
+            }
+            Statement::Ret(expr_opt) => {
+                if let Some(expr) = expr_opt {
+                    let expr_type = self.check_expr(expr)?;
+                    Ok(vec![expr_type])
+                } else {
+                    Ok(vec![Type::new_empty_range(TypeKind::Void)])
+                }
+            }
+            Statement::If(condition, if_branch, else_branch_opt) => {
+                let cond_type = self.check_expr(condition)?;
+                println!("condtype range {:?}", cond_type);
+                if cond_type.kind != TypeKind::Bool {
+                    return Err(TypeError {
+                        token_range: cond_type.token_range.clone(),
+                        message: format!("Condition must be of type bool, got {}", cond_type),
+                    });
+                }
 
-    //             let mut return_types = self.check_stmt(if_branch)?;
+                let mut return_types = self.check_stmt(if_branch)?;
 
-    //             if let Some(else_branch) = else_branch_opt {
-    //                 return_types.extend(self.check_stmt(else_branch)?);
-    //             }
+                if let Some(else_branch) = else_branch_opt {
+                    return_types.extend(self.check_stmt(else_branch)?);
+                }
 
-    //             Ok(return_types)
-    //         }
-    //         _ => Ok(vec![]),
-    //     }
-    // }
+                Ok(return_types)
+            }
+            _ => Ok(vec![]),
+        }
+    }
 
     fn check_expr(&self, expr: &Expression) -> Result<Type, TypeError> {
         match expr {
@@ -332,9 +325,15 @@ impl<'a> TypeChecker<'a> {
                     ]
                     .contains(&op_token.kind)
                     {
-                        Ok(Type::new(ltype.token_range.start..rtype.token_range.end, TypeKind::Bool))
+                        Ok(Type::new(
+                            ltype.token_range.start..rtype.token_range.end,
+                            TypeKind::Bool,
+                        ))
                     } else {
-                        Ok(Type::new(ltype.token_range.start..rtype.token_range.end, rtype.kind))
+                        Ok(Type::new(
+                            ltype.token_range.start..rtype.token_range.end,
+                            rtype.kind,
+                        ))
                     }
                 } else {
                     Err(TypeError {

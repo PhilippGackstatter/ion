@@ -1,4 +1,3 @@
-use std::ops::Range;
 use crate::lexer::Lexer;
 use crate::types::Token;
 use crate::types::TokenKind::{self, *};
@@ -8,6 +7,7 @@ use crate::types::{
     Program,
     Statement::{self, *},
 };
+use std::ops::Range;
 
 // TODO: Should be expanded to include the line and column directly,
 // since the parser (and thus the lexer and source code) are no longer accessible
@@ -388,17 +388,24 @@ impl<'a> Parser<'a> {
         //           | "(" expression ")" ;
         match &self.peek().kind {
             TrueToken => {
-                let tok = True { tokens: self.current_range()};
+                let tok = True {
+                    tokens: self.current_range(),
+                };
                 self.advance();
                 Ok(tok)
             }
             FalseToken => {
-                let tok = False { tokens: self.current_range() };
+                let tok = False {
+                    tokens: self.current_range(),
+                };
                 self.advance();
                 Ok(tok)
             }
             Num(int) => {
-                let num = Integer { tokens: self.current_range(), int: *int};
+                let num = Integer {
+                    tokens: self.current_range(),
+                    int: *int,
+                };
                 self.advance();
                 Ok(num)
             }
@@ -408,7 +415,10 @@ impl<'a> Parser<'a> {
                 Ok(num)
             }
             String_(str_) => {
-                let string = Str { tokens: self.current_range(), string: str_.clone()};
+                let string = Str {
+                    tokens: self.current_range(),
+                    string: str_.clone(),
+                };
                 self.advance();
                 Ok(string)
             }
@@ -529,12 +539,21 @@ mod tests {
             assert_eq!(
                 *expr,
                 Binary(
-                    Box::new(Integer { tokens: 0..1, int: 9}),
+                    Box::new(Integer {
+                        tokens: 0..1,
+                        int: 9
+                    }),
                     Token::new_debug(Plus),
                     Box::new(Binary(
-                        Box::new(Integer{ tokens: 0..1, int: 1}),
+                        Box::new(Integer {
+                            tokens: 0..1,
+                            int: 1
+                        }),
                         Token::new_debug(Slash),
-                        Box::new(Integer{ tokens: 0..1, int: 1})
+                        Box::new(Integer {
+                            tokens: 0..1,
+                            int: 1
+                        })
                     ))
                 )
             );
@@ -553,7 +572,10 @@ mod tests {
                 *expr,
                 Unary(
                     Token::new_debug(Bang),
-                    Box::new(Unary(Token::new_debug(Bang), Box::new(False { tokens: 0..1 })))
+                    Box::new(Unary(
+                        Token::new_debug(Bang),
+                        Box::new(False { tokens: 0..1 })
+                    ))
                 )
             );
         } else {
