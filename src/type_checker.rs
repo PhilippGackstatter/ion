@@ -1,4 +1,4 @@
-use crate::types::{Declaration, Expression, Program, Statement, Token, TokenKind};
+use crate::types::{Declaration, Expression, ExpressionKind, Program, Statement, Token, TokenKind};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::ops::Range;
@@ -290,10 +290,9 @@ impl TypeChecker {
             }
             Statement::If(condition, if_branch, else_branch_opt) => {
                 let cond_type = self.check_expr(condition)?;
-                println!("condtype range {:?}", cond_type);
                 if cond_type.kind != TypeKind::Bool {
                     return Err(TypeError {
-                        token_range: cond_type.token_range.clone(),
+                        token_range: condition.tokens.clone(),
                         message: format!("Condition must be of type bool, got {}", cond_type),
                     });
                 }
@@ -311,10 +310,10 @@ impl TypeChecker {
     }
 
     fn check_expr(&self, expr: &Expression) -> Result<Type, TypeError> {
-        match expr {
-            Expression::Binary(lexpr, op_token, rexpr) => {
-                let ltype = self.check_expr(lexpr)?;
-                let rtype = self.check_expr(rexpr)?;
+        match &expr.kind {
+            ExpressionKind::Binary(lexpr, op_token, rexpr) => {
+                let ltype = self.check_expr(&lexpr)?;
+                let rtype = self.check_expr(&rexpr)?;
                 if ltype == rtype {
                     if [
                         TokenKind::EqualEqual,
@@ -345,8 +344,8 @@ impl TypeChecker {
                     })
                 }
             }
-            Expression::Unary(op, rexpr) => {
-                let expr_type = self.check_expr(rexpr)?;
+            ExpressionKind::Unary(op, rexpr) => {
+                let expr_type = self.check_expr(&rexpr)?;
                 match op.kind {
                     TokenKind::Bang => {
                         if expr_type.kind == TypeKind::Bool {
@@ -377,12 +376,12 @@ impl TypeChecker {
                     _ => unimplemented!(),
                 }
             }
-            Expression::Integer { tokens, .. } => Ok(Type::new(tokens.clone(), TypeKind::Integer)),
-            Expression::Str { tokens, .. } => Ok(Type::new(tokens.clone(), TypeKind::Str)),
-            Expression::True { tokens } => Ok(Type::new(tokens.clone(), TypeKind::Bool)),
-            Expression::False { tokens } => Ok(Type::new(tokens.clone(), TypeKind::Bool)),
-            Expression::Assign(id, expr) => {
-                let expr_type = self.check_expr(expr)?;
+            ExpressionKind::Integer { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Integer)),
+            ExpressionKind::Str { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Str)),
+            ExpressionKind::True { ..  } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
+            ExpressionKind::False { ..  } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
+            ExpressionKind::Assign(id, expr) => {
+                let expr_type = self.check_expr(&expr)?;
 
                 if let Some(index) = self.find_local_variable(&id) {
                     // Assignment to local var
@@ -402,8 +401,8 @@ impl TypeChecker {
                     Ok(expr_type)
                 }
             }
-            Expression::Identifier(id) => {
-                if let Some(index) = self.find_local_variable(id) {
+            ExpressionKind::Identifier(id) => {
+                if let Some(index) = self.find_local_variable(&id) {
                     Ok(self.locals[index as usize].dtype.clone())
                 } else if let Some(ty) = self.symbol_table.get(id) {
                     Ok(ty.clone())
@@ -411,8 +410,8 @@ impl TypeChecker {
                     panic!("Globals unimplemented, looking for {}", id);
                 }
             }
-            Expression::Call(callee, params) => {
-                let callee_type = self.check_expr(callee)?;
+            ExpressionKind::Call(callee, params) => {
+                let callee_type = self.check_expr(&callee)?;
                 if let TypeKind::Func(fun) = callee_type.kind {
                     for (index, param) in fun.params.iter().enumerate() {
                         if let Some(call_param) = params.get(index) {

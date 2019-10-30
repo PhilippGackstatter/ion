@@ -3,7 +3,8 @@ use std::convert::TryInto;
 use crate::types::{
     Bytecode, Chunk,
     Declaration::{self, *},
-    Expression::{self, *},
+    ExpressionKind::*,
+    Expression,
     Object, Program,
     Statement::{self, *},
     Token,
@@ -169,7 +170,7 @@ impl Compiler {
     }
 
     fn compile_expr(&mut self, expr: &Expression) {
-        match expr {
+        match &expr.kind {
             Binary(lexpr, op, rexpr) => {
                 self.compile_expr(lexpr);
                 self.compile_expr(rexpr);
@@ -205,17 +206,17 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            Double(num, _) => {
-                let index = self.add_constant(Value::Double(*num));
+            Double { float } => {
+                let index = self.add_constant(Value::Double(*float));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            Str { string, .. } => {
+            Str { string } => {
                 let index = self.add_constant(Value::Obj(Object::StringObj(string.clone())));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            Expression::True { .. } => {
+            True { .. } => {
                 let index = self.add_constant(Value::Bool(true));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);

@@ -3,7 +3,8 @@ use crate::types::Token;
 use crate::types::TokenKind::{self, *};
 use crate::types::{
     Declaration::{self, *},
-    Expression::{self, *},
+    Expression,
+    ExpressionKind::*,
     Program,
     Statement::{self, *},
 };
@@ -281,12 +282,12 @@ impl<'a> Parser<'a> {
         let left_hand = self.equality();
 
         if self.match_(Equal) {
-            let equals = self.previous();
-            if let Identifier(id) = left_hand? {
+            let equals = self.previous().clone();
+            if let Identifier(id) = &left_hand?.kind {
                 let value = self.assignment()?;
-                return Ok(Assign(id, Box::new(value)));
+                return Ok(Expression::new(equals.into(), Assign(id.clone(), Box::new(value))));
             } else {
-                return Err(self.error(equals.clone(), "Invalid assignment target."));
+                return Err(self.error(equals, "Invalid assignment target."));
             }
         }
 
@@ -299,7 +300,7 @@ impl<'a> Parser<'a> {
         while self.match_(BangEqual) || self.match_(EqualEqual) {
             let operator = self.previous().clone();
             let right = self.comparison()?;
-            expr = Binary(Box::new(expr), operator, Box::new(right));
+            expr = Expression::new(expr.tokens.start..right.tokens.end, Binary(Box::new(expr), operator, Box::new(right)));
         }
         Ok(expr)
     }
@@ -314,7 +315,7 @@ impl<'a> Parser<'a> {
         {
             let operator = self.previous().clone();
             let right = self.addition()?;
-            expr = Binary(Box::new(expr), operator, Box::new(right));
+            expr = Expression::new(expr.tokens.start..right.tokens.end, Binary(Box::new(expr), operator, Box::new(right)));
         }
         Ok(expr)
     }
@@ -325,7 +326,7 @@ impl<'a> Parser<'a> {
         while self.match_(Plus) || self.match_(Minus) {
             let operator = self.previous().clone();
             let right = self.multiplication()?;
-            expr = Binary(Box::new(expr), operator, Box::new(right));
+            expr = Expression::new(expr.tokens.start..right.tokens.end, Binary(Box::new(expr), operator, Box::new(right)));
         }
         Ok(expr)
     }
@@ -336,7 +337,7 @@ impl<'a> Parser<'a> {
         while self.match_(Slash) || self.match_(Star) {
             let operator = self.previous().clone();
             let right = self.unary()?;
-            expr = Binary(Box::new(expr), operator, Box::new(right));
+            expr = Expression::new(expr.tokens.start..right.tokens.end, Binary(Box::new(expr), operator, Box::new(right)));
         }
         Ok(expr)
     }
@@ -347,7 +348,7 @@ impl<'a> Parser<'a> {
         if self.match_(Bang) || self.match_(Minus) {
             let operator = self.previous().clone();
             let lexpr = self.unary()?;
-            Ok(Unary(operator, Box::new(lexpr)))
+            Ok(Expression::new((operator.offset as usize)..lexpr.tokens.end, Unary(operator, Box::new(lexpr))))
         } else {
             self.call()
         }
@@ -380,7 +381,7 @@ impl<'a> Parser<'a> {
 
         self.consume(RightParen, "Expected ')' to end function call.")?;
 
-        Ok(Call(Box::new(expr), params))
+        Ok(Expression::new(expr.tokens.start..self.current, Call(Box::new(expr), params)))
     }
 
     fn primary(&mut self) -> ExpressionResult {
@@ -388,42 +389,32 @@ impl<'a> Parser<'a> {
         //           | "(" expression ")" ;
         match &self.peek().kind {
             TrueToken => {
-                let tok = True {
-                    tokens: self.current_range(),
-                };
+                let tok = Expression::new(self.current_range(), True);
                 self.advance();
                 Ok(tok)
             }
             FalseToken => {
-                let tok = False {
-                    tokens: self.current_range(),
-                };
+                let tok = Expression::new(self.current_range(), False);
                 self.advance();
                 Ok(tok)
             }
             Num(int) => {
-                let num = Integer {
-                    tokens: self.current_range(),
-                    int: *int,
-                };
+                let num = Expression::new(self.current_range(), Integer { int: *int});
                 self.advance();
                 Ok(num)
             }
             FloatNum(float) => {
-                let num = Double(*float, self.current);
+                let num = Expression::new(self.current_range(), Double { float: *float});
                 self.advance();
                 Ok(num)
             }
             String_(str_) => {
-                let string = Str {
-                    tokens: self.current_range(),
-                    string: str_.clone(),
-                };
+                let string = Expression::new(self.current_range(), Str { string: str_.clone() });
                 self.advance();
                 Ok(string)
             }
             IdToken(str_) => {
-                let id = Identifier(str_.clone());
+                let id = Expression::new(self.current_range(), Identifier (str_.clone()));
                 self.advance();
                 Ok(id)
             }
@@ -450,7 +441,6 @@ impl<'a> Parser<'a> {
 
     fn match_(&mut self, token: TokenKind) -> bool {
         if self.check(token) {
-            // println!("Token {:?} matched", self.peek());
             self.advance();
             true
         } else {
@@ -537,24 +527,16 @@ mod tests {
         let mut parser = Parser::new(&lexer);
         if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
             assert_eq!(
-                *expr,
+                expr.kind,
                 Binary(
-                    Box::new(Integer {
-                        tokens: 0..1,
+                    Box::new(Expression::new_debug(Integer {
                         int: 9
-                    }),
+                    })),
                     Token::new_debug(Plus),
-                    Box::new(Binary(
-                        Box::new(Integer {
-                            tokens: 0..1,
-                            int: 1
-                        }),
+                    Box::new(Expression::new_debug(Binary(Box::new(Expression::new_debug(Integer { int: 1 })),
                         Token::new_debug(Slash),
-                        Box::new(Integer {
-                            tokens: 0..1,
-                            int: 1
-                        })
-                    ))
+                        Box::new(Expression::new_debug( Integer { int: 1 }))
+                    )))
                 )
             );
         } else {
@@ -570,13 +552,13 @@ mod tests {
         if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
             assert_eq!(
                 *expr,
-                Unary(
+                Expression::new_debug(Unary(
                     Token::new_debug(Bang),
-                    Box::new(Unary(
+                    Box::new(Expression::new_debug(Unary(
                         Token::new_debug(Bang),
-                        Box::new(False { tokens: 0..1 })
-                    ))
-                )
+                        Box::new(Expression::new_debug(False))
+                    )))
+                ))
             );
         } else {
             panic!();

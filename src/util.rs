@@ -1,6 +1,7 @@
 use crate::types::{
     Declaration::{self, *},
-    Expression::{self, *},
+    Expression,
+    ExpressionKind::{self, *},
     Program,
     Statement::{self, *},
 };
@@ -108,7 +109,7 @@ fn pretty_print_stmt(mut level: u32, is_child: bool, stmt: &Statement) {
 }
 
 fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
-    match expr {
+    match &expr.kind {
         Binary(lexpr, op, rexpr) => {
             pr(level, is_child, &format!("{:?}", op.kind));
             level += 2;
@@ -134,13 +135,13 @@ fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
             pr(level, is_child, id);
             pretty_print_expr(level, true, expr);
         }
-        Integer { int, .. } => {
+        Integer { int } => {
             pr(level, is_child, &format!("{}", int));
         }
-        Double(num, _) => {
-            pr(level, is_child, &format!("{}", num));
+        Double { float } => {
+            pr(level, is_child, &format!("{}", float));
         }
-        Str { string, .. } => {
+        Str { string } => {
             pr(level, is_child, &format!(r#""{}""#, string));
         }
         Identifier(str_) => {
@@ -236,7 +237,7 @@ fn print_error(prog: &str, range: std::ops::Range<usize>, msg: &str) {
     let token = prog[newline_before_token..newline_after_token].to_owned();
 
     let token_start_index = range.start - newline_before_token;
-    let token_end_index = range.end;
+    let token_end_index = range.end - newline_before_token;
     let line_count_str = format!("{}", line_count);
 
     println!("{}: {}", line_count_str, token);

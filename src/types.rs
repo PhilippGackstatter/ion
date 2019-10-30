@@ -188,27 +188,47 @@ pub enum Statement {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Expression {
+pub enum ExpressionKind {
     Binary(Box<Expression>, Token, Box<Expression>),
     Assign(String, Box<Expression>),
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
     Integer {
-        tokens: Range<usize>,
         int: i32,
     },
-    Double(f32, usize),
+    Double { float: f32 },
     Str {
-        tokens: Range<usize>,
         string: String,
     },
     Identifier(String),
-    False {
-        tokens: Range<usize>,
-    },
-    True {
-        tokens: Range<usize>,
-    },
+    False,
+    True,
+}
+
+#[derive(Debug)]
+pub struct Expression {
+    pub tokens: Range<usize>,
+    pub kind: ExpressionKind,
+}
+
+impl Expression {
+    pub fn new(tokens: Range<usize>, kind: ExpressionKind) -> Self {
+        Expression {
+            tokens, kind
+        }
+    }
+
+    pub fn new_debug(kind: ExpressionKind) -> Self {
+        Expression {
+            tokens: 0..1, kind
+        }
+    }
+}
+
+impl PartialEq for Expression {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
 }
 
 impl fmt::Display for Value {
