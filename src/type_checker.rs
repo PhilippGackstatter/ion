@@ -358,15 +358,9 @@ impl TypeChecker {
                     ]
                     .contains(&op_token.kind)
                     {
-                        Ok(Type::new(
-                            ltype.token_range.start..rtype.token_range.end,
-                            TypeKind::Bool,
-                        ))
+                        Ok(Type::new(expr.tokens.clone(), TypeKind::Bool))
                     } else {
-                        Ok(Type::new(
-                            ltype.token_range.start..rtype.token_range.end,
-                            rtype.kind,
-                        ))
+                        Ok(Type::new(expr.tokens.clone(), rtype.kind))
                     }
                 } else {
                     Err(TypeError {
