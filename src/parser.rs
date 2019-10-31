@@ -538,6 +538,24 @@ impl<'a> Parser<'a> {
 mod tests {
     use super::*;
 
+    #[allow(unused_macros)]
+    macro_rules! expr {
+    [$exp:expr] => {
+            {
+                Box::new(Expression::new_debug($exp))
+            }
+        };
+    }
+
+    #[allow(unused_macros)]
+    macro_rules! token {
+        [$token:expr] => {
+            {
+                Token::new_debug($token)
+            }
+        };
+    }
+
     #[test]
     fn test_multiplication() {
         // Test 9 + 1 / 4
@@ -552,16 +570,16 @@ mod tests {
         ]);
         let mut parser = Parser::new(&lexer);
         if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
-            let expected = Expression::new_debug(Binary(
-                Box::new(Expression::new_debug(Integer { int: 9 })),
-                Token::new_debug(Plus),
-                Box::new(Expression::new_debug(Binary(
-                    Box::new(Expression::new_debug(Integer { int: 1 })),
-                    Token::new_debug(Slash),
-                    Box::new(Expression::new_debug(Integer { int: 4 })),
-                ))),
-            ));
-            assert_eq!(*expr, expected,);
+            let expected = expr![Binary(
+                expr![Integer { int: 9 }],
+                token![Plus],
+                expr![Binary(
+                    expr![Integer { int: 1 }],
+                    token![Slash],
+                    expr![Integer { int: 4 }]
+                )],
+            )];
+            assert_eq!(*expr, *expected);
         } else {
             panic!();
         }
@@ -575,13 +593,10 @@ mod tests {
         if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
             assert_eq!(
                 *expr,
-                Expression::new_debug(Unary(
-                    Token::new_debug(Bang),
-                    Box::new(Expression::new_debug(Unary(
-                        Token::new_debug(Bang),
-                        Box::new(Expression::new_debug(False))
-                    )))
-                ))
+                *expr![Unary(
+                    token![Bang],
+                    expr![Unary(token![Bang], expr![False])]
+                )]
             );
         } else {
             panic!();
