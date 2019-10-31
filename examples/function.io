@@ -1,10 +1,9 @@
 fn bar(first: str, second: str, third: bool) -> i32 {
     if (!third) {
         print first;
-        return 7;
+    } else {
+        print second;
     }
-
-    print second;
 
     return 42;
 }
@@ -14,4 +13,4 @@ fn foo(arg: i32) {
     print returned;
 }
 
-foo(10);
+foo(3);
