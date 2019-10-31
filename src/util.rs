@@ -186,7 +186,7 @@ fn pretty_write_decl(
                     name,
                     params
                         .iter()
-                        .map(|p| p.0.get_id())
+                        .map(|p| format!("{}: {}", p.0.get_id(), p.1.get_id()))
                         .collect::<Vec<String>>()
                         .join(", "),
                     ret

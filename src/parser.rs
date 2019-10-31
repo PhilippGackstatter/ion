@@ -603,4 +603,33 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_function_decl() {
+        let input = "fn foo(arg1: str, arg2: bool) {}";
+        let mut lexer = Lexer::new();
+        lexer.lex(&input);
+
+        let mut parser = Parser::new(&lexer);
+        let expected = FnDecl(
+            "foo".into(),
+            vec![
+                (
+                    token!(IdToken("arg1".into())),
+                    token!(IdToken("str".into())),
+                ),
+                (
+                    token!(IdToken("arg2".into())),
+                    token!(IdToken("bool".into())),
+                ),
+            ],
+            None,
+            Block(vec![StatementDecl(Ret(None))]),
+        );
+
+        let parse_result = parser.parse().unwrap();
+        let result = parse_result.first().unwrap();
+
+        assert_eq!(*result, expected,)
+    }
+
 }

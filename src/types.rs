@@ -71,7 +71,7 @@ impl Chunk {
     }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(Clone)]
 pub struct Token {
     /// The offset in bytes in the source file where the lexeme begins
     pub offset: u32,
@@ -84,6 +84,12 @@ pub struct Token {
 impl fmt::Debug for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.kind)
+    }
+}
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
     }
 }
 
