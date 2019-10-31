@@ -1,5 +1,5 @@
 use crate::types::{Declaration, Expression, ExpressionKind, Program, Statement, Token, TokenKind};
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::convert::TryInto;
 use std::ops::Range;
 
@@ -146,6 +146,18 @@ impl TypeChecker {
         Ok(())
     }
 
+    fn add_symbol(&mut self, name: &str, ty: Type) -> Result<(), TypeError> {
+        if let entry @ Entry::Vacant(_) = self.symbol_table.entry(name.into()) {
+            entry.or_insert(ty);
+            Ok(())
+        } else {
+            Err(TypeError {
+                token_range: ty.token_range.clone(),
+                message: format!("Type {} is already declared in this scope.", name),
+            })
+        }
+    }
+
     fn build_symbol_table(&mut self, decl: &Declaration) -> Result<(), TypeError> {
         match decl {
             Declaration::FnDecl(name, params_tokens, return_token, _stmt) => {
@@ -159,14 +171,14 @@ impl TypeChecker {
                 } else {
                     None
                 };
-                self.symbol_table.insert(
-                    name.clone(),
+                self.add_symbol(
+                    name,
                     Type::new_empty_range(TypeKind::Func(Function {
                         name: name.clone(),
                         params,
                         result,
                     })),
-                );
+                )?;
             }
             Declaration::StructDecl(name, token_fields) => {
                 let mut fields = Vec::new();
@@ -181,7 +193,7 @@ impl TypeChecker {
                         fields,
                     }),
                 );
-                self.symbol_table.insert(name.get_id(), st);
+                self.add_symbol(&name.get_id(), st)?;
             }
             _ => (),
         }
@@ -636,5 +648,15 @@ mod tests {
             .unwrap_err()
             .message
             .contains("can not be used with a ! operator"));
+    }
+
+    #[test]
+    fn test_redeclare_struct() {
+        let res = lex_parse_check("redeclare_struct.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("already declared in this scope"));
     }
 }

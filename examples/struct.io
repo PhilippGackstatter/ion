@@ -1,7 +1,7 @@
 struct MyType {}
 
 struct MyType2 {
-    field1: MyType
+    field1: str
 }
 
 struct MyType3 {
