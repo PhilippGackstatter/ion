@@ -262,7 +262,11 @@ impl TypeChecker {
                     }
                 }
             }
-            _ => (),
+            Declaration::StructDecl(_name, fields) => {
+                for field in fields.iter() {
+                    self.lookup_type(&field.1)?;
+                }
+            }
         }
         Ok(vec![])
     }
@@ -307,7 +311,23 @@ impl TypeChecker {
 
                 Ok(return_types)
             }
-            _ => Ok(vec![]),
+            Statement::While(condition, body) => {
+                let cond_type = self.check_expr(condition)?;
+                if cond_type.kind != TypeKind::Bool {
+                    return Err(TypeError {
+                        token_range: condition.tokens.clone(),
+                        message: format!("Condition must be of type bool, got {}", cond_type),
+                    });
+                }
+
+                self.check_stmt(body)?;
+
+                Ok(vec![])
+            }
+            Statement::Print(expr) => {
+                self.check_expr(expr)?;
+                Ok(vec![])
+            }
         }
     }
 
