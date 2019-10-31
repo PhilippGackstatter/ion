@@ -441,7 +441,13 @@ impl TypeChecker {
                 } else if let Some(ty) = self.symbol_table.get(id) {
                     Ok(ty.clone())
                 } else {
-                    panic!("Globals unimplemented, looking for {}", id);
+                    Err(TypeError {
+                        token_range: expr.tokens.clone(),
+                        message: format!(
+                            "{} is not defined in the current scope. (Globals are unimplemented.)",
+                            id
+                        ),
+                    })
                 }
             }
             ExpressionKind::Call(callee, params) => {
