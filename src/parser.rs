@@ -3,10 +3,12 @@ use crate::types::Token;
 use crate::types::TokenKind::{self, *};
 use crate::types::{
     Declaration::{self, *},
-    Expression::{self, *},
+    Expression,
+    ExpressionKind::*,
     Program,
     Statement::{self, *},
 };
+use std::ops::Range;
 
 // TODO: Should be expanded to include the line and column directly,
 // since the parser (and thus the lexer and source code) are no longer accessible
@@ -44,8 +46,62 @@ impl<'a> Parser<'a> {
         match &self.peek().kind {
             VarToken => self.variable_declaration(),
             Fun => self.function_declaration(),
+            StructToken => self.struct_declaration(),
             _ => Ok(StatementDecl(self.statement()?)),
         }
+    }
+
+    fn struct_declaration(&mut self) -> DeclarationResult {
+        self.advance();
+
+        if !self.peek().is_id_token() {
+            return Err(self.error(
+                self.peek().clone(),
+                "Expected an identifier as struct name.",
+            ));
+        }
+        let name = self.advance().clone();
+
+        self.consume(LeftBrace, "Expected '{' after struct.")?;
+        let mut fields = Vec::new();
+
+        while self.peek().kind != RightBrace {
+            if !self.peek().is_id_token() {
+                return Err(
+                    self.error(self.peek().clone(), "Expected an identifier as field name.")
+                );
+            }
+
+            let name_token = self.advance().clone();
+
+            self.consume(Colon, "Expected ':' after name.")?;
+
+            if !self.peek().is_id_token() {
+                return Err(self.error(
+                    self.peek().clone(),
+                    "Expected a type identifier after field name.",
+                ));
+            }
+
+            let type_token = self.advance().clone();
+
+            if self.peek().kind != RightBrace {
+                if self.peek().kind == Comma {
+                    self.advance();
+                } else {
+                    return Err(self.error(self.peek().clone(), "Expected a ',' inbetween fields."));
+                }
+            } else if self.peek().kind == Comma {
+                // Allow trailing comma
+                self.advance();
+            }
+
+            fields.push((name_token, type_token));
+        }
+        // Consume }
+        self.advance();
+
+        Ok(StructDecl(name, fields))
     }
 
     fn variable_declaration(&mut self) -> DeclarationResult {
@@ -84,9 +140,21 @@ impl<'a> Parser<'a> {
 
         if self.peek().kind != RightParen {
             // Consume comma after parameter
-            while let IdToken(name) = &self.peek().kind {
-                params.push(name.clone());
-                self.advance();
+            while self.peek().kind != RightParen {
+                let name_token = self.advance().clone();
+
+                self.consume(Colon, "Expected ':' for type annotation.")?;
+
+                if !self.peek().is_id_token() {
+                    return Err(self.error(
+                        self.peek().clone(),
+                        "Expected type identifier after parameter.",
+                    ));
+                }
+
+                let type_token = self.advance().clone();
+
+                params.push((name_token, type_token));
 
                 if !self.match_(Comma) && self.peek().kind != RightParen {
                     return Err(
@@ -102,17 +170,23 @@ impl<'a> Parser<'a> {
 
         self.consume(RightParen, "Expected ')' after function parameters.")?;
 
+        let return_token = if self.match_(Arrow) {
+            Some(self.advance().clone())
+        } else {
+            None
+        };
+
         let mut body = self.block()?;
 
         // Add a return statement if it does not exist
         if let Block(decls) = &mut body {
-            if let StatementDecl(Ret(_)) = &decls[decls.len() - 1] {
+            if let Some(StatementDecl(Ret(_))) = &decls.last() {
             } else {
                 decls.push(StatementDecl(Ret(None)));
             }
         }
 
-        Ok(FnDecl(id, params, body))
+        Ok(FnDecl(id, params, return_token, body))
     }
 
     // Statements
@@ -208,12 +282,15 @@ impl<'a> Parser<'a> {
         let left_hand = self.equality();
 
         if self.match_(Equal) {
-            let equals = self.previous();
-            if let Identifier(id) = left_hand? {
+            let equals = self.previous().clone();
+            if let Identifier(id) = &left_hand?.kind {
                 let value = self.assignment()?;
-                return Ok(Assign(id, Box::new(value)));
+                return Ok(Expression::new(
+                    equals.into(),
+                    Assign(id.clone(), Box::new(value)),
+                ));
             } else {
-                return Err(self.error(equals.clone(), "Invalid assignment target."));
+                return Err(self.error(equals, "Invalid assignment target."));
             }
         }
 
@@ -226,7 +303,10 @@ impl<'a> Parser<'a> {
         while self.match_(BangEqual) || self.match_(EqualEqual) {
             let operator = self.previous().clone();
             let right = self.comparison()?;
-            expr = Binary(Box::new(expr), operator, Box::new(right));
+            expr = Expression::new(
+                expr.tokens.start..right.tokens.end,
+                Binary(Box::new(expr), operator, Box::new(right)),
+            );
         }
         Ok(expr)
     }
@@ -241,7 +321,10 @@ impl<'a> Parser<'a> {
         {
             let operator = self.previous().clone();
             let right = self.addition()?;
-            expr = Binary(Box::new(expr), operator, Box::new(right));
+            expr = Expression::new(
+                expr.tokens.start..right.tokens.end,
+                Binary(Box::new(expr), operator, Box::new(right)),
+            );
         }
         Ok(expr)
     }
@@ -252,7 +335,10 @@ impl<'a> Parser<'a> {
         while self.match_(Plus) || self.match_(Minus) {
             let operator = self.previous().clone();
             let right = self.multiplication()?;
-            expr = Binary(Box::new(expr), operator, Box::new(right));
+            expr = Expression::new(
+                expr.tokens.start..right.tokens.end,
+                Binary(Box::new(expr), operator, Box::new(right)),
+            );
         }
         Ok(expr)
     }
@@ -263,7 +349,10 @@ impl<'a> Parser<'a> {
         while self.match_(Slash) || self.match_(Star) {
             let operator = self.previous().clone();
             let right = self.unary()?;
-            expr = Binary(Box::new(expr), operator, Box::new(right));
+            expr = Expression::new(
+                expr.tokens.start..right.tokens.end,
+                Binary(Box::new(expr), operator, Box::new(right)),
+            );
         }
         Ok(expr)
     }
@@ -274,7 +363,10 @@ impl<'a> Parser<'a> {
         if self.match_(Bang) || self.match_(Minus) {
             let operator = self.previous().clone();
             let lexpr = self.unary()?;
-            Ok(Unary(operator, Box::new(lexpr)))
+            Ok(Expression::new(
+                (operator.offset as usize)..lexpr.tokens.end,
+                Unary(operator, Box::new(lexpr)),
+            ))
         } else {
             self.call()
         }
@@ -307,7 +399,10 @@ impl<'a> Parser<'a> {
 
         self.consume(RightParen, "Expected ')' to end function call.")?;
 
-        Ok(Call(Box::new(expr), params))
+        Ok(Expression::new(
+            expr.tokens.start..self.current,
+            Call(Box::new(expr), params),
+        ))
     }
 
     fn primary(&mut self) -> ExpressionResult {
@@ -315,30 +410,37 @@ impl<'a> Parser<'a> {
         //           | "(" expression ")" ;
         match &self.peek().kind {
             TrueToken => {
+                let tok = Expression::new(self.current_range(), True);
                 self.advance();
-                Ok(True)
+                Ok(tok)
             }
             FalseToken => {
+                let tok = Expression::new(self.current_range(), False);
                 self.advance();
-                Ok(False)
+                Ok(tok)
             }
             Num(int) => {
-                let num = Integer(*int);
+                let num = Expression::new(self.current_range(), Integer { int: *int });
                 self.advance();
                 Ok(num)
             }
             FloatNum(float) => {
-                let num = Double(*float);
+                let num = Expression::new(self.current_range(), Double { float: *float });
                 self.advance();
                 Ok(num)
             }
             String_(str_) => {
-                let string = Str(str_.clone());
+                let string = Expression::new(
+                    self.current_range(),
+                    Str {
+                        string: str_.clone(),
+                    },
+                );
                 self.advance();
                 Ok(string)
             }
             IdToken(str_) => {
-                let id = Identifier(str_.clone());
+                let id = Expression::new(self.current_range(), Identifier(str_.clone()));
                 self.advance();
                 Ok(id)
             }
@@ -365,7 +467,6 @@ impl<'a> Parser<'a> {
 
     fn match_(&mut self, token: TokenKind) -> bool {
         if self.check(token) {
-            // println!("Token {:?} matched", self.peek());
             self.advance();
             true
         } else {
@@ -387,6 +488,11 @@ impl<'a> Parser<'a> {
 
     fn previous(&self) -> &Token {
         &self.lexer.tokens[self.current - 1]
+    }
+
+    #[allow(clippy::range_plus_one)]
+    fn current_range(&self) -> Range<usize> {
+        self.lexer.tokens[self.current].clone().into()
     }
 
     // Errors
@@ -432,6 +538,24 @@ impl<'a> Parser<'a> {
 mod tests {
     use super::*;
 
+    #[allow(unused_macros)]
+    macro_rules! expr {
+    [$exp:expr] => {
+            {
+                Box::new(Expression::new_debug($exp))
+            }
+        };
+    }
+
+    #[allow(unused_macros)]
+    macro_rules! token {
+        [$token:expr] => {
+            {
+                Token::new_debug($token)
+            }
+        };
+    }
+
     #[test]
     fn test_multiplication() {
         // Test 9 + 1 / 4
@@ -446,18 +570,16 @@ mod tests {
         ]);
         let mut parser = Parser::new(&lexer);
         if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
-            assert_eq!(
-                *expr,
-                Binary(
-                    Box::new(Integer(9)),
-                    Token::new_debug(Plus),
-                    Box::new(Binary(
-                        Box::new(Integer(1)),
-                        Token::new_debug(Slash),
-                        Box::new(Integer(4))
-                    ))
-                )
-            );
+            let expected = expr![Binary(
+                expr![Integer { int: 9 }],
+                token![Plus],
+                expr![Binary(
+                    expr![Integer { int: 1 }],
+                    token![Slash],
+                    expr![Integer { int: 4 }]
+                )],
+            )];
+            assert_eq!(*expr, *expected);
         } else {
             panic!();
         }
@@ -471,10 +593,10 @@ mod tests {
         if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
             assert_eq!(
                 *expr,
-                Unary(
-                    Token::new_debug(Bang),
-                    Box::new(Unary(Token::new_debug(Bang), Box::new(False)))
-                )
+                *expr![Unary(
+                    token![Bang],
+                    expr![Unary(token![Bang], expr![False])]
+                )]
             );
         } else {
             panic!();

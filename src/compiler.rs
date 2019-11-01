@@ -3,7 +3,8 @@ use std::convert::TryInto;
 use crate::types::{
     Bytecode, Chunk,
     Declaration::{self, *},
-    Expression::{self, *},
+    Expression,
+    ExpressionKind::*,
     Object, Program,
     Statement::{self, *},
     Token,
@@ -30,7 +31,6 @@ pub struct Compiler {
     // Local Variables
     locals: Vec<(String, u8)>,
     scope_depth: u8,
-    num_locals: u8,
 }
 
 impl Default for Compiler {
@@ -50,11 +50,9 @@ impl Compiler {
                 1
             },
             fn_type,
-            num_locals: 0,
         }
     }
 
-    #[allow(clippy::ptr_arg)]
     pub fn compile(&mut self, prog: &Program) {
         for decl in prog.iter() {
             self.compile_decl(decl);
@@ -85,11 +83,11 @@ impl Compiler {
                     self.add_local(id.clone());
                 }
             }
-            FnDecl(name, params, stmt) => {
+            FnDecl(name, params, _, stmt) => {
                 let mut fn_compiler = Compiler::new(FunctionType::Function);
 
                 for param in params {
-                    fn_compiler.add_local(param.clone());
+                    fn_compiler.add_local(param.0.get_id().clone());
                 }
 
                 fn_compiler.compile_stmt(stmt);
@@ -113,6 +111,7 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index_name);
             }
+            StructDecl(_, _) => unimplemented!(),
         }
     }
 
@@ -151,10 +150,12 @@ impl Compiler {
             Ret(expr_opt) => {
                 if let Some(expr) = expr_opt {
                     self.compile_expr(expr);
+                    self.emit_op_byte(Bytecode::OpReturn);
+                    self.emit_byte(1);
+                } else {
+                    self.emit_op_byte(Bytecode::OpReturn);
+                    self.emit_byte(0);
                 }
-
-                self.emit_op_byte(Bytecode::OpReturn);
-                self.emit_byte(1);
             }
             Block(decls) => {
                 self.begin_scope();
@@ -169,7 +170,7 @@ impl Compiler {
     }
 
     fn compile_expr(&mut self, expr: &Expression) {
-        match expr {
+        match &expr.kind {
             Binary(lexpr, op, rexpr) => {
                 self.compile_expr(lexpr);
                 self.compile_expr(rexpr);
@@ -200,27 +201,27 @@ impl Compiler {
                     self.emit_u16(index);
                 }
             }
-            Integer(num) => {
-                let index = self.add_constant(Value::Int(*num));
+            Integer { int, .. } => {
+                let index = self.add_constant(Value::Int(*int));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            Double(num) => {
-                let index = self.add_constant(Value::Double(*num));
+            Double { float } => {
+                let index = self.add_constant(Value::Double(*float));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            Str(str_) => {
-                let index = self.add_constant(Value::Obj(Object::StringObj(str_.clone())));
+            Str { string } => {
+                let index = self.add_constant(Value::Obj(Object::StringObj(string.clone())));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            True => {
+            True { .. } => {
                 let index = self.add_constant(Value::Bool(true));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
-            False => {
+            False { .. } => {
                 let index = self.add_constant(Value::Bool(false));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
@@ -283,7 +284,7 @@ impl Compiler {
             Bang => {
                 self.emit_op_byte(Bytecode::OpNot);
             }
-            Negate => {
+            Minus => {
                 self.emit_op_byte(Bytecode::OpNegate);
             }
             _ => unreachable!(),
@@ -349,7 +350,6 @@ impl Compiler {
 
     fn add_local(&mut self, name: String) {
         self.locals.push((name, self.scope_depth));
-        self.num_locals += 1;
     }
 
     fn begin_scope(&mut self) {

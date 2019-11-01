@@ -1,15 +1,40 @@
 # ION
 
-A (loose) lox implementation in Rust.
+A type-checked, interpreted programming language.
 
 ## Run
 
-Written using only a few parts from Rust's stdlib and no external dependencies, so all you need is `cargo` & `rustc`. Written with `rustc 1.37.0`, but should work with much earlier versions as well.
+All you need is `cargo` & `rustc`. Written with `rustc 1.37.0`, but should work with much earlier versions as well.
+
+Pass the `--help` option to see the options.
+
+```sh
+cargo run --bin file -- --help
+
+Usage:
+  target/debug/file [OPTIONS] [FILE]
+
+ion language
+
+Positional arguments:
+  file                  The ion file to execute.
+
+Optional arguments:
+  -h,--help             Show this help message and exit
+  -t,--tokens           Print the tokens produced by the Lexer.
+  -a,--ast              Print the abstract syntax tree produced by the Parser.
+  -s,--symbols          Print the symbol table produced by the Type Checker.
+  -c,--chunk            Print the Chunk (Constants + Bytecode) produced by the
+                        Compiler.
+  -v,--vm               Print the execution trace by the VM.
+  -u,--until UNTIL      Until what stage to run: 1 Lexer, 2 Parser, 3 Type
+                        Checker, 4 Compiler, 5 Virtual Machine.
+```
 
 Run sample scripts
 
 ```sh
-cargo run --bin file src/sample/function.io
+cargo run --bin file -- examples/function.io
 ```
 
 or run an interactive REPL
@@ -20,7 +45,7 @@ cargo run --bin repl
 
 ## Architecture
 
-The compiler is multi-pass as opposed to `clox` from the book, which is single-pass. This implementation takes some parts, like the parser, from `jlox` and some, like the bytecode compiler and virtual machine, from `clox`.
+The basic architecture is taken from [craftinginterpreters.com](https://craftinginterpreters.com). The ion compiler is multi-pass, as opposed to `clox` from the book. This implementation takes some parts, like the parser, from `jlox` and some, like the bytecode compiler and virtual machine, from `clox`.
 Let's walk through the architecture, by using some sample input.
 
 ```
@@ -163,4 +188,19 @@ it prints
       ^^^^^ Expected '(' after if.
 ```
 
-Compiler & VM errors currently panic.
+The type checker also prints nice messages.
+
+```
+fn foo(first: str, second: i32, third: bool, fourth: bool) {
+    print first;
+}
+
+foo("str", 12, true, 25);
+```
+
+Attempting to run this produces
+
+```
+6: bar("str", 12, true, 25);
+                        ^^ Function parameters have incompatible type. Expected: bool, Supplied: i32.
+```

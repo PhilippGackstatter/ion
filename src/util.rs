@@ -1,171 +1,331 @@
+use argparse::{ArgumentParser, Store, StoreTrue};
+use std::env;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+
 use crate::types::{
     Declaration::{self, *},
-    Expression::{self, *},
+    Expression,
+    ExpressionKind::*,
     Program,
     Statement::{self, *},
 };
+use std::fmt::{self, Debug, Formatter};
 
-#[allow(clippy::ptr_arg)]
+pub struct Options {
+    // Whether to debug print the following data structures
+    pub tokens: bool,
+    pub ast: bool,
+    pub symbols: bool,
+    pub chunk: bool,
+    pub vm: bool,
+    /// Until what stage to run the compiler
+    pub until: u8,
+}
+
+impl Options {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Options {
+            tokens: false,
+            ast: false,
+            symbols: false,
+            chunk: false,
+            vm: false,
+            until: 5,
+        }
+    }
+}
+
+pub fn get_repl_parser(opt: &mut Options) -> ArgumentParser {
+    let mut parser = ArgumentParser::new();
+
+    parser.set_description("ion language");
+    parser.refer(&mut opt.tokens).add_option(
+        &["-t", "--tokens"],
+        StoreTrue,
+        "Print the tokens produced by the Lexer.",
+    );
+
+    parser.refer(&mut opt.ast).add_option(
+        &["-a", "--ast"],
+        StoreTrue,
+        "Print the abstract syntax tree produced by the Parser.",
+    );
+
+    parser.refer(&mut opt.symbols).add_option(
+        &["-s", "--symbols"],
+        StoreTrue,
+        "Print the symbol table produced by the Type Checker.",
+    );
+
+    parser.refer(&mut opt.chunk).add_option(
+        &["-c", "--chunk"],
+        StoreTrue,
+        "Print the Chunk (Constants + Bytecode) produced by the Compiler.",
+    );
+
+    parser.refer(&mut opt.vm).add_option(
+        &["-v", "--vm"],
+        StoreTrue,
+        "Print the execution trace by the VM.",
+    );
+
+    parser
+        .refer(&mut opt.until)
+        .add_option(&["-u", "--until"], Store, "Until what stage to run: 1 Lexer, 2 Parser, 3 Type Checker, 4 Compiler, 5 Virtual Machine.");
+
+    parser
+}
+
+fn write(f: &mut Formatter<'_>, level: u32, is_child: bool, arg: &str) -> fmt::Result {
+    for _ in 0..level {
+        write!(f, " ")?;
+    }
+    if is_child {
+        writeln!(f, "└─ {}", arg)
+    } else {
+        writeln!(f, "─ {}", arg)
+    }
+}
+
+pub fn pretty_write_expr(
+    f: &mut Formatter<'_>,
+    mut level: u32,
+    is_child: bool,
+    expr: &Expression,
+) -> fmt::Result {
+    match &expr.kind {
+        Binary(lexpr, op, rexpr) => {
+            write(f, level, is_child, &format!("{:?}", op))?;
+            level += 2;
+            pretty_write_expr(f, level, true, rexpr)?;
+            pretty_write_expr(f, level, true, lexpr)
+        }
+        Unary(op, rexpr) => {
+            write(f, level, is_child, &format!("{:?}", op.kind))?;
+            level += 2;
+            pretty_write_expr(f, level, true, rexpr)
+        }
+        Call(callee, params) => {
+            write(f, level, is_child, "call")?;
+            level += 2;
+            for param in params.iter() {
+                pretty_write_expr(f, level, true, param)?;
+            }
+            pretty_write_expr(f, level, true, callee)
+        }
+        Assign(id, expr) => {
+            write(f, level, is_child, "Assign")?;
+            level += 2;
+            write(f, level, is_child, id)?;
+            pretty_write_expr(f, level, true, expr)
+        }
+        Integer { int } => write(f, level, is_child, &format!("{}", int)),
+        Double { float } => write(f, level, is_child, &format!("{}", float)),
+        Str { string } => write(f, level, is_child, &format!("\"{}\"", string)),
+        Identifier(str_) => write(f, level, is_child, str_),
+        True { .. } => write(f, level, is_child, "true"),
+        False { .. } => write(f, level, is_child, "false"),
+    }
+}
+
+impl Debug for Expression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        pretty_write_expr(f, 0, false, &self)
+    }
+}
+
+impl Debug for Statement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        pretty_write_stmt(f, 0, false, &self)
+    }
+}
+
+impl Debug for Declaration {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        pretty_write_decl(f, 0, false, &self)
+    }
+}
+
 pub fn pretty_print(prog: &Program) {
     println!("\nAbstract Syntax Tree");
     println!("====================");
     for decl in prog.iter() {
-        pretty_print_decl(0, false, decl);
+        println!("{:?}", decl);
     }
 }
 
-fn pr(level: u32, is_child: bool, arg: &str) {
-    for _ in 0..level {
-        print!(" ");
-    }
-    if is_child {
-        println!("└─ {}", arg);
-    } else {
-        println!("─ {}", arg);
-    }
-}
-
-fn pretty_print_decl(mut level: u32, is_child: bool, decl: &Declaration) {
+fn pretty_write_decl(
+    f: &mut Formatter<'_>,
+    mut level: u32,
+    is_child: bool,
+    decl: &Declaration,
+) -> fmt::Result {
     match decl {
-        StatementDecl(stmt) => pretty_print_stmt(level, is_child, stmt),
+        StatementDecl(stmt) => pretty_write_stmt(f, level, is_child, stmt),
         VarDecl(id, expr) => {
-            pr(level, is_child, "var");
+            write(f, level, is_child, "var")?;
             level += 2;
-            pr(level, true, id);
-            pretty_print_expr(level, true, expr);
+            write(f, level, true, id)?;
+            pretty_write_expr(f, level, true, expr)
         }
-        FnDecl(name, params, stmt) => {
-            pr(
+        FnDecl(name, params, return_ty, stmt) => {
+            let ret = if return_ty.is_some() {
+                return_ty.as_ref().unwrap().get_id()
+            } else {
+                "void".to_owned()
+            };
+            write(
+                f,
                 level,
                 is_child,
-                &format!("fn {}({})", name, params.join(", ")),
-            );
+                &format!(
+                    "fn {}({}) -> {}",
+                    name,
+                    params
+                        .iter()
+                        .map(|p| p.0.get_id())
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                    ret
+                ),
+            )?;
             level += 2;
-            pretty_print_stmt(level, true, stmt);
+            pretty_write_stmt(f, level, true, stmt)
+        }
+        StructDecl(name, fields) => {
+            write(f, level, is_child, &format!("struct {}", name.get_id()))?;
+            level += 2;
+            for (field, ty) in fields {
+                write(
+                    f,
+                    level,
+                    true,
+                    &format!("{}: {}", field.get_id(), ty.get_id()),
+                )?;
+            }
+            Ok(())
         }
     }
 }
 
-fn pretty_print_stmt(mut level: u32, is_child: bool, stmt: &Statement) {
+fn pretty_write_stmt(
+    f: &mut Formatter<'_>,
+    mut level: u32,
+    is_child: bool,
+    stmt: &Statement,
+) -> fmt::Result {
     match stmt {
-        ExpressionStmt(expr) => pretty_print_expr(level, is_child, expr),
+        ExpressionStmt(expr) => pretty_write_expr(f, level, is_child, expr),
         If(cond, then_stmt, else_stmt) => {
-            pr(level, is_child, "if");
+            write(f, level, is_child, "if")?;
             level += 2;
-            pretty_print_expr(level, true, cond);
-            pretty_print_stmt(level, true, then_stmt);
+            pretty_write_expr(f, level, true, cond)?;
+            pretty_write_stmt(f, level, true, then_stmt)?;
             if let Some(else_) = else_stmt {
-                pretty_print_stmt(level, true, else_);
+                pretty_write_stmt(f, level, true, else_)?;
             }
+            Ok(())
         }
         While(cond, body) => {
-            pr(level, is_child, "while");
+            write(f, level, is_child, "while")?;
             level += 2;
-            pretty_print_expr(level, true, cond);
-            pretty_print_stmt(level, true, body);
+            pretty_write_expr(f, level, true, cond)?;
+            pretty_write_stmt(f, level, true, body)
         }
         Print(expr) => {
-            pr(level, is_child, "print");
+            write(f, level, is_child, "print")?;
             level += 2;
-            pretty_print_expr(level, true, expr);
+            pretty_write_expr(f, level, true, expr)
         }
         Ret(expr) => {
-            pr(level, is_child, "return");
+            write(f, level, is_child, "return")?;
             level += 2;
             match expr {
-                Some(expr_) => pretty_print_expr(level, true, expr_),
-                None => pr(level, true, "None"),
+                Some(expr_) => pretty_write_expr(f, level, true, expr_),
+                None => write(f, level, true, "None"),
             }
         }
         Block(decls) => {
-            pr(level, is_child, "Block");
+            write(f, level, is_child, "Block")?;
             level += 2;
             for decl in decls.iter() {
-                pretty_print_decl(level, true, decl);
+                pretty_write_decl(f, level, true, decl)?;
             }
+            Ok(())
         }
     }
 }
 
-fn pretty_print_expr(mut level: u32, is_child: bool, expr: &Expression) {
-    match expr {
-        Binary(lexpr, op, rexpr) => {
-            pr(level, is_child, &format!("{:?}", op.kind));
-            level += 2;
-            pretty_print_expr(level, true, rexpr);
-            pretty_print_expr(level, true, lexpr);
-        }
-        Unary(op, rexpr) => {
-            pr(level, is_child, &format!("{:?}", op.kind));
-            level += 2;
-            pretty_print_expr(level, true, rexpr);
-        }
-        Call(callee, params) => {
-            pr(level, is_child, "call");
-            level += 2;
-            for param in params.iter() {
-                pretty_print_expr(level, true, param);
-            }
-            pretty_print_expr(level, true, callee);
-        }
-        Assign(id, expr) => {
-            pr(level, is_child, "Assign");
-            level += 2;
-            pr(level, is_child, id);
-            pretty_print_expr(level, true, expr);
-        }
-        Integer(num) => {
-            pr(level, is_child, &format!("{}", num));
-        }
-        Double(num) => {
-            pr(level, is_child, &format!("{}", num));
-        }
-        Str(str_) => {
-            pr(level, is_child, &format!(r#""{}""#, str_));
-        }
-        Identifier(str_) => {
-            pr(level, is_child, str_);
-        }
-        True => {
-            pr(level, is_child, "true");
-        }
-        False => {
-            pr(level, is_child, "false");
-        }
+pub fn file_to_string<P: AsRef<Path>>(path: &P) -> String {
+    let full_path = env::current_dir().unwrap().join(path);
+    let mut file = File::open(full_path).unwrap();
+    let mut file_buf = Vec::new();
+    file.read_to_end(&mut file_buf).unwrap();
+
+    String::from_utf8(file_buf)
+        .unwrap_or_else(|_| panic!("Please provide a valid UTF-8 encoded file."))
+}
+
+pub fn run(program: String, options: &Options) {
+    let mut lexer = crate::lexer::Lexer::new();
+    lexer.lex(&program);
+    if options.tokens {
+        lexer.print_tokens();
     }
-}
 
-pub fn lexit(program: String) {
-    let mut lexer = crate::lexer::Lexer::new();
-    lexer.lex(&program);
-    lexer.print_tokens();
-}
-
-pub fn run(program: String) {
-    let mut lexer = crate::lexer::Lexer::new();
-    lexer.lex(&program);
-    lexer.print_tokens();
+    if options.until == 1 {
+        return;
+    }
     let mut parser = crate::parser::Parser::new(&lexer);
     match parser.parse() {
         Ok(prog) => {
-            crate::util::pretty_print(&prog);
-            let mut compiler: crate::compiler::Compiler = Default::default();
-            compiler.compile(&prog);
+            if options.ast {
+                crate::util::pretty_print(&prog);
+            }
 
-            println!("{}", compiler.chunk());
-            println!("\nVirtual Machine");
-            println!("===============");
+            if options.until == 2 {
+                return;
+            }
+            let mut checker = crate::type_checker::TypeChecker::new();
+            match checker.check(&prog, options.symbols) {
+                Ok(()) => {
+                    if options.until == 3 {
+                        return;
+                    }
+                    let mut compiler: crate::compiler::Compiler = Default::default();
+                    compiler.compile(&prog);
 
-            let mut vm = crate::vm::VM::new();
-            vm.interpet(compiler.chunk());
+                    if options.chunk {
+                        println!("{}", compiler.chunk());
+                    }
+
+                    if options.vm {
+                        println!("\nVirtual Machine");
+                        println!("===============");
+                    }
+
+                    if options.until == 4 {
+                        return;
+                    }
+
+                    let mut vm = crate::vm::VM::new(options.vm);
+                    vm.interpet(compiler.chunk());
+                }
+                Err(err) => {
+                    print_error(&program, err.token_range, &err.message);
+                }
+            }
         }
         Err(parser_err) => {
-            print_error(&program, parser_err.token, parser_err.message);
+            print_error(&program, parser_err.token.into(), parser_err.message);
         }
     }
 }
 
-fn print_error(prog: &str, tk: crate::types::Token, msg: &str) {
+fn print_error(prog: &str, range: std::ops::Range<usize>, msg: &str) {
     let mut newline_before_token = 0;
     // Initialized to prog len in case of last line
     let mut newline_after_token = prog.len();
@@ -173,7 +333,7 @@ fn print_error(prog: &str, tk: crate::types::Token, msg: &str) {
 
     let mut break_on_next_newline = false;
     for (i, ch) in prog.bytes().enumerate() {
-        if i >= (tk.offset as usize) {
+        if i >= range.start {
             break_on_next_newline = true;
         }
         if ch == 10 {
@@ -196,8 +356,8 @@ fn print_error(prog: &str, tk: crate::types::Token, msg: &str) {
 
     let token = prog[newline_before_token..newline_after_token].to_owned();
 
-    let token_start_index = (tk.offset as usize) - newline_before_token;
-    let token_end_index = token_start_index + (tk.length as usize);
+    let token_start_index = range.start - newline_before_token;
+    let token_end_index = range.end - newline_before_token;
     let line_count_str = format!("{}", line_count);
 
     println!("{}: {}", line_count_str, token);

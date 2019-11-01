@@ -29,6 +29,7 @@ impl Lexer {
         keywords.insert("true".to_owned(), TrueToken);
         keywords.insert("var".to_owned(), VarToken);
         keywords.insert("while".to_owned(), WhileToken);
+        keywords.insert("struct".to_owned(), StructToken);
 
         Lexer {
             tokens: vec![],
@@ -46,13 +47,20 @@ impl Lexer {
                 '(' => self.add_token(1, LeftParen),
                 ')' => self.add_token(1, RightParen),
                 '+' => self.add_token(1, Plus),
-                '-' => self.add_token(1, Minus),
                 '*' => self.add_token(1, Star),
                 '{' => self.add_token(1, LeftBrace),
                 '}' => self.add_token(1, RightBrace),
                 ',' => self.add_token(1, Comma),
                 '.' => self.add_token(1, Dot),
                 ';' => self.add_token(1, Semicolon),
+                ':' => self.add_token(1, Colon),
+                '-' => {
+                    if self.match_(&mut chars, '>') {
+                        self.add_token(2, Arrow);
+                    } else {
+                        self.add_token(1, Minus);
+                    }
+                }
                 '!' => {
                     if self.match_(&mut chars, '=') {
                         self.add_token(2, BangEqual);
@@ -146,7 +154,7 @@ impl Lexer {
             panic!("Premature EOF");
         }
 
-        self.add_token(str_lit.len() as u8, String_(str_lit));
+        self.add_token((str_lit.len() + 2) as u8, String_(str_lit));
     }
 
     fn number(&mut self, first: char, chars: &mut Peekable<CharIndices<'_>>) {

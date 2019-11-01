@@ -1,4 +1,5 @@
 use std::fmt;
+use std::ops::Range;
 
 pub type Program = Vec<Declaration>;
 
@@ -70,7 +71,7 @@ impl Chunk {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone)]
 pub struct Token {
     /// The offset in bytes in the source file where the lexeme begins
     pub offset: u32,
@@ -78,6 +79,12 @@ pub struct Token {
     pub length: u8,
     /// The kind of the token
     pub kind: TokenKind,
+}
+
+impl fmt::Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.kind)
+    }
 }
 
 impl Token {
@@ -97,11 +104,36 @@ impl Token {
             kind,
         }
     }
+
+    pub fn is_id_token(&self) -> bool {
+        if let TokenKind::IdToken(_) = self.kind {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn get_id(&self) -> String {
+        if let TokenKind::IdToken(id) = &self.kind {
+            id.clone()
+        } else {
+            panic!("Expected IdToken");
+        }
+    }
+}
+
+impl Into<std::ops::Range<usize>> for Token {
+    fn into(self) -> std::ops::Range<usize> {
+        let off = self.offset as usize;
+        off..(off + (self.length as usize))
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
     Semicolon,
+    Colon,
+    Arrow,
     LeftParen,
     RightParen,
     LeftBrace,
@@ -115,7 +147,6 @@ pub enum TokenKind {
     Less,
     LessEqual,
     Bang,
-    Negate,
     Plus,
     Minus,
     Star,
@@ -129,6 +160,7 @@ pub enum TokenKind {
     For,
     VarToken,
     WhileToken,
+    StructToken,
     IdToken(String),
     PrintToken,
     IfToken,
@@ -143,14 +175,15 @@ pub enum TokenKind {
     EndOfFile,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum Declaration {
     StatementDecl(Statement),
     VarDecl(String, Expression),
-    FnDecl(String, Vec<String>, Statement),
+    StructDecl(Token, Vec<(Token, Token)>),
+    FnDecl(String, Vec<(Token, Token)>, Option<Token>, Statement),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum Statement {
     Print(Expression),
     If(Expression, Box<Statement>, Option<Box<Statement>>),
@@ -160,18 +193,39 @@ pub enum Statement {
     ExpressionStmt(Expression),
 }
 
-#[derive(Debug, PartialEq)]
-pub enum Expression {
+#[derive(PartialEq)]
+pub enum ExpressionKind {
     Binary(Box<Expression>, Token, Box<Expression>),
     Assign(String, Box<Expression>),
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
-    Integer(i32),
-    Double(f32),
-    Str(String),
+    Integer { int: i32 },
+    Double { float: f32 },
+    Str { string: String },
     Identifier(String),
     False,
     True,
+}
+
+pub struct Expression {
+    pub tokens: Range<usize>,
+    pub kind: ExpressionKind,
+}
+
+impl Expression {
+    pub fn new(tokens: Range<usize>, kind: ExpressionKind) -> Self {
+        Expression { tokens, kind }
+    }
+
+    pub fn new_debug(kind: ExpressionKind) -> Self {
+        Expression { tokens: 0..1, kind }
+    }
+}
+
+impl PartialEq for Expression {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
 }
 
 impl fmt::Display for Value {
