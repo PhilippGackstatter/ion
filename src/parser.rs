@@ -608,8 +608,8 @@ mod tests {
         let input = "fn foo(arg1: str, arg2: bool) {}";
         let mut lexer = Lexer::new();
         lexer.lex(&input);
-
         let mut parser = Parser::new(&lexer);
+
         let expected = FnDecl(
             "foo".into(),
             vec![
@@ -627,9 +627,168 @@ mod tests {
         );
 
         let parse_result = parser.parse().unwrap();
-        let result = parse_result.first().unwrap();
 
-        assert_eq!(*result, expected,)
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_struct_decl() {
+        let input = "struct MyStruct { field1: str, field2: bool }";
+        let mut lexer = Lexer::new();
+        lexer.lex(&input);
+        let mut parser = Parser::new(&lexer);
+
+        let expected = StructDecl(
+            token!(IdToken("MyStruct".into())),
+            vec![
+                (
+                    token!(IdToken("field1".into())),
+                    token!(IdToken("str".into())),
+                ),
+                (
+                    token!(IdToken("field2".into())),
+                    token!(IdToken("bool".into())),
+                ),
+            ],
+        );
+
+        let parse_result = parser.parse().unwrap();
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_while_stmt() {
+        let input = "while (i < 3) i = i + 1;";
+        let mut lexer = Lexer::new();
+        lexer.lex(&input);
+        let mut parser = Parser::new(&lexer);
+
+        let expected = StatementDecl(While(
+            Expression::new_debug(Binary(
+                expr!(Identifier("i".into())),
+                token!(Less),
+                expr!(Integer { int: 3 }),
+            )),
+            Box::new(ExpressionStmt(Expression::new_debug(Assign(
+                "i".into(),
+                expr!(Binary(
+                    expr!(Identifier("i".into())),
+                    token!(Plus),
+                    expr!(Integer { int: 1 }),
+                )),
+            )))),
+        ));
+
+        let parse_result = parser.parse().unwrap();
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_if_stmt() {
+        let input = "if (x != 3) x = 10 / 2;";
+        let mut lexer = Lexer::new();
+        lexer.lex(&input);
+        let mut parser = Parser::new(&lexer);
+
+        let expected = StatementDecl(If(
+            Expression::new_debug(Binary(
+                expr!(Identifier("x".into())),
+                token!(BangEqual),
+                expr!(Integer { int: 3 }),
+            )),
+            Box::new(ExpressionStmt(Expression::new_debug(Assign(
+                "x".into(),
+                expr!(Binary(
+                    expr!(Integer { int: 10 }),
+                    token!(Slash),
+                    expr!(Integer { int: 2 }),
+                )),
+            )))),
+            None,
+        ));
+
+        let parse_result = parser.parse().unwrap();
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_if_stmt_with_else() {
+        let input = "if (x != 3) x = 10 / 2; else x = 15 * 3;";
+        let mut lexer = Lexer::new();
+        lexer.lex(&input);
+        let mut parser = Parser::new(&lexer);
+
+        let expected = StatementDecl(If(
+            Expression::new_debug(Binary(
+                expr!(Identifier("x".into())),
+                token!(BangEqual),
+                expr!(Integer { int: 3 }),
+            )),
+            Box::new(ExpressionStmt(Expression::new_debug(Assign(
+                "x".into(),
+                expr!(Binary(
+                    expr!(Integer { int: 10 }),
+                    token!(Slash),
+                    expr!(Integer { int: 2 }),
+                )),
+            )))),
+            Some(Box::new(ExpressionStmt(Expression::new_debug(Assign(
+                "x".into(),
+                expr!(Binary(
+                    expr!(Integer { int: 15 }),
+                    token!(Star),
+                    expr!(Integer { int: 3 }),
+                )),
+            ))))),
+        ));
+
+        let parse_result = parser.parse().unwrap();
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_block() {
+        let input = "{
+            struct _MyStruct {}
+            print 5;
+        }";
+        let mut lexer = Lexer::new();
+        lexer.lex(&input);
+        let mut parser = Parser::new(&lexer);
+
+        let expected = StatementDecl(Block(vec![
+            StructDecl(token!(IdToken("_MyStruct".into())), vec![]),
+            StatementDecl(Print(Expression::new_debug(Integer { int: 5 }))),
+        ]));
+
+        let parse_result = parser.parse().unwrap();
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_var_decl() {
+        let input = r#"
+            var magic_number = "37";
+        "#;
+        let mut lexer = Lexer::new();
+        lexer.lex(&input);
+        let mut parser = Parser::new(&lexer);
+
+        let expected = VarDecl(
+            "magic_number".into(),
+            Expression::new_debug(Str {
+                string: "37".into(),
+            }),
+        );
+
+        let parse_result = parser.parse().unwrap();
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
 }
