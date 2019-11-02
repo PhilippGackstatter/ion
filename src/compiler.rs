@@ -192,15 +192,16 @@ impl Compiler {
             }
             Assign { target, value } => {
                 self.compile_expr(value);
+                // Currently assumed to be assignment to global variable
                 let id = target.kind.get_id();
-                if let Some(index) = self.find_local_variable(&id) {
-                    self.emit_op_byte(Bytecode::OpSetLocal);
-                    self.emit_byte(index);
-                } else {
-                    let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
-                    self.emit_op_byte(Bytecode::OpSetGlobal);
-                    self.emit_u16(index);
-                }
+                let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                self.emit_op_byte(Bytecode::OpSetGlobal);
+                self.emit_u16(index);
+            }
+            AssignLocal { stack_index, value } => {
+                self.compile_expr(value);
+                self.emit_op_byte(Bytecode::OpSetLocal);
+                self.emit_byte(*stack_index);
             }
             Integer { int, .. } => {
                 let index = self.add_constant(Value::Int(*int));

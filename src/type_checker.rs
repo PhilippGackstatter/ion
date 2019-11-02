@@ -344,7 +344,8 @@ impl TypeChecker {
     }
 
     fn check_expr(&self, expr: &mut Expression) -> Result<Type, TypeError> {
-        match &mut expr.kind {
+        let mut replacement = None;
+        let result = match &mut expr.kind {
             ExpressionKind::Binary(lexpr, op_token, rexpr) => {
                 let ltype = self.check_expr(lexpr)?;
                 let rtype = self.check_expr(rexpr)?;
@@ -423,6 +424,13 @@ impl TypeChecker {
                                 ),
                             })
                         } else {
+                            replacement = Some(Expression::new(
+                                target.tokens.clone(),
+                                ExpressionKind::AssignLocal {
+                                    stack_index: index,
+                                    value: value.clone(),
+                                },
+                            ));
                             Ok(expr_type)
                         }
                     } else {
@@ -492,7 +500,11 @@ impl TypeChecker {
                 }
             }
             _ => unimplemented!(),
+        };
+        if let Some(repl) = replacement {
+            *expr = repl;
         }
+        result
     }
 
     // Local Variables

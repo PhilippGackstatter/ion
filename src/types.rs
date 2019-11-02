@@ -199,11 +199,15 @@ pub enum Statement {
     ExpressionStmt(Expression),
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum ExpressionKind {
     Binary(Box<Expression>, Token, Box<Expression>),
     Assign {
         target: Box<Expression>,
+        value: Box<Expression>,
+    },
+    AssignLocal {
+        stack_index: u8,
         value: Box<Expression>,
     },
     Unary(Token, Box<Expression>),
@@ -222,6 +226,7 @@ pub enum ExpressionKind {
     True,
 }
 
+#[derive(Clone)]
 pub struct Expression {
     pub tokens: Range<usize>,
     pub kind: ExpressionKind,

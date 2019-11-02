@@ -122,6 +122,12 @@ pub fn pretty_write_expr(
             write(f, level, is_child, &target.kind.get_id())?;
             pretty_write_expr(f, level, true, value)
         }
+        AssignLocal { stack_index, value } => {
+            write(f, level, is_child, "AssignLocal")?;
+            level += 2;
+            write(f, level, is_child, &format!("{}", stack_index))?;
+            pretty_write_expr(f, level, true, value)
+        }
         Integer { int } => write(f, level, is_child, &format!("{}", int)),
         Double { float } => write(f, level, is_child, &format!("{}", float)),
         Str { string } => write(f, level, is_child, &format!("\"{}\"", string)),
