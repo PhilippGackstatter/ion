@@ -446,6 +446,10 @@ impl TypeChecker {
             }
             ExpressionKind::Identifier(id) => {
                 if let Some(index) = self.find_local_variable(&id) {
+                    replacement = Some(Expression::new(
+                        expr.tokens.clone(),
+                        ExpressionKind::LocalIdentifier(index),
+                    ));
                     Ok(self.locals[index as usize].dtype.clone())
                 } else if let Some(ty) = self.symbol_table.get(id) {
                     Ok(ty.clone())

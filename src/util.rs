@@ -132,6 +132,12 @@ pub fn pretty_write_expr(
         Double { float } => write(f, level, is_child, &format!("{}", float)),
         Str { string } => write(f, level, is_child, &format!("\"{}\"", string)),
         Identifier(str_) => write(f, level, is_child, str_),
+        LocalIdentifier(stack_index) => write(
+            f,
+            level,
+            is_child,
+            &format!("LocalIdentifier {}", stack_index),
+        ),
         True { .. } => write(f, level, is_child, "true"),
         False { .. } => write(f, level, is_child, "false"),
     }

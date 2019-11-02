@@ -222,6 +222,7 @@ pub enum ExpressionKind {
         string: String,
     },
     Identifier(String),
+    LocalIdentifier(u8),
     False,
     True,
 }

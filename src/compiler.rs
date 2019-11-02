@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use crate::types::{
     Bytecode, Chunk,
     Declaration::{self, *},
@@ -229,14 +227,13 @@ impl Compiler {
                 self.emit_u16(index);
             }
             Identifier(id) => {
-                if let Some(index) = self.find_local_variable(&id) {
-                    self.emit_op_byte(Bytecode::OpGetLocal);
-                    self.emit_byte(index);
-                } else {
-                    let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
-                    self.emit_op_byte(Bytecode::OpGetGlobal);
-                    self.emit_u16(index);
-                }
+                let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                self.emit_op_byte(Bytecode::OpGetGlobal);
+                self.emit_u16(index);
+            }
+            LocalIdentifier(stack_index) => {
+                self.emit_op_byte(Bytecode::OpGetLocal);
+                self.emit_byte(*stack_index);
             }
         }
     }
@@ -340,14 +337,6 @@ impl Compiler {
         // TODO: Check u16 overflow?
         self.chunk().constants.push(constant);
         (self.chunk().constants.len() - 1) as u16
-    }
-
-    fn find_local_variable(&mut self, id: &str) -> Option<u8> {
-        if let Some(pos) = self.locals.iter().rev().position(|elem| elem.0 == *id) {
-            Some((self.locals.len() - 1 - pos).try_into().unwrap())
-        } else {
-            None
-        }
     }
 
     fn add_local(&mut self, name: String) {
