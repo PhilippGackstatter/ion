@@ -281,7 +281,7 @@ pub fn run(program: String, options: &Options) {
     }
     let mut parser = crate::parser::Parser::new(&lexer);
     match parser.parse() {
-        Ok(prog) => {
+        Ok(mut prog) => {
             if options.ast {
                 crate::util::pretty_print(&prog);
             }
@@ -290,7 +290,7 @@ pub fn run(program: String, options: &Options) {
                 return;
             }
             let mut checker = crate::type_checker::TypeChecker::new();
-            match checker.check(&prog, options.symbols) {
+            match checker.check(&mut prog, options.symbols) {
                 Ok(()) => {
                     if options.until == 3 {
                         return;

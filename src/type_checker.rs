@@ -133,15 +133,15 @@ impl TypeChecker {
         }
     }
 
-    pub fn check(&mut self, prog: &Program, print_symbol_table: bool) -> Result<(), TypeError> {
+    pub fn check(&mut self, prog: &mut Program, print_symbol_table: bool) -> Result<(), TypeError> {
         for decl in prog.iter() {
             self.build_symbol_table(decl)?;
         }
         if print_symbol_table {
             self.print_symbol_table();
         }
-        for decl in prog.iter() {
-            self.check_decl(decl)?;
+        for mut decl in prog.iter_mut() {
+            self.check_decl(&mut decl)?;
         }
         Ok(())
     }
@@ -214,7 +214,7 @@ impl TypeChecker {
         }
     }
 
-    fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<Type>, TypeError> {
+    fn check_decl(&mut self, decl: &mut Declaration) -> Result<Vec<Type>, TypeError> {
         match decl {
             Declaration::StatementDecl(stmt) => {
                 return self.check_stmt(stmt);
@@ -283,7 +283,7 @@ impl TypeChecker {
         Ok(vec![])
     }
 
-    fn check_stmt(&mut self, stmt: &Statement) -> Result<Vec<Type>, TypeError> {
+    fn check_stmt(&mut self, stmt: &mut Statement) -> Result<Vec<Type>, TypeError> {
         match stmt {
             Statement::ExpressionStmt(expr) => {
                 self.check_expr(expr)?;
@@ -292,7 +292,7 @@ impl TypeChecker {
             Statement::Block(decls) => {
                 self.begin_scope();
                 let mut return_types = Vec::new();
-                for decl in decls.iter() {
+                for decl in decls.iter_mut() {
                     return_types.extend(self.check_decl(decl)?);
                 }
                 self.end_scope();
@@ -343,11 +343,11 @@ impl TypeChecker {
         }
     }
 
-    fn check_expr(&self, expr: &Expression) -> Result<Type, TypeError> {
-        match &expr.kind {
+    fn check_expr(&self, expr: &mut Expression) -> Result<Type, TypeError> {
+        match &mut expr.kind {
             ExpressionKind::Binary(lexpr, op_token, rexpr) => {
-                let ltype = self.check_expr(&lexpr)?;
-                let rtype = self.check_expr(&rexpr)?;
+                let ltype = self.check_expr(lexpr)?;
+                let rtype = self.check_expr(rexpr)?;
                 if ltype == rtype {
                     if [
                         TokenKind::EqualEqual,
@@ -373,7 +373,7 @@ impl TypeChecker {
                 }
             }
             ExpressionKind::Unary(op, rexpr) => {
-                let expr_type = self.check_expr(&rexpr)?;
+                let expr_type = self.check_expr(rexpr)?;
                 match op.kind {
                     TokenKind::Bang => {
                         if expr_type.kind == TypeKind::Bool {
@@ -409,7 +409,7 @@ impl TypeChecker {
             ExpressionKind::True { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
             ExpressionKind::False { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
             ExpressionKind::Assign(id, expr) => {
-                let expr_type = self.check_expr(&expr)?;
+                let expr_type = self.check_expr(expr)?;
 
                 if let Some(index) = self.find_local_variable(&id) {
                     // Assignment to local var
@@ -445,10 +445,10 @@ impl TypeChecker {
                 }
             }
             ExpressionKind::Call(callee, params) => {
-                let callee_type = self.check_expr(&callee)?;
+                let callee_type = self.check_expr(callee)?;
                 if let TypeKind::Func(fun) = callee_type.kind {
                     for (index, param) in fun.params.iter().enumerate() {
-                        if let Some(call_param) = params.get(index) {
+                        if let Some(call_param) = params.get_mut(index) {
                             let call_param_type = self.check_expr(call_param)?;
                             if *param != call_param_type {
                                 return Err(TypeError {
@@ -555,9 +555,9 @@ mod tests {
         let mut lexer = Lexer::new();
         lexer.lex(&input);
         let mut parser = Parser::new(&lexer);
-        let tree = parser.parse().unwrap();
+        let mut tree = parser.parse().unwrap();
         let mut checker = crate::type_checker::TypeChecker::new();
-        checker.check(&tree, false)
+        checker.check(&mut tree, false)
     }
 
     #[test]
