@@ -408,25 +408,32 @@ impl TypeChecker {
             ExpressionKind::Str { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Str)),
             ExpressionKind::True { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
             ExpressionKind::False { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
-            ExpressionKind::Assign(id, expr) => {
-                let expr_type = self.check_expr(expr)?;
+            ExpressionKind::Assign { target, value } => {
+                let expr_type = self.check_expr(value)?;
 
-                if let Some(index) = self.find_local_variable(&id) {
-                    // Assignment to local var
-                    if self.locals[index as usize].dtype != expr_type {
-                        Err(TypeError {
-                            token_range: expr_type.token_range.clone(),
-                            message: format!(
-                                "Expression of type {} can not be assigned to variable with type {}",
-                                expr_type, self.locals[index as usize].dtype
-                            ),
-                        })
+                if let ExpressionKind::Identifier(id) = &target.kind {
+                    if let Some(index) = self.find_local_variable(&id) {
+                        // Assignment to local var
+                        if self.locals[index as usize].dtype != expr_type {
+                            Err(TypeError {
+                                token_range: expr_type.token_range.clone(),
+                                message: format!(
+                                    "Expression of type {} can not be assigned to variable with type {}",
+                                    expr_type, self.locals[index as usize].dtype
+                                ),
+                            })
+                        } else {
+                            Ok(expr_type)
+                        }
                     } else {
+                        // TODO: Assignment to global var
                         Ok(expr_type)
                     }
                 } else {
-                    // TODO: Assignment to global var
-                    Ok(expr_type)
+                    Err(TypeError {
+                        token_range: target.tokens.clone(),
+                        message: "Invalid assignment target".into(),
+                    })
                 }
             }
             ExpressionKind::Identifier(id) => {

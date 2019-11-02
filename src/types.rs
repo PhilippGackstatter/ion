@@ -202,12 +202,21 @@ pub enum Statement {
 #[derive(PartialEq)]
 pub enum ExpressionKind {
     Binary(Box<Expression>, Token, Box<Expression>),
-    Assign(String, Box<Expression>),
+    Assign {
+        target: Box<Expression>,
+        value: Box<Expression>,
+    },
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
-    Integer { int: i32 },
-    Double { float: f32 },
-    Str { string: String },
+    Integer {
+        int: i32,
+    },
+    Double {
+        float: f32,
+    },
+    Str {
+        string: String,
+    },
     Identifier(String),
     False,
     True,
@@ -225,6 +234,16 @@ impl Expression {
 
     pub fn new_debug(kind: ExpressionKind) -> Self {
         Expression { tokens: 0..1, kind }
+    }
+}
+
+impl ExpressionKind {
+    pub fn get_id(&self) -> String {
+        if let ExpressionKind::Identifier(id) = &self {
+            id.clone()
+        } else {
+            panic!("Expected IdToken");
+        }
     }
 }
 

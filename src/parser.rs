@@ -283,15 +283,14 @@ impl<'a> Parser<'a> {
 
         if self.match_(Equal) {
             let equals = self.previous().clone();
-            if let Identifier(id) = &left_hand?.kind {
-                let value = self.assignment()?;
-                return Ok(Expression::new(
-                    equals.into(),
-                    Assign(id.clone(), Box::new(value)),
-                ));
-            } else {
-                return Err(self.error(equals, "Invalid assignment target."));
-            }
+            let value = self.assignment()?;
+            return Ok(Expression::new(
+                equals.into(),
+                Assign {
+                    target: Box::new(left_hand?),
+                    value: Box::new(value),
+                },
+            ));
         }
 
         left_hand
@@ -670,14 +669,14 @@ mod tests {
                 token!(Less),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(ExpressionStmt(Expression::new_debug(Assign(
-                "i".into(),
-                expr!(Binary(
+            Box::new(ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("i".into())),
+                value: expr!(Binary(
                     expr!(Identifier("i".into())),
                     token!(Plus),
                     expr!(Integer { int: 1 }),
                 )),
-            )))),
+            }))),
         ));
 
         let parse_result = parser.parse().unwrap();
@@ -698,14 +697,14 @@ mod tests {
                 token!(BangEqual),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(ExpressionStmt(Expression::new_debug(Assign(
-                "x".into(),
-                expr!(Binary(
+            Box::new(ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("x".into())),
+                value: expr!(Binary(
                     expr!(Integer { int: 10 }),
                     token!(Slash),
                     expr!(Integer { int: 2 }),
                 )),
-            )))),
+            }))),
             None,
         ));
 
@@ -727,22 +726,22 @@ mod tests {
                 token!(BangEqual),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(ExpressionStmt(Expression::new_debug(Assign(
-                "x".into(),
-                expr!(Binary(
+            Box::new(ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("x".into())),
+                value: expr!(Binary(
                     expr!(Integer { int: 10 }),
                     token!(Slash),
                     expr!(Integer { int: 2 }),
                 )),
-            )))),
-            Some(Box::new(ExpressionStmt(Expression::new_debug(Assign(
-                "x".into(),
-                expr!(Binary(
+            }))),
+            Some(Box::new(ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("x".into())),
+                value: expr!(Binary(
                     expr!(Integer { int: 15 }),
                     token!(Star),
                     expr!(Integer { int: 3 }),
                 )),
-            ))))),
+            })))),
         ));
 
         let parse_result = parser.parse().unwrap();

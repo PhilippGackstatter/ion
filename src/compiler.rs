@@ -190,8 +190,9 @@ impl Compiler {
 
                 self.emit_op_byte(Bytecode::OpCall);
             }
-            Assign(id, expr) => {
-                self.compile_expr(expr);
+            Assign { target, value } => {
+                self.compile_expr(value);
+                let id = target.kind.get_id();
                 if let Some(index) = self.find_local_variable(&id) {
                     self.emit_op_byte(Bytecode::OpSetLocal);
                     self.emit_byte(index);
