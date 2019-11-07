@@ -1,5 +1,6 @@
 use std::fmt;
 use std::ops::Range;
+use std::collections::HashMap;
 
 pub type Program = Vec<Declaration>;
 
@@ -25,6 +26,7 @@ impl Value {
 pub enum Object {
     StringObj(String),
     FnObj(String, Chunk, u8),
+    StructObj { name: String, fields: HashMap<String, Value> },
 }
 
 #[derive(Debug)]
@@ -205,6 +207,7 @@ pub enum ExpressionKind {
     Assign(String, Box<Expression>),
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
+    StructInit { name: Token, values: Vec<(Expression, Expression)> },
     Integer { int: i32 },
     Double { float: f32 },
     Str { string: String },
@@ -250,6 +253,7 @@ impl fmt::Display for Object {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
             Object::FnObj(name, _chunk, arity) => write!(f, "{} (args: {})", name, arity),
+            Object::StructObj { name, fields } => write!(f, "struct {}", name),
         }
     }
 }

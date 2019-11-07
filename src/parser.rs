@@ -405,6 +405,26 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    fn struct_instantiation(&mut self) -> ExpressionResult {
+        let mut expr = self.primary()?;
+
+        if self.match_(LeftBrace) {
+            let mut fields = Vec::new();
+            while !self.match_(RightBrace) {
+                let field_name = self.primary()?;
+                if let Identifier(field) = &field_name {} else {
+                    Err(self.error(field_name.tokens, "Expected identifier as field name"));
+                }
+                self.consume(Colon, "Expected ':' in field initializer.")?;
+                let field_value = self.primary()?;
+                self.consume(Comma, "Expected ',' after field initializer.")?;
+                fields.push((field_name))
+            }
+        }
+
+        Ok(expr)
+    }
+
     fn primary(&mut self) -> ExpressionResult {
         // primary → NUMBER | STRING | "false" | "true" | "nil"
         //           | "(" expression ")" ;
