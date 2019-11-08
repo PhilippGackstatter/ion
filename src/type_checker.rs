@@ -756,4 +756,14 @@ mod tests {
         assert!(res.unwrap_err().message.contains("but type i32 was found"));
     }
 
+    #[test]
+    fn test_struct_access_use() {
+        let res = lex_parse_check("struct_access_use.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("Type i32 can not be used with a ! operator"));
+    }
+
 }
