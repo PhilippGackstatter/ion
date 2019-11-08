@@ -478,6 +478,62 @@ impl TypeChecker {
                     })
                 }
             }
+            ExpressionKind::StructInit { name, values } => {
+                let start = expr.tokens.start as u32;
+                let offset = (expr.tokens.end - expr.tokens.start) as u8;
+                let fake_token = Token::new(start, offset, TokenKind::IdToken(name.get_id()));
+                let struct_type = self.lookup_type(&fake_token)?;
+                if let TypeKind::Struct(declared_struct) = &struct_type.kind {
+                    let declared_field_number = declared_struct.fields.len();
+                    let given_field_number = values.len();
+                    if declared_field_number != given_field_number {
+                        Err(CompileError {
+                            token_range: expr.tokens.clone(),
+                            message: format!(
+                                "Expected {} fields, but {} were given.",
+                                declared_field_number, given_field_number
+                            ),
+                        })
+                    } else {
+                        #[allow(clippy::needless_range_loop)]
+                        for i in 0..declared_field_number {
+                            let declared_name = &declared_struct.fields[i].0;
+                            let declared_type = &declared_struct.fields[i].1;
+                            let given_name = &values[i].0;
+                            let given_type = &values[i].1;
+
+                            if *declared_name != given_name.get_id() {
+                                return Err(CompileError {
+                                    token_range: given_name.tokens.clone(),
+                                    message: format!(
+                                        "{} has no field with name {}",
+                                        declared_struct.name,
+                                        given_name.get_id()
+                                    ),
+                                });
+                            }
+
+                            let given_type = self.check_expr(given_type)?;
+                            if *declared_type != given_type {
+                                return Err(CompileError {
+                                    token_range: given_type.token_range.clone(),
+                                    message: format!(
+                                        "Expected {} for field {} but type {} was found",
+                                        declared_type, declared_name, given_type
+                                    ),
+                                });
+                            }
+                        }
+
+                        Ok(struct_type)
+                    }
+                } else {
+                    Err(CompileError {
+                        token_range: expr.tokens.clone(),
+                        message: "Cannot instantiate anything other than a struct".to_owned(),
+                    })
+                }
+            }
             _ => unimplemented!(),
         }
     }
