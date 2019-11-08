@@ -1,6 +1,6 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
-use std::collections::HashMap;
 
 pub type Program = Vec<Declaration>;
 
@@ -26,7 +26,10 @@ impl Value {
 pub enum Object {
     StringObj(String),
     FnObj(String, Chunk, u8),
-    StructObj { name: String, fields: HashMap<String, Value> },
+    StructObj {
+        name: String,
+        fields: HashMap<String, Value>,
+    },
 }
 
 #[derive(Debug)]
@@ -137,6 +140,14 @@ impl Into<std::ops::Range<usize>> for Token {
     }
 }
 
+#[derive(Debug)]
+pub struct CompileError {
+    /// The indexes in the source string that are erroneous
+    pub token_range: Range<usize>,
+    /// The error message
+    pub message: String,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
     Semicolon,
@@ -207,10 +218,19 @@ pub enum ExpressionKind {
     Assign(String, Box<Expression>),
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
-    StructInit { name: Token, values: Vec<(Expression, Expression)> },
-    Integer { int: i32 },
-    Double { float: f32 },
-    Str { string: String },
+    StructInit {
+        name: Box<Expression>,
+        values: Vec<(Expression, Expression)>,
+    },
+    Integer {
+        int: i32,
+    },
+    Double {
+        float: f32,
+    },
+    Str {
+        string: String,
+    },
     Identifier(String),
     False,
     True,
@@ -228,6 +248,14 @@ impl Expression {
 
     pub fn new_debug(kind: ExpressionKind) -> Self {
         Expression { tokens: 0..1, kind }
+    }
+
+    pub fn get_id(&self) -> String {
+        if let ExpressionKind::Identifier(id) = &self.kind {
+            id.clone()
+        } else {
+            panic!("Expected IdToken");
+        }
     }
 }
 

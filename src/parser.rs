@@ -2,6 +2,7 @@ use crate::lexer::Lexer;
 use crate::types::Token;
 use crate::types::TokenKind::{self, *};
 use crate::types::{
+    CompileError,
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
@@ -10,17 +11,9 @@ use crate::types::{
 };
 use std::ops::Range;
 
-// TODO: Should be expanded to include the line and column directly,
-// since the parser (and thus the lexer and source code) are no longer accessible
-#[derive(Debug)]
-pub struct ParserError {
-    pub token: Token,
-    pub message: &'static str,
-}
-
-type StatementResult = Result<Statement, ParserError>;
-type ExpressionResult = Result<Expression, ParserError>;
-type DeclarationResult = Result<Declaration, ParserError>;
+type StatementResult = Result<Statement, CompileError>;
+type ExpressionResult = Result<Expression, CompileError>;
+type DeclarationResult = Result<Declaration, CompileError>;
 
 pub struct Parser<'a> {
     lexer: &'a Lexer,
@@ -28,11 +21,11 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse(&mut self) -> Result<Program, ParserError> {
+    pub fn parse(&mut self) -> Result<Program, CompileError> {
         self.program()
     }
 
-    fn program(&mut self) -> Result<Program, ParserError> {
+    fn program(&mut self) -> Result<Program, CompileError> {
         let mut prog = Vec::new();
         while !self.is_at_end() {
             prog.push(self.declaration()?);
@@ -56,7 +49,7 @@ impl<'a> Parser<'a> {
 
         if !self.peek().is_id_token() {
             return Err(self.error(
-                self.peek().clone(),
+                self.peek().clone().into(),
                 "Expected an identifier as struct name.",
             ));
         }
@@ -67,9 +60,10 @@ impl<'a> Parser<'a> {
 
         while self.peek().kind != RightBrace {
             if !self.peek().is_id_token() {
-                return Err(
-                    self.error(self.peek().clone(), "Expected an identifier as field name.")
-                );
+                return Err(self.error(
+                    self.peek().clone().into(),
+                    "Expected an identifier as field name.",
+                ));
             }
 
             let name_token = self.advance().clone();
@@ -78,7 +72,7 @@ impl<'a> Parser<'a> {
 
             if !self.peek().is_id_token() {
                 return Err(self.error(
-                    self.peek().clone(),
+                    self.peek().clone().into(),
                     "Expected a type identifier after field name.",
                 ));
             }
@@ -89,7 +83,10 @@ impl<'a> Parser<'a> {
                 if self.peek().kind == Comma {
                     self.advance();
                 } else {
-                    return Err(self.error(self.peek().clone(), "Expected a ',' inbetween fields."));
+                    return Err(self.error(
+                        self.peek().clone().into(),
+                        "Expected a ',' inbetween fields.",
+                    ));
                 }
             } else if self.peek().kind == Comma {
                 // Allow trailing comma
@@ -111,7 +108,7 @@ impl<'a> Parser<'a> {
             Ok(id_.clone())
         } else {
             Err(self.error(
-                self.peek().clone(),
+                self.peek().clone().into(),
                 "Expected an identifier after variable declaration.",
             ))
         }?;
@@ -129,7 +126,7 @@ impl<'a> Parser<'a> {
             Ok(id_.clone())
         } else {
             Err(self.error(
-                self.peek().clone(),
+                self.peek().clone().into(),
                 "Expected an identifier after function declaration.",
             ))
         }?;
@@ -147,7 +144,7 @@ impl<'a> Parser<'a> {
 
                 if !self.peek().is_id_token() {
                     return Err(self.error(
-                        self.peek().clone(),
+                        self.peek().clone().into(),
                         "Expected type identifier after parameter.",
                     ));
                 }
@@ -157,14 +154,15 @@ impl<'a> Parser<'a> {
                 params.push((name_token, type_token));
 
                 if !self.match_(Comma) && self.peek().kind != RightParen {
-                    return Err(
-                        self.error(self.peek().clone(), "Expected ')' or ',' after parameter.")
-                    );
+                    return Err(self.error(
+                        self.peek().clone().into(),
+                        "Expected ')' or ',' after parameter.",
+                    ));
                 }
             }
 
             if params.is_empty() {
-                return Err(self.error(self.peek().clone(), "Expected identifier."));
+                return Err(self.error(self.peek().clone().into(), "Expected identifier."));
             }
         }
 
@@ -216,7 +214,10 @@ impl<'a> Parser<'a> {
         }
 
         if unexpected_eof {
-            Err(self.error(self.previous().clone(), "Unclosed block, missing a '}'."))
+            Err(self.error(
+                self.previous().clone().into(),
+                "Unclosed block, missing a '}'.",
+            ))
         } else {
             Ok(Block(decls))
         }
@@ -290,7 +291,7 @@ impl<'a> Parser<'a> {
                     Assign(id.clone(), Box::new(value)),
                 ));
             } else {
-                return Err(self.error(equals, "Invalid assignment target."));
+                return Err(self.error(equals.into(), "Invalid assignment target."));
             }
         }
 
@@ -373,7 +374,7 @@ impl<'a> Parser<'a> {
     }
 
     fn call(&mut self) -> ExpressionResult {
-        let mut expr = self.primary()?;
+        let mut expr = self.struct_instantiation()?;
 
         loop {
             if self.match_(LeftParen) {
@@ -408,17 +409,31 @@ impl<'a> Parser<'a> {
     fn struct_instantiation(&mut self) -> ExpressionResult {
         let mut expr = self.primary()?;
 
-        if self.match_(LeftBrace) {
-            let mut fields = Vec::new();
-            while !self.match_(RightBrace) {
-                let field_name = self.primary()?;
-                if let Identifier(field) = &field_name {} else {
-                    Err(self.error(field_name.tokens, "Expected identifier as field name"));
+        if let Identifier(_) = &expr.kind {
+            if self.match_(LeftBrace) {
+                let mut fields = Vec::new();
+                while !self.match_(RightBrace) {
+                    let field_name = self.primary()?;
+                    if let Identifier(_) = &field_name.kind {
+                        self.consume(Colon, "Expected ':' in field initializer.")?;
+                        let field_value = self.primary()?;
+                        self.consume(Comma, "Expected ',' after field initializer.")?;
+                        fields.push((field_name, field_value))
+                    } else {
+                        return Err(CompileError {
+                            token_range: field_name.tokens.clone(),
+                            message: "Expected identifier as field name".into(),
+                        });
+                    }
                 }
-                self.consume(Colon, "Expected ':' in field initializer.")?;
-                let field_value = self.primary()?;
-                self.consume(Comma, "Expected ',' after field initializer.")?;
-                fields.push((field_name))
+                let last_token_end = fields[fields.len() - 1].1.tokens.end;
+                expr = Expression::new(
+                    expr.tokens.start..last_token_end,
+                    StructInit {
+                        name: Box::new(expr),
+                        values: fields,
+                    },
+                );
             }
         }
 
@@ -470,7 +485,7 @@ impl<'a> Parser<'a> {
                     self.consume(RightParen, "Expected '('.")?;
                     Ok(expr)
                 } else {
-                    Err(self.error(self.peek().clone(), "Expect expression."))
+                    Err(self.error(self.peek().clone().into(), "Expect expression."))
                 }
             }
         }
@@ -517,17 +532,20 @@ impl<'a> Parser<'a> {
 
     // Errors
 
-    fn consume(&mut self, token: TokenKind, error_msg: &'static str) -> Result<(), ParserError> {
+    fn consume(&mut self, token: TokenKind, error_msg: &'static str) -> Result<(), CompileError> {
         if self.check(token) {
             self.advance();
             Ok(())
         } else {
-            Err(self.error(self.peek().clone(), error_msg))
+            Err(self.error(self.peek().clone().into(), error_msg))
         }
     }
 
-    fn error(&self, token: Token, message: &'static str) -> ParserError {
-        ParserError { token, message }
+    fn error(&self, token_range: Range<usize>, message: &'static str) -> CompileError {
+        CompileError {
+            token_range,
+            message: message.into(),
+        }
     }
 
     // fn synchronize(&mut self) {

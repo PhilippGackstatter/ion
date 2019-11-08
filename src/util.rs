@@ -122,6 +122,12 @@ pub fn pretty_write_expr(
             write(f, level, is_child, id)?;
             pretty_write_expr(f, level, true, expr)
         }
+        StructInit { name, .. } => write(
+            f,
+            level,
+            is_child,
+            &format!("Struct {} (todo)", name.get_id()),
+        ),
         Integer { int } => write(f, level, is_child, &format!("{}", int)),
         Double { float } => write(f, level, is_child, &format!("{}", float)),
         Str { string } => write(f, level, is_child, &format!("\"{}\"", string)),
@@ -320,7 +326,7 @@ pub fn run(program: String, options: &Options) {
             }
         }
         Err(parser_err) => {
-            print_error(&program, parser_err.token.into(), parser_err.message);
+            print_error(&program, parser_err.token_range, &parser_err.message);
         }
     }
 }

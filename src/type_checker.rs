@@ -1,15 +1,7 @@
-use crate::types::{Declaration, Expression, ExpressionKind, Program, Statement, Token, TokenKind};
+use crate::types::{Declaration, Expression, ExpressionKind, Program, Statement, Token, TokenKind, CompileError};
 use std::collections::{hash_map::Entry, HashMap};
 use std::convert::TryInto;
 use std::ops::Range;
-
-#[derive(Debug)]
-pub struct TypeError {
-    /// The indexes in the source string that are erroneous
-    pub token_range: Range<usize>,
-    /// The error message
-    pub message: String,
-}
 
 #[derive(Debug, Clone)]
 struct Type {
@@ -133,7 +125,7 @@ impl TypeChecker {
         }
     }
 
-    pub fn check(&mut self, prog: &Program, print_symbol_table: bool) -> Result<(), TypeError> {
+    pub fn check(&mut self, prog: &Program, print_symbol_table: bool) -> Result<(), CompileError> {
         for decl in prog.iter() {
             self.build_symbol_table(decl)?;
         }
@@ -146,19 +138,19 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn add_symbol(&mut self, name: &str, ty: Type) -> Result<(), TypeError> {
+    fn add_symbol(&mut self, name: &str, ty: Type) -> Result<(), CompileError> {
         if let entry @ Entry::Vacant(_) = self.symbol_table.entry(name.into()) {
             entry.or_insert(ty);
             Ok(())
         } else {
-            Err(TypeError {
+            Err(CompileError {
                 token_range: ty.token_range.clone(),
                 message: format!("Type {} is already declared in this scope.", name),
             })
         }
     }
 
-    fn build_symbol_table(&mut self, decl: &Declaration) -> Result<(), TypeError> {
+    fn build_symbol_table(&mut self, decl: &Declaration) -> Result<(), CompileError> {
         match decl {
             Declaration::FnDecl(name, params_tokens, return_token, _stmt) => {
                 let mut params = Vec::new();
@@ -200,21 +192,21 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn lookup_type(&self, token: &Token) -> Result<Type, TypeError> {
+    fn lookup_type(&self, token: &Token) -> Result<Type, CompileError> {
         let type_name = token.get_id();
         if let Some(symbol) = self.symbol_table.get(&type_name) {
             let mut ty = symbol.clone();
             ty.token_range = token.clone().into();
             Ok(ty)
         } else {
-            Err(TypeError {
+            Err(CompileError {
                 token_range: token.clone().into(),
                 message: format!("Type {} not declared in this scope.", type_name),
             })
         }
     }
 
-    fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<Type>, TypeError> {
+    fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<Type>, CompileError> {
         match decl {
             Declaration::StatementDecl(stmt) => {
                 return self.check_stmt(stmt);
@@ -229,7 +221,7 @@ impl TypeChecker {
                     .iter()
                     .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
                 {
-                    return Err(TypeError {
+                    return Err(CompileError {
                         token_range: expr_type.token_range.clone(),
                         message: "Variable is already declared in this scope.".into(),
                     });
@@ -253,7 +245,7 @@ impl TypeChecker {
                 };
 
                 if declared_ret_type.kind != TypeKind::Void && return_types.is_empty() {
-                    return Err(TypeError {
+                    return Err(CompileError {
                         token_range: declared_ret_type.token_range.clone(),
                         message: format!(
                             "This function has to return a type {}.",
@@ -264,7 +256,7 @@ impl TypeChecker {
 
                 for return_type in return_types {
                     if return_type != declared_ret_type {
-                        return Err(TypeError {
+                        return Err(CompileError {
                             token_range: return_type.token_range.clone(),
                             message: format!(
                                 "Returned type {} does not match declared return type {}.",
@@ -283,7 +275,7 @@ impl TypeChecker {
         Ok(vec![])
     }
 
-    fn check_stmt(&mut self, stmt: &Statement) -> Result<Vec<Type>, TypeError> {
+    fn check_stmt(&mut self, stmt: &Statement) -> Result<Vec<Type>, CompileError> {
         match stmt {
             Statement::ExpressionStmt(expr) => {
                 self.check_expr(expr)?;
@@ -309,7 +301,7 @@ impl TypeChecker {
             Statement::If(condition, if_branch, else_branch_opt) => {
                 let cond_type = self.check_expr(condition)?;
                 if cond_type.kind != TypeKind::Bool {
-                    return Err(TypeError {
+                    return Err(CompileError {
                         token_range: condition.tokens.clone(),
                         message: format!("Condition must be of type bool, got {}", cond_type),
                     });
@@ -326,7 +318,7 @@ impl TypeChecker {
             Statement::While(condition, body) => {
                 let cond_type = self.check_expr(condition)?;
                 if cond_type.kind != TypeKind::Bool {
-                    return Err(TypeError {
+                    return Err(CompileError {
                         token_range: condition.tokens.clone(),
                         message: format!("Condition must be of type bool, got {}", cond_type),
                     });
@@ -343,7 +335,7 @@ impl TypeChecker {
         }
     }
 
-    fn check_expr(&self, expr: &Expression) -> Result<Type, TypeError> {
+    fn check_expr(&self, expr: &Expression) -> Result<Type, CompileError> {
         match &expr.kind {
             ExpressionKind::Binary(lexpr, op_token, rexpr) => {
                 let ltype = self.check_expr(&lexpr)?;
@@ -363,7 +355,7 @@ impl TypeChecker {
                         Ok(Type::new(expr.tokens.clone(), rtype.kind))
                     }
                 } else {
-                    Err(TypeError {
+                    Err(CompileError {
                         token_range: op_token.clone().into(),
                         message: format!(
                             "Types {} and {} are not compatible in binary operation",
@@ -379,7 +371,7 @@ impl TypeChecker {
                         if expr_type.kind == TypeKind::Bool {
                             Ok(Type::new(expr_type.token_range.clone(), TypeKind::Bool))
                         } else {
-                            Err(TypeError {
+                            Err(CompileError {
                                 token_range: rexpr.tokens.clone(),
                                 message: format!(
                                     "Type {} can not be used with a ! operator",
@@ -392,7 +384,7 @@ impl TypeChecker {
                         if expr_type.kind == TypeKind::Integer {
                             Ok(Type::new(expr_type.token_range.clone(), TypeKind::Integer))
                         } else {
-                            Err(TypeError {
+                            Err(CompileError {
                                 token_range: expr_type.token_range.clone(),
                                 message: format!(
                                     "Type {} can not be used with a - operator",
@@ -414,7 +406,7 @@ impl TypeChecker {
                 if let Some(index) = self.find_local_variable(&id) {
                     // Assignment to local var
                     if self.locals[index as usize].dtype != expr_type {
-                        Err(TypeError {
+                        Err(CompileError {
                             token_range: expr_type.token_range.clone(),
                             message: format!(
                                 "Expression of type {} can not be assigned to variable with type {}",
@@ -435,7 +427,7 @@ impl TypeChecker {
                 } else if let Some(ty) = self.symbol_table.get(id) {
                     Ok(ty.clone())
                 } else {
-                    Err(TypeError {
+                    Err(CompileError {
                         token_range: expr.tokens.clone(),
                         message: format!(
                             "{} is not defined in the current scope. (Globals are unimplemented.)",
@@ -451,7 +443,7 @@ impl TypeChecker {
                         if let Some(call_param) = params.get(index) {
                             let call_param_type = self.check_expr(call_param)?;
                             if *param != call_param_type {
-                                return Err(TypeError {
+                                return Err(CompileError {
                                     token_range: call_param_type.token_range.clone(),
                                     message: format!(
                                         "Function parameters have incompatible type. Expected: {}, Supplied: {}.",
@@ -461,7 +453,7 @@ impl TypeChecker {
                                 });
                             }
                         } else {
-                            return Err(TypeError {
+                            return Err(CompileError {
                                 token_range: callee_type.token_range.clone(),
                                 message: format!(
                                     "Function needs {} parameters, but only {} were supplied.",
@@ -478,7 +470,7 @@ impl TypeChecker {
                         Type::new_empty_range(TypeKind::Void)
                     })
                 } else {
-                    Err(TypeError {
+                    Err(CompileError {
                         token_range: callee_type.token_range.clone(),
                         message: "Cannot call anything other than a function.".to_owned(),
                     })
@@ -549,7 +541,7 @@ mod tests {
     use crate::{lexer::Lexer, parser::Parser, util};
     use std::path::Path;
 
-    fn lex_parse_check(path: &str) -> Result<(), TypeError> {
+    fn lex_parse_check(path: &str) -> Result<(), CompileError> {
         let test_path: &Path = "src/test_input/type_checker/".as_ref();
         let input = util::file_to_string(&test_path.join(&path));
         let mut lexer = Lexer::new();

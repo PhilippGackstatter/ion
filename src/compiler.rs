@@ -236,6 +236,7 @@ impl Compiler {
                     self.emit_u16(index);
                 }
             }
+            StructInit { .. } => {}
         }
     }
 
