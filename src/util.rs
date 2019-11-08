@@ -122,12 +122,17 @@ pub fn pretty_write_expr(
             write(f, level, is_child, id)?;
             pretty_write_expr(f, level, true, expr)
         }
-        StructInit { name, .. } => write(
-            f,
-            level,
-            is_child,
-            &format!("Struct {} (todo)", name.get_id()),
-        ),
+        StructInit { name, values } => {
+            write(f, level, is_child, &format!("Struct {}", name.get_id()))?;
+            level += 2;
+            for (name, value) in values.iter() {
+                let mut temp = level;
+                pretty_write_expr(f, temp, true, name)?;
+                temp += 2;
+                pretty_write_expr(f, temp, true, value)?;
+            }
+            Ok(())
+        }
         Integer { int } => write(f, level, is_child, &format!("{}", int)),
         Double { float } => write(f, level, is_child, &format!("{}", float)),
         Str { string } => write(f, level, is_child, &format!("\"{}\"", string)),
