@@ -218,6 +218,10 @@ pub enum ExpressionKind {
     Assign(String, Box<Expression>),
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
+    Access {
+        expr: Box<Expression>,
+        name: Box<Expression>,
+    },
     StructInit {
         name: Box<Expression>,
         values: Vec<(Expression, Expression)>,

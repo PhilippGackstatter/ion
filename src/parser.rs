@@ -379,6 +379,22 @@ impl<'a> Parser<'a> {
         loop {
             if self.match_(LeftParen) {
                 expr = self.finish_call(expr)?;
+            } else if self.match_(Dot) {
+                let name = self.primary()?;
+                if let Identifier(_) = &name.kind {
+                    expr = Expression::new(
+                        expr.tokens.start..name.tokens.end,
+                        Access {
+                            expr: Box::new(expr),
+                            name: Box::new(name),
+                        },
+                    );
+                } else {
+                    return Err(CompileError {
+                        token_range: name.tokens.clone(),
+                        message: "Expected identifier for field access".into(),
+                    });
+                }
             } else {
                 break;
             }
@@ -847,6 +863,33 @@ mod tests {
         };
 
         let expected = VarDecl("my_struct".into(), dexpr!(expected_struct));
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_access() {
+        let input = r#"
+            var chain_result = my_struct.method().chain();
+        "#;
+
+        let parse_result = lex_and_parse(&input);
+
+        let first_access = Access {
+            expr: expr!(Identifier("my_struct".into())),
+            name: expr!(Identifier("method".into())),
+        };
+
+        let first_call = Call(expr!(first_access), vec![]);
+
+        let second_access = Access {
+            expr: expr!(first_call),
+            name: expr!(Identifier("chain".into())),
+        };
+
+        let second_call = Call(expr!(second_access), vec![]);
+
+        let expected = VarDecl("chain_result".into(), dexpr!(second_call));
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }

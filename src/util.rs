@@ -133,6 +133,12 @@ pub fn pretty_write_expr(
             }
             Ok(())
         }
+        Access { expr, name } => {
+            write(f, level, is_child, "Access")?;
+            level += 2;
+            pretty_write_expr(f, level, is_child, expr)?;
+            pretty_write_expr(f, level, is_child, name)
+        }
         Integer { int } => write(f, level, is_child, &format!("{}", int)),
         Double { float } => write(f, level, is_child, &format!("{}", float)),
         Str { string } => write(f, level, is_child, &format!("\"{}\"", string)),

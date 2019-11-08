@@ -237,6 +237,7 @@ impl Compiler {
                 }
             }
             StructInit { .. } => {}
+            Access { .. } => (),
         }
     }
 
