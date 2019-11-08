@@ -1,4 +1,6 @@
-use crate::types::{Declaration, Expression, ExpressionKind, Program, Statement, Token, TokenKind, CompileError};
+use crate::types::{
+    CompileError, Declaration, Expression, ExpressionKind, Program, Statement, Token, TokenKind,
+};
 use std::collections::{hash_map::Entry, HashMap};
 use std::convert::TryInto;
 use std::ops::Range;

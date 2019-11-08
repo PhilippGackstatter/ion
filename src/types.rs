@@ -281,7 +281,7 @@ impl fmt::Display for Object {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
             Object::FnObj(name, _chunk, arity) => write!(f, "{} (args: {})", name, arity),
-            Object::StructObj { name, fields } => write!(f, "struct {}", name),
+            Object::StructObj { name, .. } => write!(f, "struct {}", name),
         }
     }
 }

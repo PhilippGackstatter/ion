@@ -416,7 +416,7 @@ impl<'a> Parser<'a> {
                     let field_name = self.primary()?;
                     if let Identifier(_) = &field_name.kind {
                         self.consume(Colon, "Expected ':' in field initializer.")?;
-                        let field_value = self.primary()?;
+                        let field_value = self.expression()?;
                         self.consume(Comma, "Expected ',' after field initializer.")?;
                         fields.push((field_name, field_value))
                     } else {
@@ -576,7 +576,14 @@ impl<'a> Parser<'a> {
 mod tests {
     use super::*;
 
-    #[allow(unused_macros)]
+    macro_rules! dexpr {
+    [$exp:expr] => {
+            {
+                Expression::new_debug($exp)
+            }
+        };
+    }
+
     macro_rules! expr {
     [$exp:expr] => {
             {
@@ -585,13 +592,19 @@ mod tests {
         };
     }
 
-    #[allow(unused_macros)]
     macro_rules! token {
         [$token:expr] => {
             {
                 Token::new_debug($token)
             }
         };
+    }
+
+    fn lex_and_parse(input: &str) -> Program {
+        let mut lexer = Lexer::new();
+        lexer.lex(&input);
+        let mut parser = Parser::new(&lexer);
+        parser.parse().unwrap()
     }
 
     #[test]
@@ -644,9 +657,7 @@ mod tests {
     #[test]
     fn test_function_decl() {
         let input = "fn foo(arg1: str, arg2: bool) {}";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = FnDecl(
             "foo".into(),
@@ -664,17 +675,14 @@ mod tests {
             Block(vec![StatementDecl(Ret(None))]),
         );
 
-        let parse_result = parser.parse().unwrap();
-
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
     #[test]
     fn test_struct_decl() {
         let input = "struct MyStruct { field1: str, field2: bool }";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+
+        let parse_result = lex_and_parse(&input);
 
         let expected = StructDecl(
             token!(IdToken("MyStruct".into())),
@@ -690,17 +698,13 @@ mod tests {
             ],
         );
 
-        let parse_result = parser.parse().unwrap();
-
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
     #[test]
     fn test_while_stmt() {
         let input = "while (i < 3) i = i + 1;";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = StatementDecl(While(
             Expression::new_debug(Binary(
@@ -718,17 +722,13 @@ mod tests {
             )))),
         ));
 
-        let parse_result = parser.parse().unwrap();
-
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
     #[test]
     fn test_if_stmt() {
         let input = "if (x != 3) x = 10 / 2;";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = StatementDecl(If(
             Expression::new_debug(Binary(
@@ -747,17 +747,13 @@ mod tests {
             None,
         ));
 
-        let parse_result = parser.parse().unwrap();
-
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
     #[test]
     fn test_if_stmt_with_else() {
         let input = "if (x != 3) x = 10 / 2; else x = 15 * 3;";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = StatementDecl(If(
             Expression::new_debug(Binary(
@@ -783,8 +779,6 @@ mod tests {
             ))))),
         ));
 
-        let parse_result = parser.parse().unwrap();
-
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
@@ -794,16 +788,12 @@ mod tests {
             struct _MyStruct {}
             print 5;
         }";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = StatementDecl(Block(vec![
             StructDecl(token!(IdToken("_MyStruct".into())), vec![]),
             StatementDecl(Print(Expression::new_debug(Integer { int: 5 }))),
         ]));
-
-        let parse_result = parser.parse().unwrap();
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
@@ -813,9 +803,7 @@ mod tests {
         let input = r#"
             var magic_number = "37";
         "#;
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = VarDecl(
             "magic_number".into(),
@@ -824,7 +812,41 @@ mod tests {
             }),
         );
 
-        let parse_result = parser.parse().unwrap();
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_struct_instantiation() {
+        let input = r#"
+            var my_struct = MyStruct {
+                field1: 1 + 3,
+                field2: "strings", // trailing comma required atm
+            };
+        "#;
+
+        let parse_result = lex_and_parse(&input);
+
+        let expected_struct = StructInit {
+            name: expr!(Identifier("MyStruct".into())),
+            values: vec![
+                (
+                    dexpr!(Identifier("field1".into())),
+                    dexpr!(Binary(
+                        expr!(Integer { int: 1 }),
+                        token!(Plus),
+                        expr!(Integer { int: 3 }),
+                    )),
+                ),
+                (
+                    dexpr!(Identifier("field2".into())),
+                    dexpr!(Str {
+                        string: "strings".into(),
+                    }),
+                ),
+            ],
+        };
+
+        let expected = VarDecl("my_struct".into(), dexpr!(expected_struct));
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
