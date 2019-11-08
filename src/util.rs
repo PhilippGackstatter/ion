@@ -116,11 +116,11 @@ pub fn pretty_write_expr(
             }
             pretty_write_expr(f, level, true, callee)
         }
-        Assign(id, expr) => {
+        Assign { target, value } => {
             write(f, level, is_child, "Assign")?;
             level += 2;
-            write(f, level, is_child, id)?;
-            pretty_write_expr(f, level, true, expr)
+            pretty_write_expr(f, level, true, target)?;
+            pretty_write_expr(f, level, true, value)
         }
         StructInit { name, values } => {
             write(f, level, is_child, &format!("Struct {}", name.get_id()))?;

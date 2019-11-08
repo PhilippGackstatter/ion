@@ -190,13 +190,14 @@ impl Compiler {
 
                 self.emit_op_byte(Bytecode::OpCall);
             }
-            Assign(id, expr) => {
-                self.compile_expr(expr);
-                if let Some(index) = self.find_local_variable(&id) {
+            Assign { target, value } => {
+                self.compile_expr(value);
+                if let Some(index) = self.find_local_variable(&target.get_id()) {
                     self.emit_op_byte(Bytecode::OpSetLocal);
                     self.emit_byte(index);
                 } else {
-                    let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                    let index =
+                        self.add_constant(Value::Obj(Object::StringObj(target.get_id().clone())));
                     self.emit_op_byte(Bytecode::OpSetGlobal);
                     self.emit_u16(index);
                 }

@@ -402,25 +402,45 @@ impl TypeChecker {
             ExpressionKind::Str { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Str)),
             ExpressionKind::True { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
             ExpressionKind::False { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
-            ExpressionKind::Assign(id, expr) => {
-                let expr_type = self.check_expr(&expr)?;
-
-                if let Some(index) = self.find_local_variable(&id) {
-                    // Assignment to local var
-                    if self.locals[index as usize].dtype != expr_type {
-                        Err(CompileError {
-                            token_range: expr_type.token_range.clone(),
-                            message: format!(
-                                "Expression of type {} can not be assigned to variable with type {}",
-                                expr_type, self.locals[index as usize].dtype
-                            ),
-                        })
-                    } else {
-                        Ok(expr_type)
+            ExpressionKind::Assign { target, value } => {
+                let value_type = self.check_expr(&value)?;
+                match &target.kind {
+                    ExpressionKind::Identifier(id) => {
+                        if let Some(index) = self.find_local_variable(&id) {
+                            // Assignment to local var
+                            if self.locals[index as usize].dtype != value_type {
+                                Err(CompileError {
+                                    token_range: value_type.token_range.clone(),
+                                    message: format!(
+                                        "Expression of type {} can not be assigned to variable with type {}",
+                                        value_type, self.locals[index as usize].dtype
+                                    ),
+                                })
+                            } else {
+                                Ok(value_type)
+                            }
+                        } else {
+                            // TODO: Assignment to global var
+                            Ok(value_type)
+                        }
                     }
-                } else {
-                    // TODO: Assignment to global var
-                    Ok(expr_type)
+                    ExpressionKind::Access { .. } => {
+                        let target_type = self.check_expr(target)?;
+                        if target_type != value_type {
+                            Err(CompileError {
+                                token_range: value_type.token_range.clone(),
+                                message: format!(
+                                    "Expression of type {} can not be assigned to variable of type {}",
+                                    value_type, target_type
+                                ),
+                            })
+                        } else {
+                            Ok(target_type)
+                        }
+                    }
+                    _ => {
+                        unreachable!();
+                    }
                 }
             }
             ExpressionKind::Identifier(id) => {
@@ -552,7 +572,7 @@ impl TypeChecker {
                 } else {
                     Err(CompileError {
                         token_range: expr.tokens.clone(),
-                        message: "Cannot instantiate anything other than a struct".to_owned(),
+                        message: "Cannot access anything other than a struct".to_owned(),
                     })
                 }
             }
@@ -764,6 +784,16 @@ mod tests {
             .unwrap_err()
             .message
             .contains("Type i32 can not be used with a ! operator"));
+    }
+
+    #[test]
+    fn test_struct_access_assign() {
+        let res = lex_parse_check("struct_access_assign.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("Expression of type str can not be assigned to variable of type i32"));
     }
 
 }

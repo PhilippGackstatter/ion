@@ -221,7 +221,10 @@ pub enum Statement {
 #[derive(PartialEq)]
 pub enum ExpressionKind {
     Binary(Box<Expression>, Token, Box<Expression>),
-    Assign(String, Box<Expression>),
+    Assign {
+        target: Box<Expression>,
+        value: Box<Expression>,
+    },
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
     Access {
