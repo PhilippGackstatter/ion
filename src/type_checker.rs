@@ -479,10 +479,9 @@ impl TypeChecker {
                 }
             }
             ExpressionKind::StructInit { name, values } => {
-                let start = expr.tokens.start as u32;
-                let offset = (expr.tokens.end - expr.tokens.start) as u8;
-                let fake_token = Token::new(start, offset, TokenKind::IdToken(name.get_id()));
-                let struct_type = self.lookup_type(&fake_token)?;
+                let lookup_token =
+                    Token::from_range(&expr.tokens, TokenKind::IdToken(name.get_id()));
+                let struct_type = self.lookup_type(&lookup_token)?;
                 if let TypeKind::Struct(declared_struct) = &struct_type.kind {
                     let declared_field_number = declared_struct.fields.len();
                     let given_field_number = values.len();
@@ -527,6 +526,29 @@ impl TypeChecker {
 
                         Ok(struct_type)
                     }
+                } else {
+                    Err(CompileError {
+                        token_range: expr.tokens.clone(),
+                        message: "Cannot instantiate anything other than a struct".to_owned(),
+                    })
+                }
+            }
+            ExpressionKind::Access { expr, name } => {
+                let expr_type = self.check_expr(expr)?;
+
+                if let TypeKind::Struct(strct) = &expr_type.kind {
+                    let field_type = strct.fields.iter().find(|elem| elem.0 == name.get_id());
+
+                    let field_type = field_type.ok_or_else(|| CompileError {
+                        token_range: name.tokens.clone(),
+                        message: format!(
+                            "Struct {} has no field named {}",
+                            strct.name,
+                            name.get_id()
+                        ),
+                    })?;
+
+                    Ok(field_type.1.clone())
                 } else {
                     Err(CompileError {
                         token_range: expr.tokens.clone(),

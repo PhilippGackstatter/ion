@@ -116,6 +116,12 @@ impl Token {
         }
     }
 
+    pub fn from_range(range: &Range<usize>, kind: TokenKind) -> Self {
+        let start = range.start as u32;
+        let offset = (range.end - range.start) as u8;
+        Self::new(start, offset, kind)
+    }
+
     pub fn is_id_token(&self) -> bool {
         if let TokenKind::IdToken(_) = self.kind {
             true
