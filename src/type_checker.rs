@@ -709,4 +709,29 @@ mod tests {
             .message
             .contains("already declared in this scope"));
     }
+
+    #[test]
+    fn test_struct_init_too_many_fields() {
+        let res = lex_parse_check("struct_init_too_many.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("Expected 2 fields, but 3 were given"));
+    }
+
+    #[test]
+    fn test_struct_init_wrong_field_name() {
+        let res = lex_parse_check("struct_init_wrong_field_name.io");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().message.contains("has no field with name"));
+    }
+
+    #[test]
+    fn test_struct_init_wrong_type() {
+        let res = lex_parse_check("struct_init_wrong_type.io");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().message.contains("but type i32 was found"));
+    }
+
 }
