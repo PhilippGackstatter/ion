@@ -221,21 +221,21 @@ impl TypeChecker {
             }
             Declaration::VarDecl(id, expr) => {
                 let expr_type = self.check_expr(expr)?;
-                if self.scope_depth == 0 {
-                    // Global
-                } else {
-                    if self
-                        .locals
-                        .iter()
-                        .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
-                    {
-                        return Err(TypeError {
-                            token_range: expr_type.token_range.clone(),
-                            message: "Variable is already declared in this scope.".into(),
-                        });
-                    }
-                    self.add_local(id.clone(), expr_type);
+                // if self.scope_depth == 0 {
+                //     // Global
+                // } else {
+                if self
+                    .locals
+                    .iter()
+                    .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
+                {
+                    return Err(TypeError {
+                        token_range: expr_type.token_range.clone(),
+                        message: "Variable is already declared in this scope.".into(),
+                    });
                 }
+                self.add_local(id.clone(), expr_type);
+                // }
             }
             Declaration::FnDecl(_name, params_tokens, return_token, body) => {
                 for (name_token, param_token) in params_tokens {

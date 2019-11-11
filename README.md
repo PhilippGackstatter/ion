@@ -2,6 +2,52 @@
 
 A type-checked, interpreted programming language.
 
+## Example
+
+A classic fibonacci example.
+
+Run this using `cargo run --bin file -- examples/fibonacci.io`
+
+```
+// Prints the fibonacci numbers until `up_to`
+// and returns the last one that was calculated
+fn fibonacci(up_to: i32) -> i32 {
+
+    var fib1 = 0;
+    var fib2 = 1;
+
+    var next = 0;
+
+    while(next <= up_to) {
+
+        print next;
+
+        fib1 = fib2;
+        fib2 = next;
+        next = fib1 + fib2;
+
+    }
+
+    return next;
+
+}
+
+// The type of `last` can be inferred from the function signature
+var last = fibonacci(100);
+print last;
+```
+
+This program would print `0 1 1 2 3 5 8 13 21 34 55 89 144` (separated by newlines).
+
+Types of constants and of function return values can be inferred, which leads to variable declarations without explicit type annotations.
+
+Since it is type checked at compile time, calling `fibonacci("100")` would error with
+
+```
+20: fibonacci("100");
+              ^^^^^ Function parameters have incompatible type. Expected: i32, Supplied: str.
+```
+
 ## Run
 
 All you need is `cargo` & `rustc`. Written with `rustc 1.37.0`, but should work with much earlier versions as well.
@@ -45,7 +91,7 @@ cargo run --bin repl
 
 ## Architecture
 
-The basic architecture is taken from [craftinginterpreters.com](https://craftinginterpreters.com). The ion compiler is multi-pass, as opposed to `clox` from the book. This implementation takes some parts, like the parser, from `jlox` and some, like the bytecode compiler and virtual machine, from `clox`.
+The basic architecture is inspired by the lox language from [craftinginterpreters.com](https://craftinginterpreters.com). The ion compiler is multi-pass, as opposed to `clox` from the book. This implementation takes some parts, like the parser, from `jlox` and some, like the bytecode compiler and virtual machine, from `clox`.
 Let's walk through the architecture, by using some sample input.
 
 ```
