@@ -48,6 +48,44 @@ Since it is type checked at compile time, calling `fibonacci("100")` would error
               ^^^^^ Function parameters have incompatible type. Expected: i32, Supplied: str.
 ```
 
+Another Example with Structs.
+
+```
+struct Dog {
+    name: str,
+    age: i32,
+}
+
+struct Owner {
+    name: str,
+    dog: Dog,
+}
+
+fn execute() {
+    var owner = Owner {
+        name: "John",
+        dog: Dog {
+            name: "Nemo",
+            age: 2,
+        },
+    };
+
+    owner.name = "John, the dog owner";
+
+    print owner.name;
+    print owner.dog.name;
+}
+
+execute();
+```
+
+That would print
+
+```
+John, the dog owner
+Nemo
+```
+
 ## Run
 
 All you need is `cargo` & `rustc`. Written with `rustc 1.37.0`, but should work with much earlier versions as well.
