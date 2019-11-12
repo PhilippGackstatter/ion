@@ -769,5 +769,4 @@ mod tests {
             .message
             .contains("Expression of type str can not be assigned to variable of type i32"));
     }
-
 }

@@ -89,6 +89,24 @@ impl VM {
                     let index = self.read_u16(chunk, &mut i);
                     i = index as usize - 1;
                 }
+                OpStructInit => {
+                    let struct_length = self.read_u8(chunk, &mut i);
+                    let mut field_value_map = HashMap::new();
+                    for _ in 0..struct_length {
+                        let field_name = self.pop();
+                        let field_value = self.pop();
+
+                        if let Value::Obj(Object::StringObj(field_name)) = field_name {
+                            println!("Adding {} with value {}", field_name, field_value);
+                            field_value_map.insert(field_name, field_value);
+                        } else {
+                            panic!("Expected string as field name.");
+                        }
+                    }
+                    self.push(Value::Obj(Object::StructObj {
+                        fields: field_value_map,
+                    }));
+                }
                 OpCall => {
                     if let Value::Obj(Object::FnObj(_name, chunk, arity)) = self.pop() {
                         // Save the position of the current frame pointer

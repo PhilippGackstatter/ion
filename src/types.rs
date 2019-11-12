@@ -26,10 +26,7 @@ impl Value {
 pub enum Object {
     StringObj(String),
     FnObj(String, Chunk, u8),
-    StructObj {
-        name: String,
-        fields: HashMap<String, Value>,
-    },
+    StructObj { fields: HashMap<String, Value> },
 }
 
 #[derive(Debug)]
@@ -57,6 +54,7 @@ pub enum Bytecode {
     OpJumpIfFalse,
     OpLoop,
     OpCall,
+    OpStructInit,
     OpPrint,
     OpReturn,
 }
@@ -294,7 +292,7 @@ impl fmt::Display for Object {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
             Object::FnObj(name, _chunk, arity) => write!(f, "{} (args: {})", name, arity),
-            Object::StructObj { name, .. } => write!(f, "struct {}", name),
+            Object::StructObj { .. } => write!(f, "struct"),
         }
     }
 }
@@ -372,6 +370,10 @@ fn byte_to_opcode(
             Bytecode::OpLoop => {
                 let index = read_u16(bytes);
                 format!("{:?} -> {}", byte, index)
+            }
+            Bytecode::OpStructInit => {
+                let index = read_u8(bytes);
+                format!("{:?} of len {}", byte, index)
             }
             Bytecode::OpReturn => {
                 let retvals = read_u8(bytes);

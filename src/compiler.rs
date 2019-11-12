@@ -111,7 +111,7 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index_name);
             }
-            StructDecl(_, _) => unimplemented!(),
+            StructDecl(_, _) => (),
         }
     }
 
@@ -237,7 +237,18 @@ impl Compiler {
                     self.emit_u16(index);
                 }
             }
-            StructInit { .. } => {}
+            StructInit { values, .. } => {
+                for (field_name, field_value) in values.iter() {
+                    self.compile_expr(field_value);
+                    let index =
+                        self.add_constant(Value::Obj(Object::StringObj(field_name.get_id())));
+                    self.emit_op_byte(Bytecode::OpConstant);
+                    self.emit_u16(index);
+                }
+
+                self.emit_op_byte(Bytecode::OpStructInit);
+                self.emit_byte(values.len().try_into().unwrap());
+            }
             Access { .. } => (),
         }
     }
