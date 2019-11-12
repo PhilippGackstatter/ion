@@ -107,6 +107,19 @@ impl VM {
                     let fields = self.pop().unwrap_obj().unwrap_struct();
                     self.push(fields.get(&field_name).unwrap().clone());
                 }
+                OpStructWrite => {
+                    let struct_stack_index = self.read_u8(chunk, &mut i) as usize;
+                    let field_name = self.pop().unwrap_obj().unwrap_string();
+                    let new_field_value = self.pop();
+
+                    let mut struct_ = &mut self.stack[self.frame_pointer + struct_stack_index];
+
+                    if let Value::Obj(Object::StructObj { fields }) = &mut struct_ {
+                        fields.insert(field_name, new_field_value);
+                    } else {
+                        panic!("Expected struct");
+                    }
+                }
                 OpCall => {
                     if let Value::Obj(Object::FnObj(_name, chunk, arity)) = self.pop() {
                         // Save the position of the current frame pointer

@@ -192,14 +192,30 @@ impl Compiler {
             }
             Assign { target, value } => {
                 self.compile_expr(value);
-                if let Some(index) = self.find_local_variable(&target.get_id()) {
-                    self.emit_op_byte(Bytecode::OpSetLocal);
-                    self.emit_byte(index);
+                if let Identifier(ident) = &target.kind {
+                    if let Some(index) = self.find_local_variable(ident) {
+                        self.emit_op_byte(Bytecode::OpSetLocal);
+                        self.emit_byte(index);
+                    } else {
+                        let index = self
+                            .add_constant(Value::Obj(Object::StringObj(target.get_id().clone())));
+                        self.emit_op_byte(Bytecode::OpSetGlobal);
+                        self.emit_u16(index);
+                    }
+                } else if let Access { expr, name } = &target.kind {
+                    if let Some(index) = self.find_local_variable(&expr.get_id()) {
+                        let const_index =
+                            self.add_constant(Value::Obj(Object::StringObj(name.get_id().clone())));
+                        self.emit_op_byte(Bytecode::OpConstant);
+                        self.emit_u16(const_index);
+
+                        self.emit_op_byte(Bytecode::OpStructWrite);
+                        self.emit_byte(index);
+                    } else {
+                        panic!("Expected to find local variable.");
+                    }
                 } else {
-                    let index =
-                        self.add_constant(Value::Obj(Object::StringObj(target.get_id().clone())));
-                    self.emit_op_byte(Bytecode::OpSetGlobal);
-                    self.emit_u16(index);
+                    panic!("Unsupported target for assignment.");
                 }
             }
             Integer { int, .. } => {
