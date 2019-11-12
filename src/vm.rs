@@ -93,31 +93,19 @@ impl VM {
                     let struct_length = self.read_u8(chunk, &mut i);
                     let mut field_value_map = HashMap::new();
                     for _ in 0..struct_length {
-                        let field_name = self.pop();
+                        let field_name = self.pop().unwrap_obj().unwrap_string();
                         let field_value = self.pop();
-
-                        if let Value::Obj(Object::StringObj(field_name)) = field_name {
-                            field_value_map.insert(field_name, field_value);
-                        } else {
-                            panic!("Expected string as field name.");
-                        }
+                        field_value_map.insert(field_name, field_value);
                     }
+
                     self.push(Value::Obj(Object::StructObj {
                         fields: field_value_map,
                     }));
                 }
                 OpStructAccess => {
-                    let field_name = self.pop();
-                    let struct_ = self.pop();
-                    if let Value::Obj(Object::StringObj(field_name)) = field_name {
-                        if let Value::Obj(Object::StructObj { fields }) = struct_ {
-                            self.push(fields.get(&field_name).unwrap().clone());
-                        } else {
-                            panic!("Expected struct");
-                        }
-                    } else {
-                        panic!("Expected string as field name");
-                    }
+                    let field_name = self.pop().unwrap_obj().unwrap_string();
+                    let fields = self.pop().unwrap_obj().unwrap_struct();
+                    self.push(fields.get(&field_name).unwrap().clone());
                 }
                 OpCall => {
                     if let Value::Obj(Object::FnObj(_name, chunk, arity)) = self.pop() {

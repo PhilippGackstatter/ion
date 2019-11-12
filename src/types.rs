@@ -13,11 +13,35 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn unwrap_bool(&self) -> bool {
+    pub fn unwrap_bool(self) -> bool {
         if let Value::Bool(b) = self {
-            *b
+            b
         } else {
             panic!("Expected bool.");
+        }
+    }
+
+    pub fn unwrap_obj(self) -> Object {
+        if let Value::Obj(obj) = self {
+            obj
+        } else {
+            panic!("Expected Object.");
+        }
+    }
+
+    pub fn unwrap_int(self) -> i32 {
+        if let Value::Int(int) = self {
+            int
+        } else {
+            panic!("Expected i32.");
+        }
+    }
+
+    pub fn unwrap_double(self) -> f32 {
+        if let Value::Double(double) = self {
+            double
+        } else {
+            panic!("Expected f32.");
         }
     }
 }
@@ -27,6 +51,24 @@ pub enum Object {
     StringObj(String),
     FnObj(String, Chunk, u8),
     StructObj { fields: HashMap<String, Value> },
+}
+
+impl Object {
+    pub fn unwrap_string(self) -> String {
+        if let Object::StringObj(str_) = self {
+            str_
+        } else {
+            panic!("Expected String.");
+        }
+    }
+
+    pub fn unwrap_struct(self) -> HashMap<String, Value> {
+        if let Object::StructObj { fields } = self {
+            fields
+        } else {
+            panic!("Expected struct obj.");
+        }
+    }
 }
 
 #[derive(Debug)]
