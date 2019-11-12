@@ -320,69 +320,60 @@ fn byte_to_opcode(
     bytes: &mut std::iter::Enumerate<std::slice::Iter<u8>>,
     constants: &[Value],
 ) -> Option<(usize, String)> {
+    use Bytecode::*;
+
     if let Some((index, byte_)) = bytes.next() {
         let byte = unsafe { std::mem::transmute::<u8, Bytecode>(*byte_) };
         let res = match byte {
-            Bytecode::OpPop => format!("{:?}", byte),
-            Bytecode::OpMul => format!("{:?}", byte),
-            Bytecode::OpAdd => format!("{:?}", byte),
-            Bytecode::OpDiv => format!("{:?}", byte),
-            Bytecode::OpSub => format!("{:?}", byte),
-            Bytecode::OpNot => format!("{:?}", byte),
-            Bytecode::OpEqual => format!("{:?}", byte),
-            Bytecode::OpNegate => format!("{:?}", byte),
-            Bytecode::OpGreater => format!("{:?}", byte),
-            Bytecode::OpLess => format!("{:?}", byte),
-            Bytecode::OpGreaterEqual => format!("{:?}", byte),
-            Bytecode::OpLessEqual => format!("{:?}", byte),
-            Bytecode::OpPrint => format!("{:?}", byte),
-            Bytecode::OpConstant => {
+            OpPop | OpMul | OpAdd | OpDiv | OpSub | OpNot | OpEqual | OpNegate | OpGreater
+            | OpLess | OpGreaterEqual | OpLessEqual | OpPrint | OpStructAccess | OpCall => {
+                format!("{:?}", byte)
+            }
+            OpConstant => {
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])
             }
-            Bytecode::OpDefineGlobal => {
+            OpDefineGlobal => {
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])
             }
-            Bytecode::OpSetGlobal => {
+            OpSetGlobal => {
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])
             }
-            Bytecode::OpGetGlobal => {
+            OpGetGlobal => {
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])
             }
-            Bytecode::OpSetLocal => {
+            OpSetLocal => {
                 let index = read_u8(bytes);
                 format!("{:?} {}", byte, index)
             }
-            Bytecode::OpGetLocal => {
+            OpGetLocal => {
                 let index = read_u8(bytes);
                 format!("{:?} {}", byte, index)
             }
-            Bytecode::OpJumpIfFalse => {
+            OpJumpIfFalse => {
                 let index = read_u16(bytes);
                 format!("{:?} -> {}", byte, index)
             }
-            Bytecode::OpJump => {
+            OpJump => {
                 let index = read_u16(bytes);
                 format!("{:?} -> {}", byte, index)
             }
-            Bytecode::OpLoop => {
+            OpLoop => {
                 let index = read_u16(bytes);
                 format!("{:?} -> {}", byte, index)
             }
-            Bytecode::OpStructInit => {
+            OpStructInit => {
                 let index = read_u8(bytes);
                 format!("{:?} of len {}", byte, index)
             }
-            Bytecode::OpStructAccess => format!("{:?}", byte),
-            Bytecode::OpReturn => {
+            OpReturn => {
                 let retvals = read_u8(bytes);
                 let pop = read_u8(bytes);
                 format!("{:?} {} vals, pop {}", byte, retvals, pop)
             }
-            Bytecode::OpCall => format!("{:?}", byte),
         };
         Some((index, res))
     } else {
