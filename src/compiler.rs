@@ -249,7 +249,15 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpStructInit);
                 self.emit_byte(values.len().try_into().unwrap());
             }
-            Access { .. } => (),
+            Access { expr, name } => {
+                self.compile_expr(expr);
+
+                let index = self.add_constant(Value::Obj(Object::StringObj(name.get_id())));
+                self.emit_op_byte(Bytecode::OpConstant);
+                self.emit_u16(index);
+
+                self.emit_op_byte(Bytecode::OpStructAccess);
+            }
         }
     }
 

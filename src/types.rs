@@ -55,6 +55,7 @@ pub enum Bytecode {
     OpLoop,
     OpCall,
     OpStructInit,
+    OpStructAccess,
     OpPrint,
     OpReturn,
 }
@@ -375,6 +376,7 @@ fn byte_to_opcode(
                 let index = read_u8(bytes);
                 format!("{:?} of len {}", byte, index)
             }
+            Bytecode::OpStructAccess => format!("{:?}", byte),
             Bytecode::OpReturn => {
                 let retvals = read_u8(bytes);
                 let pop = read_u8(bytes);
