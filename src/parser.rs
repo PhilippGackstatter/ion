@@ -2,6 +2,7 @@ use crate::lexer::Lexer;
 use crate::types::Token;
 use crate::types::TokenKind::{self, *};
 use crate::types::{
+    CompileError,
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
@@ -10,17 +11,9 @@ use crate::types::{
 };
 use std::ops::Range;
 
-// TODO: Should be expanded to include the line and column directly,
-// since the parser (and thus the lexer and source code) are no longer accessible
-#[derive(Debug)]
-pub struct ParserError {
-    pub token: Token,
-    pub message: &'static str,
-}
-
-type StatementResult = Result<Statement, ParserError>;
-type ExpressionResult = Result<Expression, ParserError>;
-type DeclarationResult = Result<Declaration, ParserError>;
+type StatementResult = Result<Statement, CompileError>;
+type ExpressionResult = Result<Expression, CompileError>;
+type DeclarationResult = Result<Declaration, CompileError>;
 
 pub struct Parser<'a> {
     lexer: &'a Lexer,
@@ -28,11 +21,11 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse(&mut self) -> Result<Program, ParserError> {
+    pub fn parse(&mut self) -> Result<Program, CompileError> {
         self.program()
     }
 
-    fn program(&mut self) -> Result<Program, ParserError> {
+    fn program(&mut self) -> Result<Program, CompileError> {
         let mut prog = Vec::new();
         while !self.is_at_end() {
             prog.push(self.declaration()?);
@@ -56,7 +49,7 @@ impl<'a> Parser<'a> {
 
         if !self.peek().is_id_token() {
             return Err(self.error(
-                self.peek().clone(),
+                self.peek().clone().into(),
                 "Expected an identifier as struct name.",
             ));
         }
@@ -67,9 +60,10 @@ impl<'a> Parser<'a> {
 
         while self.peek().kind != RightBrace {
             if !self.peek().is_id_token() {
-                return Err(
-                    self.error(self.peek().clone(), "Expected an identifier as field name.")
-                );
+                return Err(self.error(
+                    self.peek().clone().into(),
+                    "Expected an identifier as field name.",
+                ));
             }
 
             let name_token = self.advance().clone();
@@ -78,7 +72,7 @@ impl<'a> Parser<'a> {
 
             if !self.peek().is_id_token() {
                 return Err(self.error(
-                    self.peek().clone(),
+                    self.peek().clone().into(),
                     "Expected a type identifier after field name.",
                 ));
             }
@@ -89,7 +83,10 @@ impl<'a> Parser<'a> {
                 if self.peek().kind == Comma {
                     self.advance();
                 } else {
-                    return Err(self.error(self.peek().clone(), "Expected a ',' inbetween fields."));
+                    return Err(self.error(
+                        self.peek().clone().into(),
+                        "Expected a ',' inbetween fields.",
+                    ));
                 }
             } else if self.peek().kind == Comma {
                 // Allow trailing comma
@@ -111,7 +108,7 @@ impl<'a> Parser<'a> {
             Ok(id_.clone())
         } else {
             Err(self.error(
-                self.peek().clone(),
+                self.peek().clone().into(),
                 "Expected an identifier after variable declaration.",
             ))
         }?;
@@ -129,7 +126,7 @@ impl<'a> Parser<'a> {
             Ok(id_.clone())
         } else {
             Err(self.error(
-                self.peek().clone(),
+                self.peek().clone().into(),
                 "Expected an identifier after function declaration.",
             ))
         }?;
@@ -147,7 +144,7 @@ impl<'a> Parser<'a> {
 
                 if !self.peek().is_id_token() {
                     return Err(self.error(
-                        self.peek().clone(),
+                        self.peek().clone().into(),
                         "Expected type identifier after parameter.",
                     ));
                 }
@@ -157,14 +154,15 @@ impl<'a> Parser<'a> {
                 params.push((name_token, type_token));
 
                 if !self.match_(Comma) && self.peek().kind != RightParen {
-                    return Err(
-                        self.error(self.peek().clone(), "Expected ')' or ',' after parameter.")
-                    );
+                    return Err(self.error(
+                        self.peek().clone().into(),
+                        "Expected ')' or ',' after parameter.",
+                    ));
                 }
             }
 
             if params.is_empty() {
-                return Err(self.error(self.peek().clone(), "Expected identifier."));
+                return Err(self.error(self.peek().clone().into(), "Expected identifier."));
             }
         }
 
@@ -216,7 +214,10 @@ impl<'a> Parser<'a> {
         }
 
         if unexpected_eof {
-            Err(self.error(self.previous().clone(), "Unclosed block, missing a '}'."))
+            Err(self.error(
+                self.previous().clone().into(),
+                "Unclosed block, missing a '}'.",
+            ))
         } else {
             Ok(Block(decls))
         }
@@ -282,15 +283,19 @@ impl<'a> Parser<'a> {
         let left_hand = self.equality();
 
         if self.match_(Equal) {
+            let left_hand = left_hand?;
             let equals = self.previous().clone();
-            if let Identifier(id) = &left_hand?.kind {
-                let value = self.assignment()?;
+            let value = self.assignment()?;
+            if let Identifier(_) | Access { .. } = &left_hand.kind {
                 return Ok(Expression::new(
                     equals.into(),
-                    Assign(id.clone(), Box::new(value)),
+                    Assign {
+                        target: Box::new(left_hand),
+                        value: Box::new(value),
+                    },
                 ));
             } else {
-                return Err(self.error(equals, "Invalid assignment target."));
+                return Err(self.error(equals.into(), "Invalid assignment target."));
             }
         }
 
@@ -373,11 +378,27 @@ impl<'a> Parser<'a> {
     }
 
     fn call(&mut self) -> ExpressionResult {
-        let mut expr = self.primary()?;
+        let mut expr = self.struct_instantiation()?;
 
         loop {
             if self.match_(LeftParen) {
                 expr = self.finish_call(expr)?;
+            } else if self.match_(Dot) {
+                let name = self.primary()?;
+                if let Identifier(_) = &name.kind {
+                    expr = Expression::new(
+                        expr.tokens.start..name.tokens.end,
+                        Access {
+                            expr: Box::new(expr),
+                            name: Box::new(name),
+                        },
+                    );
+                } else {
+                    return Err(CompileError {
+                        token_range: name.tokens.clone(),
+                        message: "Expected identifier for field access".into(),
+                    });
+                }
             } else {
                 break;
             }
@@ -403,6 +424,40 @@ impl<'a> Parser<'a> {
             expr.tokens.start..self.current,
             Call(Box::new(expr), params),
         ))
+    }
+
+    fn struct_instantiation(&mut self) -> ExpressionResult {
+        let mut expr = self.primary()?;
+
+        if let Identifier(_) = &expr.kind {
+            if self.match_(LeftBrace) {
+                let mut fields = Vec::new();
+                while !self.match_(RightBrace) {
+                    let field_name = self.primary()?;
+                    if let Identifier(_) = &field_name.kind {
+                        self.consume(Colon, "Expected ':' in field initializer.")?;
+                        let field_value = self.expression()?;
+                        self.consume(Comma, "Expected ',' after field initializer.")?;
+                        fields.push((field_name, field_value))
+                    } else {
+                        return Err(CompileError {
+                            token_range: field_name.tokens.clone(),
+                            message: "Expected identifier as field name".into(),
+                        });
+                    }
+                }
+                let last_token_end = fields[fields.len() - 1].1.tokens.end;
+                expr = Expression::new(
+                    expr.tokens.start..last_token_end,
+                    StructInit {
+                        name: Box::new(expr),
+                        values: fields,
+                    },
+                );
+            }
+        }
+
+        Ok(expr)
     }
 
     fn primary(&mut self) -> ExpressionResult {
@@ -450,7 +505,7 @@ impl<'a> Parser<'a> {
                     self.consume(RightParen, "Expected '('.")?;
                     Ok(expr)
                 } else {
-                    Err(self.error(self.peek().clone(), "Expect expression."))
+                    Err(self.error(self.peek().clone().into(), "Expect expression."))
                 }
             }
         }
@@ -497,17 +552,20 @@ impl<'a> Parser<'a> {
 
     // Errors
 
-    fn consume(&mut self, token: TokenKind, error_msg: &'static str) -> Result<(), ParserError> {
+    fn consume(&mut self, token: TokenKind, error_msg: &'static str) -> Result<(), CompileError> {
         if self.check(token) {
             self.advance();
             Ok(())
         } else {
-            Err(self.error(self.peek().clone(), error_msg))
+            Err(self.error(self.peek().clone().into(), error_msg))
         }
     }
 
-    fn error(&self, token: Token, message: &'static str) -> ParserError {
-        ParserError { token, message }
+    fn error(&self, token_range: Range<usize>, message: &'static str) -> CompileError {
+        CompileError {
+            token_range,
+            message: message.into(),
+        }
     }
 
     // fn synchronize(&mut self) {
@@ -538,7 +596,14 @@ impl<'a> Parser<'a> {
 mod tests {
     use super::*;
 
-    #[allow(unused_macros)]
+    macro_rules! dexpr {
+    [$exp:expr] => {
+            {
+                Expression::new_debug($exp)
+            }
+        };
+    }
+
     macro_rules! expr {
     [$exp:expr] => {
             {
@@ -547,13 +612,19 @@ mod tests {
         };
     }
 
-    #[allow(unused_macros)]
     macro_rules! token {
         [$token:expr] => {
             {
                 Token::new_debug($token)
             }
         };
+    }
+
+    fn lex_and_parse(input: &str) -> Program {
+        let mut lexer = Lexer::new();
+        lexer.lex(&input);
+        let mut parser = Parser::new(&lexer);
+        parser.parse().unwrap()
     }
 
     #[test]
@@ -606,9 +677,7 @@ mod tests {
     #[test]
     fn test_function_decl() {
         let input = "fn foo(arg1: str, arg2: bool) {}";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = FnDecl(
             "foo".into(),
@@ -626,17 +695,14 @@ mod tests {
             Block(vec![StatementDecl(Ret(None))]),
         );
 
-        let parse_result = parser.parse().unwrap();
-
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
     #[test]
     fn test_struct_decl() {
         let input = "struct MyStruct { field1: str, field2: bool }";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+
+        let parse_result = lex_and_parse(&input);
 
         let expected = StructDecl(
             token!(IdToken("MyStruct".into())),
@@ -652,17 +718,13 @@ mod tests {
             ],
         );
 
-        let parse_result = parser.parse().unwrap();
-
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
     #[test]
     fn test_while_stmt() {
         let input = "while (i < 3) i = i + 1;";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = StatementDecl(While(
             Expression::new_debug(Binary(
@@ -670,17 +732,15 @@ mod tests {
                 token!(Less),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(ExpressionStmt(Expression::new_debug(Assign(
-                "i".into(),
-                expr!(Binary(
+            Box::new(ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("i".into())),
+                value: expr!(Binary(
                     expr!(Identifier("i".into())),
                     token!(Plus),
                     expr!(Integer { int: 1 }),
                 )),
-            )))),
+            }))),
         ));
-
-        let parse_result = parser.parse().unwrap();
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
@@ -688,9 +748,7 @@ mod tests {
     #[test]
     fn test_if_stmt() {
         let input = "if (x != 3) x = 10 / 2;";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = StatementDecl(If(
             Expression::new_debug(Binary(
@@ -698,18 +756,16 @@ mod tests {
                 token!(BangEqual),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(ExpressionStmt(Expression::new_debug(Assign(
-                "x".into(),
-                expr!(Binary(
+            Box::new(ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("x".into())),
+                value: expr!(Binary(
                     expr!(Integer { int: 10 }),
                     token!(Slash),
                     expr!(Integer { int: 2 }),
                 )),
-            )))),
+            }))),
             None,
         ));
-
-        let parse_result = parser.parse().unwrap();
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
@@ -717,9 +773,7 @@ mod tests {
     #[test]
     fn test_if_stmt_with_else() {
         let input = "if (x != 3) x = 10 / 2; else x = 15 * 3;";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = StatementDecl(If(
             Expression::new_debug(Binary(
@@ -727,25 +781,23 @@ mod tests {
                 token!(BangEqual),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(ExpressionStmt(Expression::new_debug(Assign(
-                "x".into(),
-                expr!(Binary(
+            Box::new(ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("x".into())),
+                value: expr!(Binary(
                     expr!(Integer { int: 10 }),
                     token!(Slash),
                     expr!(Integer { int: 2 }),
                 )),
-            )))),
-            Some(Box::new(ExpressionStmt(Expression::new_debug(Assign(
-                "x".into(),
-                expr!(Binary(
+            }))),
+            Some(Box::new(ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("x".into())),
+                value: expr!(Binary(
                     expr!(Integer { int: 15 }),
                     token!(Star),
                     expr!(Integer { int: 3 }),
                 )),
-            ))))),
+            })))),
         ));
-
-        let parse_result = parser.parse().unwrap();
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
@@ -756,16 +808,12 @@ mod tests {
             struct _MyStruct {}
             print 5;
         }";
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = StatementDecl(Block(vec![
             StructDecl(token!(IdToken("_MyStruct".into())), vec![]),
             StatementDecl(Print(Expression::new_debug(Integer { int: 5 }))),
         ]));
-
-        let parse_result = parser.parse().unwrap();
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
@@ -775,9 +823,7 @@ mod tests {
         let input = r#"
             var magic_number = "37";
         "#;
-        let mut lexer = Lexer::new();
-        lexer.lex(&input);
-        let mut parser = Parser::new(&lexer);
+        let parse_result = lex_and_parse(&input);
 
         let expected = VarDecl(
             "magic_number".into(),
@@ -786,9 +832,69 @@ mod tests {
             }),
         );
 
-        let parse_result = parser.parse().unwrap();
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_struct_instantiation() {
+        let input = r#"
+            var my_struct = MyStruct {
+                field1: 1 + 3,
+                field2: "strings", // trailing comma required atm
+            };
+        "#;
+
+        let parse_result = lex_and_parse(&input);
+
+        let expected_struct = StructInit {
+            name: expr!(Identifier("MyStruct".into())),
+            values: vec![
+                (
+                    dexpr!(Identifier("field1".into())),
+                    dexpr!(Binary(
+                        expr!(Integer { int: 1 }),
+                        token!(Plus),
+                        expr!(Integer { int: 3 }),
+                    )),
+                ),
+                (
+                    dexpr!(Identifier("field2".into())),
+                    dexpr!(Str {
+                        string: "strings".into(),
+                    }),
+                ),
+            ],
+        };
+
+        let expected = VarDecl("my_struct".into(), dexpr!(expected_struct));
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
+    #[test]
+    fn test_access() {
+        let input = r#"
+            var chain_result = my_struct.method().chain();
+        "#;
+
+        let parse_result = lex_and_parse(&input);
+
+        let first_access = Access {
+            expr: expr!(Identifier("my_struct".into())),
+            name: expr!(Identifier("method".into())),
+        };
+
+        let first_call = Call(expr!(first_access), vec![]);
+
+        let second_access = Access {
+            expr: expr!(first_call),
+            name: expr!(Identifier("chain".into())),
+        };
+
+        let second_call = Call(expr!(second_access), vec![]);
+
+        let expected = VarDecl("chain_result".into(), dexpr!(second_call));
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
 }

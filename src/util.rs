@@ -116,11 +116,28 @@ pub fn pretty_write_expr(
             }
             pretty_write_expr(f, level, true, callee)
         }
-        Assign(id, expr) => {
+        Assign { target, value } => {
             write(f, level, is_child, "Assign")?;
             level += 2;
-            write(f, level, is_child, id)?;
-            pretty_write_expr(f, level, true, expr)
+            pretty_write_expr(f, level, true, target)?;
+            pretty_write_expr(f, level, true, value)
+        }
+        StructInit { name, values } => {
+            write(f, level, is_child, &format!("Struct {}", name.get_id()))?;
+            level += 2;
+            for (name, value) in values.iter() {
+                let mut temp = level;
+                pretty_write_expr(f, temp, true, name)?;
+                temp += 2;
+                pretty_write_expr(f, temp, true, value)?;
+            }
+            Ok(())
+        }
+        Access { expr, name } => {
+            write(f, level, is_child, "Access")?;
+            level += 2;
+            pretty_write_expr(f, level, is_child, expr)?;
+            pretty_write_expr(f, level, is_child, name)
         }
         Integer { int } => write(f, level, is_child, &format!("{}", int)),
         Double { float } => write(f, level, is_child, &format!("{}", float)),
@@ -320,7 +337,7 @@ pub fn run(program: String, options: &Options) {
             }
         }
         Err(parser_err) => {
-            print_error(&program, parser_err.token.into(), parser_err.message);
+            print_error(&program, parser_err.token_range, &parser_err.message);
         }
     }
 }

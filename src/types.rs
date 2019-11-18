@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::ops::Range;
 
@@ -12,11 +13,35 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn unwrap_bool(&self) -> bool {
+    pub fn unwrap_bool(self) -> bool {
         if let Value::Bool(b) = self {
-            *b
+            b
         } else {
             panic!("Expected bool.");
+        }
+    }
+
+    pub fn unwrap_obj(self) -> Object {
+        if let Value::Obj(obj) = self {
+            obj
+        } else {
+            panic!("Expected Object.");
+        }
+    }
+
+    pub fn unwrap_int(self) -> i32 {
+        if let Value::Int(int) = self {
+            int
+        } else {
+            panic!("Expected i32.");
+        }
+    }
+
+    pub fn unwrap_double(self) -> f32 {
+        if let Value::Double(double) = self {
+            double
+        } else {
+            panic!("Expected f32.");
         }
     }
 }
@@ -25,6 +50,25 @@ impl Value {
 pub enum Object {
     StringObj(String),
     FnObj(String, Chunk, u8),
+    StructObj { fields: HashMap<String, Value> },
+}
+
+impl Object {
+    pub fn unwrap_string(self) -> String {
+        if let Object::StringObj(str_) = self {
+            str_
+        } else {
+            panic!("Expected String.");
+        }
+    }
+
+    pub fn unwrap_struct(self) -> HashMap<String, Value> {
+        if let Object::StructObj { fields } = self {
+            fields
+        } else {
+            panic!("Expected struct obj.");
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -52,6 +96,9 @@ pub enum Bytecode {
     OpJumpIfFalse,
     OpLoop,
     OpCall,
+    OpStructInit,
+    OpStructAccess,
+    OpStructWrite,
     OpPrint,
     OpReturn,
 }
@@ -111,6 +158,12 @@ impl Token {
         }
     }
 
+    pub fn from_range(range: &Range<usize>, kind: TokenKind) -> Self {
+        let start = range.start as u32;
+        let offset = (range.end - range.start) as u8;
+        Self::new(start, offset, kind)
+    }
+
     pub fn is_id_token(&self) -> bool {
         if let TokenKind::IdToken(_) = self.kind {
             true
@@ -133,6 +186,14 @@ impl Into<std::ops::Range<usize>> for Token {
         let off = self.offset as usize;
         off..(off + (self.length as usize))
     }
+}
+
+#[derive(Debug)]
+pub struct CompileError {
+    /// The indexes in the source string that are erroneous
+    pub token_range: Range<usize>,
+    /// The error message
+    pub message: String,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -202,12 +263,29 @@ pub enum Statement {
 #[derive(PartialEq)]
 pub enum ExpressionKind {
     Binary(Box<Expression>, Token, Box<Expression>),
-    Assign(String, Box<Expression>),
+    Assign {
+        target: Box<Expression>,
+        value: Box<Expression>,
+    },
     Unary(Token, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
-    Integer { int: i32 },
-    Double { float: f32 },
-    Str { string: String },
+    Access {
+        expr: Box<Expression>,
+        name: Box<Expression>,
+    },
+    StructInit {
+        name: Box<Expression>,
+        values: Vec<(Expression, Expression)>,
+    },
+    Integer {
+        int: i32,
+    },
+    Double {
+        float: f32,
+    },
+    Str {
+        string: String,
+    },
     Identifier(String),
     False,
     True,
@@ -225,6 +303,14 @@ impl Expression {
 
     pub fn new_debug(kind: ExpressionKind) -> Self {
         Expression { tokens: 0..1, kind }
+    }
+
+    pub fn get_id(&self) -> String {
+        if let ExpressionKind::Identifier(id) = &self.kind {
+            id.clone()
+        } else {
+            panic!("Expected IdToken");
+        }
     }
 }
 
@@ -250,6 +336,7 @@ impl fmt::Display for Object {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
             Object::FnObj(name, _chunk, arity) => write!(f, "{} (args: {})", name, arity),
+            Object::StructObj { .. } => write!(f, "struct"),
         }
     }
 }
@@ -276,64 +363,59 @@ fn byte_to_opcode(
     bytes: &mut std::iter::Enumerate<std::slice::Iter<u8>>,
     constants: &[Value],
 ) -> Option<(usize, String)> {
+    use Bytecode::*;
+
     if let Some((index, byte_)) = bytes.next() {
         let byte = unsafe { std::mem::transmute::<u8, Bytecode>(*byte_) };
         let res = match byte {
-            Bytecode::OpPop => format!("{:?}", byte),
-            Bytecode::OpMul => format!("{:?}", byte),
-            Bytecode::OpAdd => format!("{:?}", byte),
-            Bytecode::OpDiv => format!("{:?}", byte),
-            Bytecode::OpSub => format!("{:?}", byte),
-            Bytecode::OpNot => format!("{:?}", byte),
-            Bytecode::OpEqual => format!("{:?}", byte),
-            Bytecode::OpNegate => format!("{:?}", byte),
-            Bytecode::OpGreater => format!("{:?}", byte),
-            Bytecode::OpLess => format!("{:?}", byte),
-            Bytecode::OpGreaterEqual => format!("{:?}", byte),
-            Bytecode::OpLessEqual => format!("{:?}", byte),
-            Bytecode::OpPrint => format!("{:?}", byte),
-            Bytecode::OpConstant => {
+            OpPop | OpMul | OpAdd | OpDiv | OpSub | OpNot | OpEqual | OpNegate | OpGreater
+            | OpLess | OpGreaterEqual | OpLessEqual | OpPrint | OpStructAccess | OpCall
+            | OpStructWrite => format!("{:?}", byte),
+            OpConstant => {
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])
             }
-            Bytecode::OpDefineGlobal => {
+            OpDefineGlobal => {
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])
             }
-            Bytecode::OpSetGlobal => {
+            OpSetGlobal => {
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])
             }
-            Bytecode::OpGetGlobal => {
+            OpGetGlobal => {
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])
             }
-            Bytecode::OpSetLocal => {
+            OpSetLocal => {
                 let index = read_u8(bytes);
                 format!("{:?} {}", byte, index)
             }
-            Bytecode::OpGetLocal => {
+            OpGetLocal => {
                 let index = read_u8(bytes);
                 format!("{:?} {}", byte, index)
             }
-            Bytecode::OpJumpIfFalse => {
+            OpJumpIfFalse => {
                 let index = read_u16(bytes);
                 format!("{:?} -> {}", byte, index)
             }
-            Bytecode::OpJump => {
+            OpJump => {
                 let index = read_u16(bytes);
                 format!("{:?} -> {}", byte, index)
             }
-            Bytecode::OpLoop => {
+            OpLoop => {
                 let index = read_u16(bytes);
                 format!("{:?} -> {}", byte, index)
             }
-            Bytecode::OpReturn => {
+            OpStructInit => {
+                let index = read_u8(bytes);
+                format!("{:?} of len {}", byte, index)
+            }
+            OpReturn => {
                 let retvals = read_u8(bytes);
                 let pop = read_u8(bytes);
                 format!("{:?} {} vals, pop {}", byte, retvals, pop)
             }
-            Bytecode::OpCall => format!("{:?}", byte),
         };
         Some((index, res))
     } else {
