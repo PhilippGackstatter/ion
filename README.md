@@ -70,7 +70,7 @@ fn execute() {
         },
     };
 
-    owner.name = "John, the dog owner";
+    owner.dog.name = "Finding me, is finding ...";
 
     print owner.name;
     print owner.dog.name;
@@ -82,8 +82,8 @@ execute();
 That would print
 
 ```
-John, the dog owner
-Nemo
+John
+Finding me, is finding ...
 ```
 
 ## Run

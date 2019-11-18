@@ -21,7 +21,7 @@ fn create_owner(owner_name: str) -> Owner {
 fn execute() {
     var owner = create_owner("John");
 
-    owner.name = "John Dog Owner";
+    owner.dog.name = "Finding me, is finding ...";
 
     print owner.name;
     print owner.dog.name;
