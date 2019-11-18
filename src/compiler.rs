@@ -203,14 +203,28 @@ impl Compiler {
                         self.emit_u16(index);
                     }
                 } else if let Access { expr, name } = &target.kind {
-                    if let Some(index) = self.find_local_variable(&expr.get_id()) {
-                        let const_index =
-                            self.add_constant(Value::Obj(Object::StringObj(name.get_id().clone())));
-                        self.emit_op_byte(Bytecode::OpConstant);
-                        self.emit_u16(const_index);
+
+                    let mut field_names = vec![name];
+                    let mut expr_ptr = expr;
+
+                    while let Access { expr: nested_expr, name: nested_name } = &expr_ptr.kind {
+                        field_names.push(&nested_name);
+                        expr_ptr = nested_expr;
+                    }
+
+                    if let Some(index) = self.find_local_variable(&expr_ptr.get_id()) {
+                        let no_fields = field_names.len().try_into().unwrap();
+
+                        for field_name in field_names {
+                            let const_index =
+                            self.add_constant(Value::Obj(Object::StringObj(field_name.get_id().clone())));
+                            self.emit_op_byte(Bytecode::OpConstant);
+                            self.emit_u16(const_index);
+                        }
 
                         self.emit_op_byte(Bytecode::OpStructWrite);
                         self.emit_byte(index);
+                        self.emit_byte(no_fields);
                     } else {
                         panic!("Expected to find local variable.");
                     }
