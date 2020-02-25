@@ -40,6 +40,7 @@ impl<'a> Parser<'a> {
             VarToken => self.variable_declaration(),
             Fun => self.function_declaration(),
             StructToken => self.struct_declaration(),
+            ImplToken => self.impl_declaration(),
             _ => Ok(StatementDecl(self.statement()?)),
         }
     }
@@ -99,6 +100,32 @@ impl<'a> Parser<'a> {
         self.advance();
 
         Ok(StructDecl(name, fields))
+    }
+
+    fn impl_declaration(&mut self) -> DeclarationResult {
+        self.advance();
+
+        if !self.peek().is_id_token() {
+            return Err(self.error(
+                self.peek().clone().into(),
+                "Expected an identifier as struct name.",
+            ));
+        }
+        let name = self.advance().clone();
+
+        self.consume(LeftBrace, "Expected '{' after struct.")?;
+
+        let mut methods = Vec::new();
+
+        while self.peek().kind != RightBrace {
+            let fn_decl = self.function_declaration()?;
+            methods.push(fn_decl);
+        }
+
+        // Consume }
+        self.advance();
+
+        Ok(ImplDecl { struct_name: name, methods })
     }
 
     fn variable_declaration(&mut self) -> DeclarationResult {
@@ -901,7 +928,7 @@ mod tests {
     #[test]
     fn test_impl_block() {
         let input = r#"
-            impl {
+            impl MyStruct {
                 fn print_something() {}
                 fn is_positive(arg1: int) -> bool {}
             }
