@@ -897,4 +897,41 @@ mod tests {
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
+
+    #[test]
+    fn test_impl_block() {
+        let input = r#"
+            impl {
+                fn print_something() {}
+                fn is_positive(arg1: int) -> bool {}
+            }
+        "#;
+
+        let parse_result = lex_and_parse(&input);
+
+        let expected = Declaration::ImplDecl {
+            struct_name: token!(IdToken("MyStruct".into())),
+            methods: vec![
+                FnDecl(
+                    "print_something".into(),
+                    vec![],
+                    None,
+                    Block(vec![StatementDecl(Ret(None))]),
+                ),
+                FnDecl(
+                    "is_positive".into(),
+                    vec![
+                        (
+                            token!(IdToken("arg1".into())),
+                            token!(IdToken("int".into())),
+                        )
+                    ],
+                    Some(token!(IdToken("bool".into()))),
+                    Block(vec![StatementDecl(Ret(None))]),
+                ),
+            ],
+        };
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
 }
