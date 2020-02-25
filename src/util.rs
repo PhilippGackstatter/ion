@@ -212,6 +212,14 @@ fn pretty_write_decl(
             level += 2;
             pretty_write_stmt(f, level, true, stmt)
         }
+        ImplDecl { struct_name, methods } => {
+            write(f, level, is_child, &format!("impl {}", struct_name.get_id()))?;
+            level += 2;
+            for fn_decl in methods {
+                pretty_write_decl(f, level, true, fn_decl)?;
+            }
+            Ok(())
+        }
         StructDecl(name, fields) => {
             write(f, level, is_child, &format!("struct {}", name.get_id()))?;
             level += 2;

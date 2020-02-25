@@ -228,6 +228,7 @@ pub enum TokenKind {
     VarToken,
     WhileToken,
     StructToken,
+    ImplToken,
     IdToken(String),
     PrintToken,
     IfToken,
@@ -248,6 +249,7 @@ pub enum Declaration {
     VarDecl(String, Expression),
     StructDecl(Token, Vec<(Token, Token)>),
     FnDecl(String, Vec<(Token, Token)>, Option<Token>, Statement),
+    ImplDecl { struct_name: Token, methods: Vec<Declaration> },
 }
 
 #[derive(PartialEq)]

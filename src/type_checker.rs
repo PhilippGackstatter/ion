@@ -273,6 +273,7 @@ impl TypeChecker {
                     self.lookup_type(&field.1)?;
                 }
             }
+            Declaration::ImplDecl { .. } => (),
         }
         Ok(vec![])
     }

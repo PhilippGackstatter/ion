@@ -111,6 +111,7 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index_name);
             }
+            ImplDecl { .. } => unimplemented!(),
             StructDecl(_, _) => (),
         }
     }
