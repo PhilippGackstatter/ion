@@ -102,6 +102,7 @@ struct Function {
 struct Struct {
     pub name: String,
     fields: Vec<(String, Type)>,
+    number_of_fields: usize,
 }
 
 pub struct TypeChecker {
@@ -155,23 +156,9 @@ impl TypeChecker {
     fn build_symbol_table(&mut self, decl: &Declaration) -> Result<(), CompileError> {
         match decl {
             Declaration::FnDecl(name, params_tokens, return_token, _stmt) => {
-                let mut params = Vec::new();
-                for (_, type_token) in params_tokens {
-                    let ty = self.lookup_type(type_token)?;
-                    params.push(ty);
-                }
-                let result = if let Some(return_ty) = return_token {
-                    Some(Box::new(self.lookup_type(return_ty)?))
-                } else {
-                    None
-                };
                 self.add_symbol(
                     name,
-                    Type::new_empty_range(TypeKind::Func(Function {
-                        name: name.clone(),
-                        params,
-                        result,
-                    })),
+                    self.generate_function_type(name, params_tokens, return_token, _stmt)?,
                 )?;
             }
             Declaration::StructDecl(name, token_fields) => {
@@ -180,11 +167,13 @@ impl TypeChecker {
                     fields.push((name.get_id(), self.lookup_type(ty)?));
                 }
 
+                let number_of_fields = fields.len();
                 let st = Type::new(
                     name.clone().into(),
                     TypeKind::Struct(Struct {
                         name: name.get_id(),
                         fields,
+                        number_of_fields,
                     }),
                 );
                 self.add_symbol(&name.get_id(), st)?;
@@ -203,6 +192,34 @@ impl TypeChecker {
         } else {
             Err(CompileError {
                 token_range: token.clone().into(),
+                message: format!("Type {} not declared in this scope.", type_name),
+            })
+        }
+    }
+
+    fn add_struct_method(
+        &mut self,
+        struct_name: &Token,
+        method_name: &str,
+        method_ty: Type,
+    ) -> Result<(), CompileError> {
+        let type_name = struct_name.get_id();
+        if let Some(symbol) = self.symbol_table.get_mut(&type_name) {
+            if let TypeKind::Struct(strct) = &mut symbol.kind {
+                strct.fields.push((method_name.to_owned(), method_ty));
+                Ok(())
+            } else {
+                Err(CompileError {
+                    token_range: struct_name.clone().into(),
+                    message: format!(
+                        "Can only add methods to type struct, found {} instead",
+                        type_name
+                    ),
+                })
+            }
+        } else {
+            Err(CompileError {
+                token_range: struct_name.clone().into(),
                 message: format!("Type {} not declared in this scope.", type_name),
             })
         }
@@ -273,7 +290,18 @@ impl TypeChecker {
                     self.lookup_type(&field.1)?;
                 }
             }
-            Declaration::ImplDecl { .. } => (),
+            Declaration::ImplDecl {
+                struct_name,
+                methods,
+            } => {
+                for method in methods {
+                    if let Declaration::FnDecl(name, params_tokens, return_token, _stmt) = method {
+                        let fn_type =
+                            self.generate_function_type(name, params_tokens, return_token, _stmt)?;
+                        self.add_struct_method(struct_name, name, fn_type)?;
+                    }
+                }
+            }
         }
         Ok(vec![])
     }
@@ -478,7 +506,7 @@ impl TypeChecker {
                     Token::from_range(&expr.tokens, TokenKind::IdToken(name.get_id()));
                 let struct_type = self.lookup_type(&lookup_token)?;
                 if let TypeKind::Struct(declared_struct) = &struct_type.kind {
-                    let declared_field_number = declared_struct.fields.len();
+                    let declared_field_number = declared_struct.number_of_fields;
                     let given_field_number = values.len();
                     if declared_field_number != given_field_number {
                         Err(CompileError {
@@ -553,6 +581,31 @@ impl TypeChecker {
             }
             _ => unimplemented!(),
         }
+    }
+
+    fn generate_function_type(
+        &self,
+        name: &String,
+        params_tokens: &Vec<(Token, Token)>,
+        return_token: &Option<Token>,
+        _stmt: &Statement,
+    ) -> Result<Type, CompileError> {
+        let mut params = Vec::new();
+        for (_, type_token) in params_tokens {
+            let ty = self.lookup_type(type_token)?;
+            params.push(ty);
+        }
+        let result = if let Some(return_ty) = return_token {
+            Some(Box::new(self.lookup_type(return_ty)?))
+        } else {
+            None
+        };
+
+        Ok(Type::new_empty_range(TypeKind::Func(Function {
+            name: name.clone(),
+            params,
+            result,
+        })))
     }
 
     // Local Variables
