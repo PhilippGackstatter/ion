@@ -84,34 +84,19 @@ impl Compiler {
                 }
             }
             FnDecl(name, params, _, stmt) => {
-                let mut fn_compiler = Compiler::new(FunctionType::Function);
-
-                for param in params {
-                    fn_compiler.add_local(param.0.get_id().clone());
-                }
-
-                fn_compiler.compile_stmt(stmt);
-
-                // Provide the final parameter to OpReturn: number of arguments to pop
-                fn_compiler.emit_byte(fn_compiler.locals.len() as u8);
-
-                // Create the function object as constant, load it on the stack at runtime
-                let fn_obj = Object::FnObj(
-                    name.clone(),
-                    fn_compiler.chunk().clone(),
-                    params.len() as u8,
-                );
-                let index = self.add_constant(Value::Obj(fn_obj));
-
-                self.emit_op_byte(Bytecode::OpConstant);
-                self.emit_u16(index);
-
-                // Declare the fn obj on the stack as a global variable associated with its name
-                let index_name = self.add_constant(Value::Obj(Object::StringObj(name.clone())));
-                self.emit_op_byte(Bytecode::OpDefineGlobal);
-                self.emit_u16(index_name);
+                self.compile_fn_decl(name, params, stmt);
             }
-            ImplDecl { .. } => unimplemented!(),
+            ImplDecl {
+                struct_name,
+                methods,
+            } => {
+                for method in methods {
+                    if let FnDecl(name, params, _, stmt) = method {
+                        let method_name = struct_name.get_id() + name;
+                        self.compile_fn_decl(&method_name, params, stmt);
+                    }
+                }
+            }
             StructDecl(_, _) => (),
         }
     }
@@ -204,11 +189,14 @@ impl Compiler {
                         self.emit_u16(index);
                     }
                 } else if let Access { expr, name } = &target.kind {
-
                     let mut field_names = vec![name];
                     let mut expr_ptr = expr;
 
-                    while let Access { expr: nested_expr, name: nested_name } = &expr_ptr.kind {
+                    while let Access {
+                        expr: nested_expr,
+                        name: nested_name,
+                    } = &expr_ptr.kind
+                    {
                         field_names.push(&nested_name);
                         expr_ptr = nested_expr;
                     }
@@ -217,8 +205,9 @@ impl Compiler {
                         let no_fields = field_names.len().try_into().unwrap();
 
                         for field_name in field_names {
-                            let const_index =
-                            self.add_constant(Value::Obj(Object::StringObj(field_name.get_id().clone())));
+                            let const_index = self.add_constant(Value::Obj(Object::StringObj(
+                                field_name.get_id().clone(),
+                            )));
                             self.emit_op_byte(Bytecode::OpConstant);
                             self.emit_u16(const_index);
                         }
@@ -342,6 +331,35 @@ impl Compiler {
             }
             _ => unreachable!(),
         }
+    }
+
+    fn compile_fn_decl(&mut self, name: &String, params: &Vec<(Token, Token)>, stmt: &Statement) {
+        let mut fn_compiler = Compiler::new(FunctionType::Function);
+
+        for param in params {
+            fn_compiler.add_local(param.0.get_id().clone());
+        }
+
+        fn_compiler.compile_stmt(stmt);
+
+        // Provide the final parameter to OpReturn: number of arguments to pop
+        fn_compiler.emit_byte(fn_compiler.locals.len() as u8);
+
+        // Create the function object as constant, load it on the stack at runtime
+        let fn_obj = Object::FnObj(
+            name.clone(),
+            fn_compiler.chunk().clone(),
+            params.len() as u8,
+        );
+        let index = self.add_constant(Value::Obj(fn_obj));
+
+        self.emit_op_byte(Bytecode::OpConstant);
+        self.emit_u16(index);
+
+        // Declare the fn obj on the stack as a global variable associated with its name
+        let index_name = self.add_constant(Value::Obj(Object::StringObj(name.clone())));
+        self.emit_op_byte(Bytecode::OpDefineGlobal);
+        self.emit_u16(index_name);
     }
 
     // Helpers
