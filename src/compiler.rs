@@ -257,7 +257,7 @@ impl Compiler {
                     self.emit_u16(index);
                 }
             }
-            StructInit { values, .. } => {
+            StructInit { name, values } => {
                 for (field_name, field_value) in values.iter() {
                     self.compile_expr(field_value);
                     let index =
@@ -265,6 +265,10 @@ impl Compiler {
                     self.emit_op_byte(Bytecode::OpConstant);
                     self.emit_u16(index);
                 }
+
+                let index = self.add_constant(Value::Obj(Object::StringObj(name.get_id())));
+                self.emit_op_byte(Bytecode::OpConstant);
+                self.emit_u16(index);
 
                 self.emit_op_byte(Bytecode::OpStructInit);
                 self.emit_byte(values.len().try_into().unwrap());
