@@ -91,14 +91,29 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index_name);
             }
+            // TODO: This should be compiled in a first pass, otherwise a StructInit that comes before an impl block in the source
+            // code, will be created without the methods from that later impl block!
             ImplDecl {
                 struct_name,
                 methods,
             } => {
                 for method in methods {
                     if let FnDecl(name, params, _, stmt) = method {
-                        let method_name = struct_name.get_id() + name;
+                        let method_name = name;
+
+                        // Puts the compiled Function Object on the stack
                         self.compile_fn_decl(&method_name, params, stmt);
+
+                        // Associate the Function Object with the method name on the struct
+                        self.emit_op_byte(Bytecode::OpStructMethod);
+
+                        let struct_name_index =
+                            self.add_constant(Value::Obj(Object::StringObj(struct_name.get_id())));
+                        self.emit_u16(struct_name_index);
+
+                        let method_name_index =
+                            self.add_constant(Value::Obj(Object::StringObj(name.clone())));
+                        self.emit_u16(method_name_index);
                     }
                 }
             }
