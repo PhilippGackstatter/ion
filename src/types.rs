@@ -49,7 +49,6 @@ impl Value {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     StringObj(String),
-    // TODO: Remove function name from obj, it is unnecessary
     FnObj(String, Chunk, u8),
     StructObj { fields: HashMap<String, Value> },
 }
