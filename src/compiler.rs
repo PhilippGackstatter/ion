@@ -85,6 +85,11 @@ impl Compiler {
             }
             FnDecl(name, params, _, stmt) => {
                 self.compile_fn_decl(name, params, stmt);
+
+                // Declare the fn obj on the stack as a global variable associated with its name
+                let index_name = self.add_constant(Value::Obj(Object::StringObj(name.clone())));
+                self.emit_op_byte(Bytecode::OpDefineGlobal);
+                self.emit_u16(index_name);
             }
             ImplDecl {
                 struct_name,
@@ -359,11 +364,6 @@ impl Compiler {
 
         self.emit_op_byte(Bytecode::OpConstant);
         self.emit_u16(index);
-
-        // Declare the fn obj on the stack as a global variable associated with its name
-        let index_name = self.add_constant(Value::Obj(Object::StringObj(name.clone())));
-        self.emit_op_byte(Bytecode::OpDefineGlobal);
-        self.emit_u16(index_name);
     }
 
     // Helpers
