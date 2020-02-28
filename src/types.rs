@@ -49,6 +49,7 @@ impl Value {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     StringObj(String),
+    // TODO: Remove function name from obj, it is unnecessary
     FnObj(String, Chunk, u8),
     StructObj { fields: HashMap<String, Value> },
 }
@@ -99,6 +100,7 @@ pub enum Bytecode {
     OpStructInit,
     OpStructAccess,
     OpStructWrite,
+    OpStructMethod,
     OpPrint,
     OpReturn,
 }
@@ -249,7 +251,10 @@ pub enum Declaration {
     VarDecl(String, Expression),
     StructDecl(Token, Vec<(Token, Token)>),
     FnDecl(String, Vec<(Token, Token)>, Option<Token>, Statement),
-    ImplDecl { struct_name: Token, methods: Vec<Declaration> },
+    ImplDecl {
+        struct_name: Token,
+        methods: Vec<Declaration>,
+    },
 }
 
 #[derive(PartialEq)]
@@ -412,6 +417,13 @@ fn byte_to_opcode(
             OpStructInit => {
                 let index = read_u8(bytes);
                 format!("{:?} of len {}", byte, index)
+            }
+            OpStructMethod => {
+                let index = read_u16(bytes);
+                let struct_name = &constants[index as usize];
+                let index = read_u16(bytes);
+                let method_name = &constants[index as usize];
+                format!("{:?} Add {} to {}", byte, method_name, struct_name)
             }
             OpReturn => {
                 let retvals = read_u8(bytes);
