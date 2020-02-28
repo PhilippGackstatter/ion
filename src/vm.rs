@@ -136,10 +136,10 @@ impl VM {
                         if let Value::Obj(Object::StructObj { fields }) = unsafe { &mut *value_ptr }
                         {
                             match fields.get_mut(&field_name) {
-                                Some(value @ Value::Obj(_)) => {
+                                Some(value) => {
                                     value_ptr = value as *mut Value;
                                 }
-                                _ => panic!("Expected struct or field"),
+                                None => panic!("Did not find field {}", field_name),
                             }
                         } else {
                             panic!("Expected struct");
