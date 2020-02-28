@@ -184,7 +184,7 @@ impl VM {
                     }
                 }
                 OpCall => {
-                    if let Value::Obj(Object::FnObj(_name, chunk, arity)) = self.pop() {
+                    if let Value::Obj(Object::FnObj { chunk, arity, .. }) = self.pop() {
                         // Save the position of the current frame pointer
                         let current_frame_pointer = self.frame_pointer;
 

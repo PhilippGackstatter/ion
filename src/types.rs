@@ -49,8 +49,15 @@ impl Value {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     StringObj(String),
-    FnObj(String, Chunk, u8),
-    StructObj { fields: HashMap<String, Value> },
+    FnObj {
+        name: String,
+        struct_name: Option<String>,
+        chunk: Chunk,
+        arity: u8,
+    },
+    StructObj {
+        fields: HashMap<String, Value>,
+    },
 }
 
 impl Object {
@@ -341,7 +348,7 @@ impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
-            Object::FnObj(name, _chunk, arity) => write!(f, "{} (args: {})", name, arity),
+            Object::FnObj { name, arity, .. } => write!(f, "{} (args: {})", name, arity),
             Object::StructObj { .. } => write!(f, "struct"),
         }
     }

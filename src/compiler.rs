@@ -370,11 +370,12 @@ impl Compiler {
         fn_compiler.emit_byte(fn_compiler.locals.len() as u8);
 
         // Create the function object as constant, load it on the stack at runtime
-        let fn_obj = Object::FnObj(
-            name.clone(),
-            fn_compiler.chunk().clone(),
-            params.len() as u8,
-        );
+        let fn_obj = Object::FnObj {
+            name: name.clone(),
+            struct_name: None,
+            chunk: fn_compiler.chunk().clone(),
+            arity: params.len() as u8,
+        };
         let index = self.add_constant(Value::Obj(fn_obj));
 
         self.emit_op_byte(Bytecode::OpConstant);
