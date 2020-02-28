@@ -92,7 +92,15 @@ impl VM {
                 }
                 OpStructInit => {
                     let struct_length = self.read_u8(chunk, &mut i);
-                    let mut field_value_map = HashMap::new();
+                    let struct_name = self.pop().unwrap_obj().unwrap_string();
+
+                    // Use a copy of the struct prototype if it exists, otherwise use an empty hmap
+                    let mut field_value_map = if let Some(entry) = self.globals.get(&struct_name) {
+                        entry.clone().unwrap_obj().unwrap_struct()
+                    } else {
+                        HashMap::new()
+                    };
+
                     for _ in 0..struct_length {
                         let field_name = self.pop().unwrap_obj().unwrap_string();
                         let field_value = self.pop();
