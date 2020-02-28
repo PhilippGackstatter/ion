@@ -2,6 +2,7 @@ use crate::types::{
     Bytecode::{self, *},
     Chunk, Object, Value,
 };
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 #[derive(Debug, Default)]
@@ -141,6 +142,37 @@ impl VM {
                     // that we want to write the new value to
                     unsafe {
                         *value_ptr = new_field_value;
+                    }
+                }
+                OpStructMethod => {
+                    let struct_name_index = self.read_u16(chunk, &mut i);
+                    let struct_name = &chunk.constants[struct_name_index as usize];
+
+                    let method_name_index = self.read_u16(chunk, &mut i);
+                    let method_name = &chunk.constants[method_name_index as usize];
+
+                    let method = self.pop();
+
+                    match self
+                        .globals
+                        .entry(struct_name.clone().unwrap_obj().unwrap_string())
+                    {
+                        Entry::Occupied(mut e) => {
+                            if let Value::Obj(Object::StructObj { fields }) = e.get_mut() {
+                                fields.insert(
+                                    method_name.clone().unwrap_obj().unwrap_string(),
+                                    method,
+                                );
+                            } else {
+                                unreachable!("Should not call OpStructMethod on a non-struct.")
+                            }
+                        }
+                        Entry::Vacant(e) => {
+                            let mut fields = HashMap::new();
+                            fields.insert(method_name.clone().unwrap_obj().unwrap_string(), method);
+
+                            e.insert(Value::Obj(Object::StructObj { fields }));
+                        }
                     }
                 }
                 OpCall => {
