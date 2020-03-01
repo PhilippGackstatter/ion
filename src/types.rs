@@ -1,15 +1,42 @@
+use std::cell::RefCell;
+use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::fmt;
+use std::fmt::Debug;
 use std::ops::Range;
+use std::rc::Rc;
 
 pub type Program = Vec<Declaration>;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone)]
 pub enum Value {
     Bool(bool),
     Int(i32),
     Double(f32),
-    Obj(Object),
+    Obj(Rc<RefCell<Object>>),
+}
+
+impl Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            Value::Bool(boolean) => write!(f, "{:?}", boolean),
+            Value::Int(int) => write!(f, "{:?}", int),
+            Value::Double(double) => write!(f, "{:?}", double),
+            Value::Obj(obj) => write!(f, "{:?}", obj.borrow().clone()),
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Bool(lboolean), Value::Bool(rboolean)) => lboolean == rboolean,
+            (Value::Int(lint), Value::Int(rint)) => lint == rint,
+            (Value::Double(ldouble), Value::Double(rdouble)) => ldouble == rdouble,
+            (Value::Obj(lobj), Value::Obj(robj)) => lobj.borrow().clone() == robj.borrow().clone(),
+            (_, _) => false,
+        }
+    }
 }
 
 impl Value {
@@ -21,7 +48,7 @@ impl Value {
         }
     }
 
-    pub fn unwrap_obj(self) -> Object {
+    pub fn unwrap_obj(self) -> Rc<RefCell<Object>> {
         if let Value::Obj(obj) = self {
             obj
         } else {
@@ -42,6 +69,22 @@ impl Value {
             double
         } else {
             panic!("Expected f32.");
+        }
+    }
+
+    pub fn unwrap_string(self) -> String {
+        if let Object::StringObj(str_) = self.unwrap_obj().borrow().clone() {
+            str_
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    pub fn unwrap_struct(self) -> HashMap<String, Value> {
+        if let Object::StructObj { fields } = self.unwrap_obj().borrow().clone() {
+            fields
+        } else {
+            panic!("Expected struct");
         }
     }
 }
@@ -339,7 +382,7 @@ impl fmt::Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Int(int) => write!(f, "{}", int),
             Value::Double(float) => write!(f, "{}", float),
-            Value::Obj(obj) => write!(f, "{}", obj),
+            Value::Obj(obj) => write!(f, "{}", obj.borrow().clone()),
         }
     }
 }

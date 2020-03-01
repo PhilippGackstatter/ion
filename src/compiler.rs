@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::convert::TryInto;
+use std::rc::Rc;
 
 use crate::types::{
     Bytecode, Chunk,
@@ -69,7 +71,7 @@ impl Compiler {
                 self.compile_expr(expr);
 
                 if self.scope_depth == 0 {
-                    let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                    let index = self.add_constant(make_string_value(id));
                     self.emit_op_byte(Bytecode::OpDefineGlobal);
                     self.emit_u16(index);
                 } else {
@@ -87,7 +89,7 @@ impl Compiler {
                 self.compile_fn_decl(name, params, stmt);
 
                 // Declare the fn obj on the stack as a global variable associated with its name
-                let index_name = self.add_constant(Value::Obj(Object::StringObj(name.clone())));
+                let index_name = self.add_constant(make_string_value(name));
                 self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index_name);
             }
@@ -108,11 +110,10 @@ impl Compiler {
                         self.emit_op_byte(Bytecode::OpStructMethod);
 
                         let struct_name_index =
-                            self.add_constant(Value::Obj(Object::StringObj(struct_name.get_id())));
+                            self.add_constant(make_string_value(&struct_name.get_id()));
                         self.emit_u16(struct_name_index);
 
-                        let method_name_index =
-                            self.add_constant(Value::Obj(Object::StringObj(name.clone())));
+                        let method_name_index = self.add_constant(make_string_value(name));
                         self.emit_u16(method_name_index);
                     }
                 }
@@ -253,7 +254,7 @@ impl Compiler {
                 self.emit_u16(index);
             }
             Str { string } => {
-                let index = self.add_constant(Value::Obj(Object::StringObj(string.clone())));
+                let index = self.add_constant(make_string_value(string));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
@@ -272,7 +273,7 @@ impl Compiler {
                     self.emit_op_byte(Bytecode::OpGetLocal);
                     self.emit_byte(index);
                 } else {
-                    let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                    let index = self.add_constant(make_string_value(id));
                     self.emit_op_byte(Bytecode::OpGetGlobal);
                     self.emit_u16(index);
                 }
@@ -280,13 +281,12 @@ impl Compiler {
             StructInit { name, values } => {
                 for (field_name, field_value) in values.iter() {
                     self.compile_expr(field_value);
-                    let index =
-                        self.add_constant(Value::Obj(Object::StringObj(field_name.get_id())));
+                    let index = self.add_constant(make_string_value(&field_name.get_id()));
                     self.emit_op_byte(Bytecode::OpConstant);
                     self.emit_u16(index);
                 }
 
-                let index = self.add_constant(Value::Obj(Object::StringObj(name.get_id())));
+                let index = self.add_constant(make_string_value(&name.get_id()));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
 
@@ -296,7 +296,7 @@ impl Compiler {
             Access { expr, name } => {
                 self.compile_expr(expr);
 
-                let index = self.add_constant(Value::Obj(Object::StringObj(name.get_id())));
+                let index = self.add_constant(make_string_value(&name.get_id()));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
 
@@ -376,7 +376,7 @@ impl Compiler {
             chunk: fn_compiler.chunk().clone(),
             arity: params.len() as u8,
         };
-        let index = self.add_constant(Value::Obj(fn_obj));
+        let index = self.add_constant(Value::Obj(Rc::new(RefCell::new(fn_obj))));
 
         self.emit_op_byte(Bytecode::OpConstant);
         self.emit_u16(index);
@@ -464,4 +464,8 @@ impl Compiler {
 
         self.scope_depth -= 1;
     }
+}
+
+fn make_string_value(str_: &str) -> Value {
+    Value::Obj(Rc::new(RefCell::new(Object::StringObj(str_.to_owned()))))
 }

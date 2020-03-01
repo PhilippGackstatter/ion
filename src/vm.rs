@@ -2,8 +2,10 @@ use crate::types::{
     Bytecode::{self, *},
     Chunk, Object, Value,
 };
+use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Debug, Default)]
 pub struct VM {
@@ -50,22 +52,28 @@ impl VM {
                 }
                 OpDefineGlobal => {
                     let index = self.read_u16(chunk, &mut i);
-                    let assign = self.pop();
-                    if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
-                        self.globals.insert(str_.clone(), assign);
+                    let new_val = self.pop();
+                    if let Value::Obj(obj) = &chunk.constants[index as usize] {
+                        if let Object::StringObj(str_) = obj.borrow().clone() {
+                            self.globals.insert(str_, new_val);
+                        }
                     }
                 }
                 OpSetGlobal => {
                     let index = self.read_u16(chunk, &mut i);
                     let new_val = self.pop();
-                    if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
-                        self.globals.insert(str_.clone(), new_val);
+                    if let Value::Obj(obj) = &chunk.constants[index as usize] {
+                        if let Object::StringObj(str_) = obj.borrow().clone() {
+                            self.globals.insert(str_, new_val);
+                        }
                     }
                 }
                 OpGetGlobal => {
                     let index = self.read_u16(chunk, &mut i);
-                    if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
-                        self.push(self.globals.get(str_).unwrap().clone());
+                    if let Value::Obj(obj) = &chunk.constants[index as usize] {
+                        if let Object::StringObj(str_) = obj.borrow().clone() {
+                            self.push(self.globals.get(&str_).unwrap().clone());
+                        }
                     }
                 }
                 OpGetLocal => {
@@ -92,28 +100,28 @@ impl VM {
                 }
                 OpStructInit => {
                     let struct_length = self.read_u8(chunk, &mut i);
-                    let struct_name = self.pop().unwrap_obj().unwrap_string();
+                    let struct_name = self.pop().unwrap_string();
 
                     // Use a copy of the struct prototype if it exists, otherwise use an empty hmap
                     let mut field_value_map = if let Some(entry) = self.globals.get(&struct_name) {
-                        entry.clone().unwrap_obj().unwrap_struct()
+                        entry.clone().unwrap_struct()
                     } else {
                         HashMap::new()
                     };
 
                     for _ in 0..struct_length {
-                        let field_name = self.pop().unwrap_obj().unwrap_string();
+                        let field_name = self.pop().unwrap_string();
                         let field_value = self.pop();
                         field_value_map.insert(field_name, field_value);
                     }
 
-                    self.push(Value::Obj(Object::StructObj {
+                    self.push(Value::Obj(Rc::new(RefCell::new(Object::StructObj {
                         fields: field_value_map,
-                    }));
+                    }))));
                 }
                 OpStructAccess => {
-                    let field_name = self.pop().unwrap_obj().unwrap_string();
-                    let fields = self.pop().unwrap_obj().unwrap_struct();
+                    let field_name = self.pop().unwrap_string();
+                    let fields = self.pop().unwrap_struct();
                     self.push(fields.get(&field_name).unwrap().clone());
                 }
                 OpStructWrite => {
@@ -161,42 +169,47 @@ impl VM {
 
                     let method = self.pop();
 
-                    match self
-                        .globals
-                        .entry(struct_name.clone().unwrap_obj().unwrap_string())
-                    {
+                    match self.globals.entry(struct_name.clone().unwrap_string()) {
                         Entry::Occupied(mut e) => {
-                            if let Value::Obj(Object::StructObj { fields }) = e.get_mut() {
-                                fields.insert(
-                                    method_name.clone().unwrap_obj().unwrap_string(),
-                                    method,
-                                );
+                            if let Value::Obj(obj) = e.get_mut() {
+                                if let Object::StructObj { fields } = unsafe { &mut *obj.as_ptr() }
+                                {
+                                    fields.insert(method_name.clone().unwrap_string(), method);
+                                } else {
+                                    panic!("Should not call OpStructMethod on a non-struct.")
+                                }
                             } else {
-                                unreachable!("Should not call OpStructMethod on a non-struct.")
+                                panic!("Should not call OpStructMethod on a non-object.")
                             }
                         }
                         Entry::Vacant(e) => {
                             let mut fields = HashMap::new();
-                            fields.insert(method_name.clone().unwrap_obj().unwrap_string(), method);
+                            fields.insert(method_name.clone().unwrap_string(), method);
 
-                            e.insert(Value::Obj(Object::StructObj { fields }));
+                            e.insert(Value::Obj(Rc::new(RefCell::new(Object::StructObj {
+                                fields,
+                            }))));
                         }
                     }
                 }
                 OpCall => {
-                    if let Value::Obj(Object::FnObj { chunk, arity, .. }) = self.pop() {
-                        // Save the position of the current frame pointer
-                        let current_frame_pointer = self.frame_pointer;
+                    if let Value::Obj(ref mut obj) = self.pop() {
+                        if let Object::FnObj { chunk, arity, .. } = unsafe { &mut *obj.as_ptr() } {
+                            // Save the position of the current frame pointer
+                            let current_frame_pointer = self.frame_pointer;
 
-                        // The frame pointer points to the first parameter of the function on the stack
-                        self.frame_pointer = self.stack.len() - arity as usize;
+                            // The frame pointer points to the first parameter of the function on the stack
+                            self.frame_pointer = self.stack.len() - *arity as usize;
 
-                        self.interpet(&chunk);
+                            self.interpet(&chunk);
 
-                        // And restore it after the function returns
-                        self.frame_pointer = current_frame_pointer;
+                            // And restore it after the function returns
+                            self.frame_pointer = current_frame_pointer;
+                        } else {
+                            panic!("Expected a function object on the stack.");
+                        }
                     } else {
-                        panic!("Expected function object on the stack.");
+                        panic!("Expected an object on the stack.");
                     }
                 }
                 OpPrint => {
