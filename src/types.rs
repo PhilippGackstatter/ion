@@ -147,8 +147,8 @@ pub enum Bytecode {
     OpLoop,
     OpCall,
     OpStructInit,
-    OpStructAccess,
-    OpStructWrite,
+    OpStructGetField,
+    OpStructSetField,
     OpStructMethod,
     OpPrint,
     OpReturn,
@@ -425,8 +425,8 @@ fn byte_to_opcode(
         let byte = unsafe { std::mem::transmute::<u8, Bytecode>(*byte_) };
         let res = match byte {
             OpPop | OpMul | OpAdd | OpDiv | OpSub | OpNot | OpEqual | OpNegate | OpGreater
-            | OpLess | OpGreaterEqual | OpLessEqual | OpPrint | OpStructAccess | OpCall
-            | OpStructWrite => format!("{:?}", byte),
+            | OpLess | OpGreaterEqual | OpLessEqual | OpPrint | OpStructGetField | OpCall
+            | OpStructSetField => format!("{:?}", byte),
             OpConstant => {
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])

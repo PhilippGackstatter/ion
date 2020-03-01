@@ -119,12 +119,12 @@ impl VM {
                         fields: field_value_map,
                     }))));
                 }
-                OpStructAccess => {
+                OpStructGetField => {
                     let field_name = self.pop().unwrap_string();
                     let fields = self.pop().unwrap_struct();
                     self.push(fields.get(&field_name).unwrap().clone());
                 }
-                OpStructWrite => {
+                OpStructSetField => {
                     let field_name = self.pop().unwrap_string();
                     let struct_ = self.pop();
                     let new_value = self.pop();

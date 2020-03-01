@@ -218,7 +218,7 @@ impl Compiler {
                         panic!("Expected property to be an identifier.");
                     }
 
-                    self.emit_op_byte(Bytecode::OpStructWrite);
+                    self.emit_op_byte(Bytecode::OpStructSetField);
                 }
             }
             Integer { int, .. } => {
@@ -278,7 +278,7 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
 
-                self.emit_op_byte(Bytecode::OpStructAccess);
+                self.emit_op_byte(Bytecode::OpStructGetField);
             }
         }
     }
