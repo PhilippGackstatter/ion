@@ -125,39 +125,14 @@ impl VM {
                     self.push(fields.get(&field_name).unwrap().clone());
                 }
                 OpStructWrite => {
-                    let struct_stack_index = self.read_u8(chunk, &mut i) as usize;
-                    let write_depth = self.read_u8(chunk, &mut i) as usize;
+                    let field_name = self.pop().unwrap_string();
+                    let struct_ = self.pop();
+                    let new_value = self.pop();
 
-                    let mut field_names = Vec::with_capacity(write_depth as usize);
-
-                    for _ in 0..write_depth {
-                        field_names.push(self.pop().unwrap_obj().unwrap_string());
-                    }
-
-                    let new_field_value = self.pop();
-
-                    let struct_ = &mut self.stack[self.frame_pointer + struct_stack_index];
-                    let mut value_ptr = struct_ as *mut Value;
-
-                    for field_name in field_names {
-                        // Type Checker guarantees that every new field we lookup is a struct
-                        if let Value::Obj(Object::StructObj { fields }) = unsafe { &mut *value_ptr }
-                        {
-                            match fields.get_mut(&field_name) {
-                                Some(value) => {
-                                    value_ptr = value as *mut Value;
-                                }
-                                None => panic!("Did not find field {}", field_name),
-                            }
-                        } else {
-                            panic!("Expected struct");
+                    if let Value::Obj(obj) = struct_ {
+                        if let Object::StructObj { fields } = unsafe { &mut *obj.as_ptr() } {
+                            *fields.get_mut(&field_name).unwrap() = new_value;
                         }
-                    }
-
-                    // After the loop exits, value_ptr points at the innermost field
-                    // that we want to write the new value to
-                    unsafe {
-                        *value_ptr = new_field_value;
                     }
                 }
                 OpStructMethod => {

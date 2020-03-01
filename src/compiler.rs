@@ -199,48 +199,26 @@ impl Compiler {
             }
             Assign { target, value } => {
                 self.compile_expr(value);
+
                 if let Identifier(ident) = &target.kind {
                     if let Some(index) = self.find_local_variable(ident) {
                         self.emit_op_byte(Bytecode::OpSetLocal);
                         self.emit_byte(index);
                     } else {
-                        let index = self
-                            .add_constant(Value::Obj(Object::StringObj(target.get_id().clone())));
-                        self.emit_op_byte(Bytecode::OpSetGlobal);
-                        self.emit_u16(index);
+                        panic!("No local variable with name {}", ident);
                     }
                 } else if let Access { expr, name } = &target.kind {
-                    let mut field_names = vec![name];
-                    let mut expr_ptr = expr;
+                    self.compile_expr(expr);
 
-                    while let Access {
-                        expr: nested_expr,
-                        name: nested_name,
-                    } = &expr_ptr.kind
-                    {
-                        field_names.push(&nested_name);
-                        expr_ptr = nested_expr;
-                    }
-
-                    if let Some(index) = self.find_local_variable(&expr_ptr.get_id()) {
-                        let no_fields = field_names.len().try_into().unwrap();
-
-                        for field_name in field_names {
-                            let const_index = self.add_constant(Value::Obj(Object::StringObj(
-                                field_name.get_id().clone(),
-                            )));
-                            self.emit_op_byte(Bytecode::OpConstant);
-                            self.emit_u16(const_index);
-                        }
-
-                        self.emit_op_byte(Bytecode::OpStructWrite);
-                        self.emit_byte(index);
-                        self.emit_byte(no_fields);
+                    if let Identifier(ident) = &name.kind {
+                        let index = self.add_constant(make_string_value(ident));
+                        self.emit_op_byte(Bytecode::OpConstant);
+                        self.emit_u16(index);
                     } else {
-                        panic!("Expected to find local variable.");
+                        panic!("Expected property to be an identifier.");
                     }
-                } else {
-                    panic!("Unsupported target for assignment.");
+
+                    self.emit_op_byte(Bytecode::OpStructWrite);
                 }
             }
             Integer { int, .. } => {
