@@ -81,10 +81,11 @@ impl Value {
     }
 
     pub fn unwrap_struct(self) -> HashMap<String, Value> {
-        if let Object::StructObj { fields, .. } = self.unwrap_obj().borrow().clone() {
+        let obj = self.unwrap_obj().borrow().clone();
+        if let Object::StructObj { fields, .. } = obj {
             fields
         } else {
-            panic!("Expected struct");
+            panic!("Expected struct, got {:?}", obj);
         }
     }
 }
@@ -392,7 +393,18 @@ impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
-            Object::FnObj { name, arity, .. } => write!(f, "{} ({})", name, arity),
+            Object::FnObj {
+                name,
+                arity,
+                receiver,
+                ..
+            } => {
+                if let Some(recv) = receiver {
+                    write!(f, "{} ({}) <{}>", name, arity, recv.borrow())
+                } else {
+                    write!(f, "{} ({})", name, arity)
+                }
+            }
             Object::StructObj { name, .. } => write!(f, "{} {{}}", name),
         }
     }
