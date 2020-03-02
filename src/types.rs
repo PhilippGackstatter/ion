@@ -81,7 +81,7 @@ impl Value {
     }
 
     pub fn unwrap_struct(self) -> HashMap<String, Value> {
-        if let Object::StructObj { fields } = self.unwrap_obj().borrow().clone() {
+        if let Object::StructObj { fields, .. } = self.unwrap_obj().borrow().clone() {
             fields
         } else {
             panic!("Expected struct");
@@ -99,6 +99,7 @@ pub enum Object {
         arity: u8,
     },
     StructObj {
+        name: String,
         fields: HashMap<String, Value>,
     },
 }
@@ -113,7 +114,7 @@ impl Object {
     }
 
     pub fn unwrap_struct(self) -> HashMap<String, Value> {
-        if let Object::StructObj { fields } = self {
+        if let Object::StructObj { fields, .. } = self {
             fields
         } else {
             panic!("Expected struct obj.");
@@ -392,7 +393,7 @@ impl fmt::Display for Object {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
             Object::FnObj { name, arity, .. } => write!(f, "{} ({})", name, arity),
-            Object::StructObj { .. } => write!(f, "struct"),
+            Object::StructObj { name, .. } => write!(f, "{} {{}}", name),
         }
     }
 }

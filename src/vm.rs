@@ -116,6 +116,7 @@ impl VM {
                     }
 
                     self.push(Value::Obj(Rc::new(RefCell::new(Object::StructObj {
+                        name: struct_name,
                         fields: field_value_map,
                     }))));
                 }
@@ -130,14 +131,16 @@ impl VM {
                     let new_value = self.pop();
 
                     if let Value::Obj(obj) = struct_ {
-                        if let Object::StructObj { fields } = unsafe { &mut *obj.as_ptr() } {
+                        if let Object::StructObj { fields, .. } = unsafe { &mut *obj.as_ptr() } {
                             *fields.get_mut(&field_name).unwrap() = new_value;
                         }
                     }
                 }
                 OpStructMethod => {
                     let struct_name_index = self.read_u16(chunk, &mut i);
-                    let struct_name = &chunk.constants[struct_name_index as usize];
+                    let struct_name = chunk.constants[struct_name_index as usize]
+                        .clone()
+                        .unwrap_string();
 
                     let method_name_index = self.read_u16(chunk, &mut i);
                     let method_name = &chunk.constants[method_name_index as usize];
@@ -150,13 +153,14 @@ impl VM {
                         panic!("Expected method to be an object.");
                     };
 
-                    let struct_entry = self.globals.entry(struct_name.clone().unwrap_string());
+                    let struct_entry = self.globals.entry(struct_name.clone());
 
                     let receiver_struct;
                     match struct_entry {
                         Entry::Occupied(mut e) => {
                             if let Value::Obj(obj) = e.get_mut() {
-                                if let Object::StructObj { fields } = unsafe { &mut *obj.as_ptr() }
+                                if let Object::StructObj { fields, .. } =
+                                    unsafe { &mut *obj.as_ptr() }
                                 {
                                     fields.insert(method_name.clone().unwrap_string(), method);
                                     receiver_struct = Some(Rc::clone(obj));
@@ -171,7 +175,10 @@ impl VM {
                             let mut fields = HashMap::new();
                             fields.insert(method_name.clone().unwrap_string(), method);
 
-                            let struct_obj = Rc::new(RefCell::new(Object::StructObj { fields }));
+                            let struct_obj = Rc::new(RefCell::new(Object::StructObj {
+                                name: struct_name,
+                                fields,
+                            }));
                             receiver_struct = Some(Rc::clone(&struct_obj));
                             e.insert(Value::Obj(struct_obj));
                         }
