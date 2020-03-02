@@ -350,7 +350,7 @@ impl Compiler {
         // Create the function object as constant, load it on the stack at runtime
         let fn_obj = Object::FnObj {
             name: name.clone(),
-            struct_name: None,
+            receiver: None,
             chunk: fn_compiler.chunk().clone(),
             arity: params.len() as u8,
         };

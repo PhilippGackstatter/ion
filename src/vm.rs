@@ -144,12 +144,22 @@ impl VM {
 
                     let method = self.pop();
 
-                    match self.globals.entry(struct_name.clone().unwrap_string()) {
+                    let method_obj_clone = if let Value::Obj(method_obj) = &method {
+                        Rc::clone(method_obj)
+                    } else {
+                        panic!("Expected method to be an object.");
+                    };
+
+                    let struct_entry = self.globals.entry(struct_name.clone().unwrap_string());
+
+                    let receiver_struct;
+                    match struct_entry {
                         Entry::Occupied(mut e) => {
                             if let Value::Obj(obj) = e.get_mut() {
                                 if let Object::StructObj { fields } = unsafe { &mut *obj.as_ptr() }
                                 {
                                     fields.insert(method_name.clone().unwrap_string(), method);
+                                    receiver_struct = Some(Rc::clone(obj));
                                 } else {
                                     panic!("Should not call OpStructMethod on a non-struct.")
                                 }
@@ -161,10 +171,16 @@ impl VM {
                             let mut fields = HashMap::new();
                             fields.insert(method_name.clone().unwrap_string(), method);
 
-                            e.insert(Value::Obj(Rc::new(RefCell::new(Object::StructObj {
-                                fields,
-                            }))));
+                            let struct_obj = Rc::new(RefCell::new(Object::StructObj { fields }));
+                            receiver_struct = Some(Rc::clone(&struct_obj));
+                            e.insert(Value::Obj(struct_obj));
                         }
+                    }
+
+                    if let Object::FnObj { receiver, .. } =
+                        unsafe { &mut *method_obj_clone.as_ptr() }
+                    {
+                        *receiver = receiver_struct
                     }
                 }
                 OpCall => {

@@ -94,7 +94,7 @@ pub enum Object {
     StringObj(String),
     FnObj {
         name: String,
-        struct_name: Option<String>,
+        receiver: Option<Rc<RefCell<Object>>>,
         chunk: Chunk,
         arity: u8,
     },
@@ -391,7 +391,7 @@ impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
-            Object::FnObj { name, arity, .. } => write!(f, "{} (args: {})", name, arity),
+            Object::FnObj { name, arity, .. } => write!(f, "{} ({})", name, arity),
             Object::StructObj { .. } => write!(f, "struct"),
         }
     }
