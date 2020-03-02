@@ -20,10 +20,11 @@ pub struct CompilerError {
     pub message: &'static str,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum FunctionType {
     Script,
     Function,
+    Method,
 }
 
 pub struct Compiler {
@@ -45,7 +46,12 @@ impl Compiler {
     pub fn new(fn_type: FunctionType) -> Self {
         Compiler {
             chunk: Chunk::new(),
-            locals: vec![],
+            locals: 
+            if fn_type == FunctionType::Method {
+                vec![("self".to_owned(), 1)]
+            } else {
+                vec![]
+            },
             scope_depth: if fn_type == FunctionType::Script {
                 0
             } else {
@@ -86,7 +92,7 @@ impl Compiler {
                 }
             }
             FnDecl(name, params, _, stmt) => {
-                self.compile_fn_decl(name, params, stmt);
+                self.compile_fn_decl(name, params, stmt, FunctionType::Function);
 
                 // Declare the fn obj on the stack as a global variable associated with its name
                 let index_name = self.add_constant(make_string_value(name));
@@ -104,7 +110,7 @@ impl Compiler {
                         let method_name = name;
 
                         // Puts the compiled Function Object on the stack
-                        self.compile_fn_decl(&method_name, params, stmt);
+                        self.compile_fn_decl(&method_name, params, stmt, FunctionType::Method);
 
                         // Associate the Function Object with the method name on the struct
                         self.emit_op_byte(Bytecode::OpStructMethod);
@@ -335,8 +341,14 @@ impl Compiler {
         }
     }
 
-    fn compile_fn_decl(&mut self, name: &String, params: &Vec<(Token, Token)>, stmt: &Statement) {
-        let mut fn_compiler = Compiler::new(FunctionType::Function);
+    fn compile_fn_decl(
+        &mut self,
+        name: &String,
+        params: &Vec<(Token, Token)>,
+        stmt: &Statement,
+        function_type: FunctionType,
+    ) {
+        let mut fn_compiler = Compiler::new(function_type.clone());
 
         for param in params {
             fn_compiler.add_local(param.0.get_id().clone());
@@ -345,7 +357,13 @@ impl Compiler {
         fn_compiler.compile_stmt(stmt);
 
         // Provide the final parameter to OpReturn: number of arguments to pop
-        fn_compiler.emit_byte(fn_compiler.locals.len() as u8);
+        let num_locals = if function_type == FunctionType::Function {
+            fn_compiler.locals.len() as u8 + 1
+        } else {
+            fn_compiler.locals.len() as u8
+        };
+
+        fn_compiler.emit_byte(num_locals);
 
         // Create the function object as constant, load it on the stack at runtime
         let fn_obj = Object::FnObj {
