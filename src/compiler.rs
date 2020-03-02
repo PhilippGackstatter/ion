@@ -46,8 +46,7 @@ impl Compiler {
     pub fn new(fn_type: FunctionType) -> Self {
         Compiler {
             chunk: Chunk::new(),
-            locals: 
-            if fn_type == FunctionType::Method {
+            locals: if fn_type == FunctionType::Method {
                 vec![("self".to_owned(), 1)]
             } else {
                 vec![]
@@ -194,6 +193,9 @@ impl Compiler {
                 self.unary_op(op);
             }
             Call(callee, params) => {
+                self.emit_op_byte(Bytecode::OpConstant);
+                let index = self.add_constant(make_string_value("<SELF>"));
+                self.emit_u16(index);
                 // Put the arguments on the stack, s.t. they're available as locals for the callee
                 for param in params {
                     self.compile_expr(param);

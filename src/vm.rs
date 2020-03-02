@@ -198,12 +198,23 @@ impl VM {
                 }
                 OpCall => {
                     if let Value::Obj(ref mut obj) = self.pop() {
-                        if let Object::FnObj { chunk, arity, .. } = unsafe { &mut *obj.as_ptr() } {
+                        if let Object::FnObj {
+                            chunk,
+                            arity,
+                            receiver,
+                            ..
+                        } = unsafe { &mut *obj.as_ptr() }
+                        {
                             // Save the position of the current frame pointer
                             let current_frame_pointer = self.frame_pointer;
 
                             // The frame pointer points to the first parameter of the function on the stack
                             self.frame_pointer = self.stack.len() - *arity as usize;
+                            if let Some(recv) = receiver {
+                                // If we have a method, then we have the additional argument self at local index 0
+                                self.frame_pointer -= 1;
+                                self.stack[self.frame_pointer] = Value::Obj(Rc::clone(recv));
+                            }
 
                             self.interpet(&chunk);
 
