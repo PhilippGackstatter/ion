@@ -109,16 +109,37 @@ impl VM {
                         HashMap::new()
                     };
 
+                    let method_names: Vec<String> =
+                        field_value_map.keys().map(|k| k.to_owned()).collect();
+
                     for _ in 0..struct_length {
                         let field_name = self.pop().unwrap_string();
                         let field_value = self.pop();
                         field_value_map.insert(field_name, field_value);
                     }
 
-                    self.push(Value::Obj(Rc::new(RefCell::new(Object::StructObj {
+                    let struct_obj = Rc::new(RefCell::new(Object::StructObj {
                         name: struct_name,
                         fields: field_value_map,
-                    }))));
+                    }));
+
+                    for method in method_names {
+                        if let Object::StructObj { fields, .. } =
+                            unsafe { &mut *struct_obj.as_ptr() }
+                        {
+                            fields.entry(method).and_modify(|e| {
+                                if let Value::Obj(obj) = e {
+                                    if let Object::FnObj { receiver, .. } =
+                                        unsafe { &mut *obj.as_ptr() }
+                                    {
+                                        *receiver = Some(Rc::clone(&struct_obj));
+                                    }
+                                }
+                            });
+                        }
+                    }
+
+                    self.push(Value::Obj(struct_obj));
                 }
                 OpStructGetField => {
                     let field_name = self.pop().unwrap_string();
@@ -147,15 +168,8 @@ impl VM {
 
                     let method = self.pop();
 
-                    let method_obj_clone = if let Value::Obj(method_obj) = &method {
-                        Rc::clone(method_obj)
-                    } else {
-                        panic!("Expected method to be an object.");
-                    };
-
                     let struct_entry = self.globals.entry(struct_name.clone());
 
-                    let receiver_struct;
                     match struct_entry {
                         Entry::Occupied(mut e) => {
                             if let Value::Obj(obj) = e.get_mut() {
@@ -163,7 +177,6 @@ impl VM {
                                     unsafe { &mut *obj.as_ptr() }
                                 {
                                     fields.insert(method_name.clone().unwrap_string(), method);
-                                    receiver_struct = Some(Rc::clone(obj));
                                 } else {
                                     panic!("Should not call OpStructMethod on a non-struct.")
                                 }
@@ -179,15 +192,8 @@ impl VM {
                                 name: struct_name,
                                 fields,
                             }));
-                            receiver_struct = Some(Rc::clone(&struct_obj));
                             e.insert(Value::Obj(struct_obj));
                         }
-                    }
-
-                    if let Object::FnObj { receiver, .. } =
-                        unsafe { &mut *method_obj_clone.as_ptr() }
-                    {
-                        *receiver = receiver_struct
                     }
                 }
                 OpCall => {
