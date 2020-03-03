@@ -30,7 +30,11 @@ enum TypeKind {
     Str,
     Bool,
     Void,
-    Func(Function),
+    Func {
+        name: String,
+        params: Vec<Type>,
+        result: Option<Box<Type>>,
+    },
     Struct(Struct),
 }
 
@@ -55,15 +59,20 @@ impl std::fmt::Display for Type {
                 }
                 write!(f, ")")
             }
-            TypeKind::Func(fun) => {
-                write!(f, "{} (", fun.name)?;
-                for param in fun.params.iter() {
+            TypeKind::Func {
+                name,
+                params,
+                result,
+                ..
+            } => {
+                write!(f, "{} (", name)?;
+                for param in params.iter() {
                     write!(f, "{}, ", param)?;
                 }
                 write!(
                     f,
                     ") -> {}",
-                    if let Some(ret_ty) = &fun.result {
+                    if let Some(ret_ty) = &result {
                         format!("{}", ret_ty)
                     } else {
                         "void".into()
@@ -89,13 +98,6 @@ impl Variable {
             dtype,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct Function {
-    pub name: String,
-    params: Vec<Type>,
-    result: Option<Box<Type>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -295,6 +297,7 @@ impl TypeChecker {
                 methods,
             } => {
                 for method in methods {
+                    self.check_decl(method)?;
                     if let Declaration::FnDecl(name, params_tokens, return_token, _stmt) = method {
                         let fn_type =
                             self.generate_function_type(name, params_tokens, return_token, _stmt)?;
@@ -463,8 +466,13 @@ impl TypeChecker {
             }
             ExpressionKind::Call(callee, params) => {
                 let callee_type = self.check_expr(&callee)?;
-                if let TypeKind::Func(fun) = callee_type.kind {
-                    for (index, param) in fun.params.iter().enumerate() {
+                if let TypeKind::Func {
+                    params: declared_params,
+                    result,
+                    ..
+                } = callee_type.kind
+                {
+                    for (index, param) in declared_params.iter().enumerate() {
                         if let Some(call_param) = params.get(index) {
                             let call_param_type = self.check_expr(call_param)?;
                             if *param != call_param_type {
@@ -482,14 +490,14 @@ impl TypeChecker {
                                 token_range: callee_type.token_range.clone(),
                                 message: format!(
                                     "Function needs {} parameters, but only {} were supplied.",
-                                    fun.params.len(),
+                                    declared_params.len(),
                                     params.len()
                                 ),
                             });
                         }
                     }
 
-                    Ok(if let Some(res) = &fun.result {
+                    Ok(if let Some(res) = &result {
                         res.as_ref().clone()
                     } else {
                         Type::new_empty_range(TypeKind::Void)
@@ -601,11 +609,11 @@ impl TypeChecker {
             None
         };
 
-        Ok(Type::new_empty_range(TypeKind::Func(Function {
+        Ok(Type::new_empty_range(TypeKind::Func {
             name: name.clone(),
             params,
             result,
-        })))
+        }))
     }
 
     // Local Variables
