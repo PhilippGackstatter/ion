@@ -497,7 +497,7 @@ impl TypeChecker {
                 } else {
                     Err(CompileError {
                         token_range: callee_type.token_range.clone(),
-                        message: "Cannot call anything other than a function.".to_owned(),
+                        message: format!("Type {} is not callable.", callee_type),
                     })
                 }
             }
