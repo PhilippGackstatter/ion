@@ -251,41 +251,8 @@ impl TypeChecker {
                 // }
             }
             Declaration::FnDecl(_name, params_tokens, return_token, body) => {
-                for (name_token, param_token) in params_tokens {
-                    let expr_type = self.lookup_type(param_token)?;
-                    // Make the parameters available as locals to the function body
-                    // so that they can be found & type checked
-                    self.add_local_to_next_scope(name_token.get_id(), expr_type);
-                }
-                let return_types = self.check_stmt(body)?;
-
-                let declared_ret_type = if let Some(return_type) = return_token {
-                    self.lookup_type(return_type)?
-                } else {
-                    Type::new_empty_range(TypeKind::Void)
-                };
-
-                if declared_ret_type.kind != TypeKind::Void && return_types.is_empty() {
-                    return Err(CompileError {
-                        token_range: declared_ret_type.token_range.clone(),
-                        message: format!(
-                            "This function has to return a type {}.",
-                            declared_ret_type
-                        ),
-                    });
-                }
-
-                for return_type in return_types {
-                    if return_type != declared_ret_type {
-                        return Err(CompileError {
-                            token_range: return_type.token_range.clone(),
-                            message: format!(
-                                "Returned type {} does not match declared return type {}.",
-                                return_type, declared_ret_type
-                            ),
-                        });
-                    }
-                }
+                let return_types = self.check_function_body(params_tokens, body, None)?;
+                self.check_function_return_types(return_types, return_token)?;
             }
             Declaration::StructDecl(_name, fields) => {
                 for field in fields.iter() {
@@ -297,10 +264,13 @@ impl TypeChecker {
                 methods,
             } => {
                 for method in methods {
-                    self.check_decl(method)?;
-                    if let Declaration::FnDecl(name, params_tokens, return_token, _stmt) = method {
+                    if let Declaration::FnDecl(name, params_tokens, return_token, body) = method {
+                        let return_types =
+                            self.check_function_body(params_tokens, body, Some(struct_name))?;
+                        self.check_function_return_types(return_types, return_token)?;
+
                         let fn_type =
-                            self.generate_function_type(name, params_tokens, return_token, _stmt)?;
+                            self.generate_function_type(name, params_tokens, return_token, body)?;
                         self.add_struct_method(struct_name, name, fn_type)?;
                     }
                 }
@@ -589,6 +559,60 @@ impl TypeChecker {
             }
             _ => unimplemented!(),
         }
+    }
+
+    fn check_function_body(
+        &mut self,
+        params: &Vec<(Token, Token)>,
+        body: &Statement,
+        receiver: Option<&Token>,
+    ) -> Result<Vec<Type>, CompileError> {
+        for (name_token, param_token) in params {
+            let expr_type = self.lookup_type(param_token)?;
+            // Make the parameters available as locals to the function body
+            // so that they can be found & type checked
+            self.add_local_to_next_scope(name_token.get_id(), expr_type);
+        }
+
+        if let Some(receiver) = receiver {
+            let receiver_type = self.lookup_type(receiver)?;
+            self.add_local_to_next_scope("self".to_owned(), receiver_type);
+        }
+
+        let return_types = self.check_stmt(body)?;
+        Ok(return_types)
+    }
+
+    fn check_function_return_types(
+        &self,
+        return_types: Vec<Type>,
+        return_token: &Option<Token>,
+    ) -> Result<(), CompileError> {
+        let declared_ret_type = if let Some(return_type) = return_token {
+            self.lookup_type(return_type)?
+        } else {
+            Type::new_empty_range(TypeKind::Void)
+        };
+
+        if declared_ret_type.kind != TypeKind::Void && return_types.is_empty() {
+            return Err(CompileError {
+                token_range: declared_ret_type.token_range.clone(),
+                message: format!("This function has to return a type {}.", declared_ret_type),
+            });
+        }
+
+        for return_type in return_types {
+            if return_type != declared_ret_type {
+                return Err(CompileError {
+                    token_range: return_type.token_range.clone(),
+                    message: format!(
+                        "Returned type {} does not match declared return type {}.",
+                        return_type, declared_ret_type
+                    ),
+                });
+            }
+        }
+        Ok(())
     }
 
     fn generate_function_type(
