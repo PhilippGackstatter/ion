@@ -315,7 +315,7 @@ impl VM {
     fn apply_bool_op(&mut self, byte: Bytecode) {
         match byte {
             OpEqual => {
-                let res = self.pop().unwrap_bool() == self.pop().unwrap_bool();
+                let res = self.pop() == self.pop();
                 self.push(Value::Bool(res));
             }
             OpNot => {
