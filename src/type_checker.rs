@@ -155,7 +155,7 @@ impl TypeChecker {
         }
     }
 
-    fn build_symbol_table(&mut self, decl: &Declaration) -> Result<(), CompileError> {
+    fn build_symbol_table<'a>(&mut self, decl: &'a Declaration) -> Result<(), CompileError> {
         match decl {
             Declaration::FnDecl(name, params_tokens, return_token, _stmt) => {
                 self.add_symbol(
@@ -180,8 +180,21 @@ impl TypeChecker {
                 );
                 self.add_symbol(&name.get_id(), st)?;
             }
+            Declaration::ImplDecl {
+                struct_name,
+                methods,
+            } => {
+                for method in methods {
+                    if let Declaration::FnDecl(name, params_tokens, return_token, body) = method {
+                        let fn_type =
+                            self.generate_function_type(name, params_tokens, return_token, body)?;
+                        self.add_struct_method(struct_name, name, fn_type)?;
+                    }
+                }
+            }
             _ => (),
         }
+
         Ok(())
     }
 
@@ -264,14 +277,10 @@ impl TypeChecker {
                 methods,
             } => {
                 for method in methods {
-                    if let Declaration::FnDecl(name, params_tokens, return_token, body) = method {
+                    if let Declaration::FnDecl(_name, params_tokens, return_token, body) = method {
                         let return_types =
                             self.check_function_body(params_tokens, body, Some(struct_name))?;
                         self.check_function_return_types(return_types, return_token)?;
-
-                        let fn_type =
-                            self.generate_function_type(name, params_tokens, return_token, body)?;
-                        self.add_struct_method(struct_name, name, fn_type)?;
                     }
                 }
             }
