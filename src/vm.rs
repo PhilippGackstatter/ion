@@ -104,7 +104,27 @@ impl VM {
 
                     // Use a copy of the struct prototype if it exists, otherwise use an empty hmap
                     let mut field_value_map = if let Some(entry) = self.globals.get(&struct_name) {
-                        entry.clone().unwrap_struct()
+                        // If an entry exists it contains only functions.
+                        // If we simply clone the entry, the Rc<RefCell> will be cloned
+                        // but not the nested Function Objects.
+                        // Later, when we set the receiver, it will overwrite whatever other receiver
+                        // was in there before.
+                        // Consequently, each function must be deep-cloned.
+                        let mut fn_objs = HashMap::new();
+                        if let Value::Obj(obj) = entry {
+                            if let Object::StructObj { fields, .. } = unsafe { &*obj.as_ptr() } {
+                                for (key, val) in fields.iter() {
+                                    if let Value::Obj(inner_obj) = val {
+                                        let fn_obj = unsafe { &*inner_obj.as_ptr() }.clone();
+                                        fn_objs.insert(
+                                            key.clone(),
+                                            Value::Obj(Rc::new(RefCell::new(fn_obj))),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        fn_objs
                     } else {
                         HashMap::new()
                     };
