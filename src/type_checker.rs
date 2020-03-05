@@ -27,6 +27,7 @@ impl Type {
 #[derive(Debug, Clone, PartialEq)]
 enum TypeKind {
     Integer,
+    Double,
     Str,
     Bool,
     Void,
@@ -35,6 +36,8 @@ enum TypeKind {
         params: Vec<Type>,
         result: Option<Box<Type>>,
     },
+    // TODO: Wrap Struct in a Rc<RefCell> so that forward declarations are no longer necessary
+    // and impl blocks can occur after a declared usage of the impl'ed struct
     Struct(Struct),
 }
 
@@ -48,6 +51,7 @@ impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
             TypeKind::Integer => write!(f, "i32"),
+            TypeKind::Double => write!(f, "f32"),
             TypeKind::Str => write!(f, "str"),
             TypeKind::Bool => write!(f, "bool"),
             TypeKind::Void => write!(f, "void"),
@@ -122,6 +126,7 @@ impl TypeChecker {
         hmap.insert("str".to_owned(), Type::new_empty_range(TypeKind::Str));
         hmap.insert("bool".to_owned(), Type::new_empty_range(TypeKind::Bool));
         hmap.insert("i32".to_owned(), Type::new_empty_range(TypeKind::Integer));
+        hmap.insert("f32".to_owned(), Type::new_empty_range(TypeKind::Double));
 
         TypeChecker {
             locals: vec![],
@@ -410,6 +415,7 @@ impl TypeChecker {
                 }
             }
             ExpressionKind::Integer { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Integer)),
+            ExpressionKind::Double { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Double)),
             ExpressionKind::Str { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Str)),
             ExpressionKind::True { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
             ExpressionKind::False { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
@@ -566,7 +572,6 @@ impl TypeChecker {
                     })
                 }
             }
-            _ => unimplemented!(),
         }
     }
 
