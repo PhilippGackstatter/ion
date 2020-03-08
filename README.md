@@ -4,91 +4,60 @@ A type-checked, interpreted programming language.
 
 ## Example
 
-A classic fibonacci example.
+An object-oriented example with vectors.
 
-Run this using `cargo run --bin file -- examples/fibonacci.io`
+Run this using `cargo run --bin file -- examples/struct_vector.io`
 
 ```
-// Prints the fibonacci numbers until `up_to`
-// and returns the last one that was calculated
-fn fibonacci(up_to: i32) -> i32 {
+// Declaring a new type called Vector
+struct Vector {
+    x: i32,
+    y: i32,
+    z: i32,
+}
 
-    var fib1 = 0;
-    var fib2 = 1;
-
-    var next = 0;
-
-    while(next <= up_to) {
-
-        print next;
-
-        fib1 = fib2;
-        fib2 = next;
-        next = fib1 + fib2;
-
+// Add methods to the previously defined type
+impl Vector {
+    // Define a method dot_product
+    // It has access to the instance it's called on through "self"
+    fn dot_product(other: Vector) -> i32 {
+        return self.x * other.x + self.y * other.y + self.z * other.z;
     }
-
-    return next;
-
 }
 
-// The type of `last` can be inferred from the function signature
-var last = fibonacci(100);
-print last;
-```
+// Create an instance of the type by providing initial values for all of its fields
+// Since the type of the variable can be inferred, we don't need to annotate the type
+var z_unit_vector = Vector {
+    x: 0,
+    y: 0,
+    z: 1,
+};
 
-This program would print `0 1 1 2 3 5 8 13 21 34 55 89 144` (separated by newlines).
+var y_unit_vector = Vector {
+    x: 0,
+    y: 1,
+    z: 0,
+};
 
-Types of constants and of function return values can be inferred, which leads to variable declarations without explicit type annotations.
-
-Since it is type checked at compile time, calling `fibonacci("100")` would error with
-
-```
-20: fibonacci("100");
-              ^^^^^ Function parameters have incompatible type. Expected: i32, Supplied: str.
-```
-
-Another Example with Structs.
-
-```
-struct Dog {
-    name: str,
-    age: i32,
+if (z_unit_vector.dot_product(y_unit_vector) == 0) {
+    print "Vectors are orthogonal!";
+} else {
+    print "Vectors are not orthogonal!";
 }
-
-struct Owner {
-    name: str,
-    dog: Dog,
-}
-
-fn execute() {
-    var owner = Owner {
-        name: "John",
-        dog: Dog {
-            name: "Nemo",
-            age: 2,
-        },
-    };
-
-    owner.dog.name = "Finding me, is finding ...";
-
-    print owner.name;
-    print owner.dog.name;
-}
-
-execute();
 ```
 
-That would print
+If we run this, it prints `Vectors are orthogonal!`.
+
+Since it is type checked at compile time, changing the `0` to a `"0"` results in:
 
 ```
-John
-Finding me, is finding ...
+25: if (z_unit_vector.dot_product(y_unit_vector) == "0") {
+                                                 ^^ Types i32 and str are not compatible in binary operation
 ```
 
 ## Run
 
-All you need is `cargo` & `rustc`. Written with `rustc 1.37.0`, but should work with much earlier versions as well.
+All you need is `cargo` & `rustc` by installing it from [rustup.rs](https://rustup.rs/).
 
 Pass the `--help` option to see the options.
 
@@ -119,12 +88,6 @@ Run sample scripts
 
 ```sh
 cargo run --bin file -- examples/function.io
-```
-
-or run an interactive REPL
-
-```sh
-cargo run --bin repl
 ```
 
 ## Architecture
