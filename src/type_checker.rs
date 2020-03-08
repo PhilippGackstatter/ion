@@ -1,22 +1,27 @@
 use crate::types::{
     CompileError, Declaration, Expression, ExpressionKind, Program, Statement, Token, TokenKind,
 };
+use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::convert::TryInto;
 use std::ops::Range;
+use std::rc::{Rc, Weak};
+
+type RcTypeKind = Rc<RefCell<TypeKind>>;
+type WeakTypeKind = Weak<RefCell<TypeKind>>;
 
 #[derive(Debug, Clone)]
 struct Type {
     pub token_range: Range<usize>,
-    pub kind: TypeKind,
+    pub kind: RcTypeKind,
 }
 
 impl Type {
-    fn new(token_range: Range<usize>, kind: TypeKind) -> Self {
+    fn new(token_range: Range<usize>, kind: RcTypeKind) -> Self {
         Type { token_range, kind }
     }
 
-    fn new_empty_range(kind: TypeKind) -> Self {
+    fn new_empty_range(kind: RcTypeKind) -> Self {
         Type {
             token_range: 0..0,
             kind,
@@ -31,13 +36,7 @@ enum TypeKind {
     Str,
     Bool,
     Void,
-    Func {
-        name: String,
-        params: Vec<Type>,
-        result: Option<Box<Type>>,
-    },
-    // TODO: Wrap Struct in a Rc<RefCell> so that forward declarations are no longer necessary
-    // and impl blocks can occur after a declared usage of the impl'ed struct
+    Func(Function),
     Struct(Struct),
 }
 
@@ -47,9 +46,9 @@ impl PartialEq for Type {
     }
 }
 
-impl std::fmt::Display for Type {
+impl std::fmt::Display for TypeKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.kind {
+        match self {
             TypeKind::Integer => write!(f, "i32"),
             TypeKind::Double => write!(f, "f32"),
             TypeKind::Str => write!(f, "str"),
@@ -59,31 +58,32 @@ impl std::fmt::Display for Type {
                 write!(f, "{}", strct.name)?;
                 write!(f, "(")?;
                 for field in strct.fields.iter() {
-                    write!(f, "{}: {}, ", field.0, field.1)?;
+                    write!(f, "{}: {}, ", field.0, field.1.upgrade().unwrap().borrow())?;
                 }
                 write!(f, ")")
             }
-            TypeKind::Func {
-                name,
-                params,
-                result,
-                ..
-            } => {
-                write!(f, "{} (", name)?;
-                for param in params.iter() {
-                    write!(f, "{}, ", param)?;
+            TypeKind::Func(function) => {
+                write!(f, "{} (", function.name)?;
+                for param in function.params.iter() {
+                    write!(f, "{}, ", param.upgrade().unwrap().borrow())?;
                 }
                 write!(
                     f,
                     ") -> {}",
-                    if let Some(ret_ty) = &result {
-                        format!("{}", ret_ty)
+                    if let Some(ret_ty) = &function.result {
+                        format!("{}", ret_ty.upgrade().unwrap().borrow())
                     } else {
                         "void".into()
                     }
                 )
             }
         }
+    }
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", *self.kind.borrow())
     }
 }
 
@@ -104,29 +104,80 @@ impl Variable {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 struct Struct {
     pub name: String,
-    fields: Vec<(String, Type)>,
+    fields: Vec<(String, WeakTypeKind)>,
     number_of_fields: usize,
+}
+
+impl PartialEq for Struct {
+    fn eq(&self, other: &Self) -> bool {
+        let mut result = self.name == other.name && self.fields.len() == other.fields.len();
+
+        if !result {
+            return false;
+        };
+
+        for i in 0..self.fields.len() {
+            result = result && self.fields[i].0 == other.fields[i].0;
+            result = result && self.fields[i].1.ptr_eq(&other.fields[i].1);
+        }
+
+        result
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Function {
+    name: String,
+    params: Vec<WeakTypeKind>,
+    result: Option<WeakTypeKind>,
+}
+
+impl PartialEq for Function {
+    fn eq(&self, other: &Self) -> bool {
+        let mut eq_result = self.name == other.name && self.params.len() == other.params.len();
+
+        if !eq_result {
+            return false;
+        };
+
+        for i in 0..self.params.len() {
+            eq_result = eq_result && self.params[i].ptr_eq(&other.params[i]);
+        }
+
+        eq_result = eq_result
+            && match (&self.result, &other.result) {
+                (Some(ty), Some(other_ty)) => ty.ptr_eq(&other_ty),
+                (None, None) => true,
+                _ => false,
+            };
+
+        eq_result
+    }
 }
 
 pub struct TypeChecker {
     locals: Vec<Variable>,
     scope_depth: u8,
 
-    symbol_table: HashMap<String, Type>,
+    symbol_table: HashMap<String, RcTypeKind>,
+}
+
+fn wrap_typekind(kind: TypeKind) -> RcTypeKind {
+    Rc::new(RefCell::new(kind))
 }
 
 impl TypeChecker {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        let mut hmap: HashMap<String, Type> = HashMap::new();
+        let mut hmap: HashMap<String, RcTypeKind> = HashMap::new();
 
-        hmap.insert("str".to_owned(), Type::new_empty_range(TypeKind::Str));
-        hmap.insert("bool".to_owned(), Type::new_empty_range(TypeKind::Bool));
-        hmap.insert("i32".to_owned(), Type::new_empty_range(TypeKind::Integer));
-        hmap.insert("f32".to_owned(), Type::new_empty_range(TypeKind::Double));
+        hmap.insert("str".to_owned(), wrap_typekind(TypeKind::Str));
+        hmap.insert("bool".to_owned(), wrap_typekind(TypeKind::Bool));
+        hmap.insert("i32".to_owned(), wrap_typekind(TypeKind::Integer));
+        hmap.insert("f32".to_owned(), wrap_typekind(TypeKind::Double));
 
         TypeChecker {
             locals: vec![],
@@ -148,10 +199,9 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn add_symbol(&mut self, name: &str, ty: Type) -> Result<(), CompileError> {
+    fn add_symbol(&mut self, name: &str, ty: Type) -> Result<&RcTypeKind, CompileError> {
         if let entry @ Entry::Vacant(_) = self.symbol_table.entry(name.into()) {
-            entry.or_insert(ty);
-            Ok(())
+            Ok(entry.or_insert(ty.kind))
         } else {
             Err(CompileError {
                 token_range: ty.token_range.clone(),
@@ -171,17 +221,18 @@ impl TypeChecker {
             Declaration::StructDecl(name, token_fields) => {
                 let mut fields = Vec::new();
                 for (name, ty) in token_fields {
-                    fields.push((name.get_id(), self.lookup_type(ty)?));
+                    let type_ref = Rc::downgrade(&self.lookup_type_ref(ty)?);
+                    fields.push((name.get_id(), type_ref));
                 }
 
                 let number_of_fields = fields.len();
                 let st = Type::new(
                     name.clone().into(),
-                    TypeKind::Struct(Struct {
+                    wrap_typekind(TypeKind::Struct(Struct {
                         name: name.get_id(),
                         fields,
                         number_of_fields,
-                    }),
+                    })),
                 );
                 self.add_symbol(&name.get_id(), st)?;
             }
@@ -193,7 +244,10 @@ impl TypeChecker {
                     if let Declaration::FnDecl(name, params_tokens, return_token, body) = method {
                         let fn_type =
                             self.generate_function_type(name, params_tokens, return_token, body)?;
-                        self.add_struct_method(struct_name, name, fn_type)?;
+                        let struct_method_name = struct_name.get_id() + name;
+                        let fn_type_ref =
+                            Rc::downgrade(self.add_symbol(&struct_method_name, fn_type)?);
+                        self.add_struct_method(struct_name, name, fn_type_ref)?;
                     }
                 }
             }
@@ -204,11 +258,14 @@ impl TypeChecker {
     }
 
     fn lookup_type(&self, token: &Token) -> Result<Type, CompileError> {
+        let type_ref = self.lookup_type_ref(token)?;
+        Ok(Type::new(token.clone().into(), type_ref))
+    }
+
+    fn lookup_type_ref(&self, token: &Token) -> Result<RcTypeKind, CompileError> {
         let type_name = token.get_id();
         if let Some(symbol) = self.symbol_table.get(&type_name) {
-            let mut ty = symbol.clone();
-            ty.token_range = token.clone().into();
-            Ok(ty)
+            Ok(Rc::clone(symbol))
         } else {
             Err(CompileError {
                 token_range: token.clone().into(),
@@ -221,11 +278,11 @@ impl TypeChecker {
         &mut self,
         struct_name: &Token,
         method_name: &str,
-        method_ty: Type,
+        method_ty: WeakTypeKind,
     ) -> Result<(), CompileError> {
         let type_name = struct_name.get_id();
         if let Some(symbol) = self.symbol_table.get_mut(&type_name) {
-            if let TypeKind::Struct(strct) = &mut symbol.kind {
+            if let TypeKind::Struct(strct) = &mut *symbol.borrow_mut() {
                 strct.fields.push((method_name.to_owned(), method_ty));
                 Ok(())
             } else {
@@ -313,12 +370,12 @@ impl TypeChecker {
                     let expr_type = self.check_expr(expr)?;
                     Ok(vec![expr_type])
                 } else {
-                    Ok(vec![Type::new_empty_range(TypeKind::Void)])
+                    Ok(vec![Type::new_empty_range(wrap_typekind(TypeKind::Void))])
                 }
             }
             Statement::If(condition, if_branch, else_branch_opt) => {
                 let cond_type = self.check_expr(condition)?;
-                if cond_type.kind != TypeKind::Bool {
+                if *cond_type.kind.borrow() != TypeKind::Bool {
                     return Err(CompileError {
                         token_range: condition.tokens.clone(),
                         message: format!("Condition must be of type bool, got {}", cond_type),
@@ -335,7 +392,7 @@ impl TypeChecker {
             }
             Statement::While(condition, body) => {
                 let cond_type = self.check_expr(condition)?;
-                if cond_type.kind != TypeKind::Bool {
+                if *cond_type.kind.borrow() != TypeKind::Bool {
                     return Err(CompileError {
                         token_range: condition.tokens.clone(),
                         message: format!("Condition must be of type bool, got {}", cond_type),
@@ -368,7 +425,10 @@ impl TypeChecker {
                     ]
                     .contains(&op_token.kind)
                     {
-                        Ok(Type::new(expr.tokens.clone(), TypeKind::Bool))
+                        Ok(Type::new(
+                            expr.tokens.clone(),
+                            wrap_typekind(TypeKind::Bool),
+                        ))
                     } else {
                         Ok(Type::new(expr.tokens.clone(), rtype.kind))
                     }
@@ -386,8 +446,11 @@ impl TypeChecker {
                 let expr_type = self.check_expr(&rexpr)?;
                 match op.kind {
                     TokenKind::Bang => {
-                        if expr_type.kind == TypeKind::Bool {
-                            Ok(Type::new(expr_type.token_range.clone(), TypeKind::Bool))
+                        if *expr_type.kind.borrow() == TypeKind::Bool {
+                            Ok(Type::new(
+                                expr_type.token_range.clone(),
+                                wrap_typekind(TypeKind::Bool),
+                            ))
                         } else {
                             Err(CompileError {
                                 token_range: rexpr.tokens.clone(),
@@ -399,8 +462,11 @@ impl TypeChecker {
                         }
                     }
                     TokenKind::Minus => {
-                        if expr_type.kind == TypeKind::Integer {
-                            Ok(Type::new(expr_type.token_range.clone(), TypeKind::Integer))
+                        if *expr_type.kind.borrow() == TypeKind::Integer {
+                            Ok(Type::new(
+                                expr_type.token_range.clone(),
+                                wrap_typekind(TypeKind::Integer),
+                            ))
                         } else {
                             Err(CompileError {
                                 token_range: expr_type.token_range.clone(),
@@ -414,11 +480,25 @@ impl TypeChecker {
                     _ => unimplemented!(),
                 }
             }
-            ExpressionKind::Integer { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Integer)),
-            ExpressionKind::Double { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Double)),
-            ExpressionKind::Str { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Str)),
-            ExpressionKind::True { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
-            ExpressionKind::False { .. } => Ok(Type::new(expr.tokens.clone(), TypeKind::Bool)),
+            ExpressionKind::Integer { .. } => Ok(Type::new(
+                expr.tokens.clone(),
+                wrap_typekind(TypeKind::Integer),
+            )),
+            ExpressionKind::Double { .. } => Ok(Type::new(
+                expr.tokens.clone(),
+                wrap_typekind(TypeKind::Double),
+            )),
+            ExpressionKind::Str { .. } => {
+                Ok(Type::new(expr.tokens.clone(), wrap_typekind(TypeKind::Str)))
+            }
+            ExpressionKind::True { .. } => Ok(Type::new(
+                expr.tokens.clone(),
+                wrap_typekind(TypeKind::Bool),
+            )),
+            ExpressionKind::False { .. } => Ok(Type::new(
+                expr.tokens.clone(),
+                wrap_typekind(TypeKind::Bool),
+            )),
             ExpressionKind::Assign { target, value } => {
                 let value_type = self.check_expr(&value)?;
                 let target_type = self.check_expr(target)?;
@@ -438,7 +518,7 @@ impl TypeChecker {
                 if let Some(index) = self.find_local_variable(&id) {
                     Ok(self.locals[index as usize].dtype.clone())
                 } else if let Some(ty) = self.symbol_table.get(id) {
-                    Ok(ty.clone())
+                    Ok(Type::new_empty_range(ty.clone()))
                 } else {
                     Err(CompileError {
                         token_range: expr.tokens.clone(),
@@ -451,22 +531,24 @@ impl TypeChecker {
             }
             ExpressionKind::Call(callee, params) => {
                 let callee_type = self.check_expr(&callee)?;
-                if let TypeKind::Func {
-                    params: declared_params,
-                    result,
-                    ..
-                } = callee_type.kind
-                {
-                    for (index, param) in declared_params.iter().enumerate() {
+                let callee_type_kind = &*callee_type.kind.borrow();
+
+                if let TypeKind::Func(function) = callee_type_kind {
+                    for (index, param) in function.params.iter().enumerate() {
                         if let Some(call_param) = params.get(index) {
                             let call_param_type = self.check_expr(call_param)?;
-                            if *param != call_param_type {
+
+                            let expected_param_typekind = param.upgrade().unwrap();
+                            let expected_param_typekind = &*expected_param_typekind.borrow();
+                            let call_param_typekind = &*call_param_type.kind.borrow();
+
+                            if expected_param_typekind != call_param_typekind {
                                 return Err(CompileError {
                                     token_range: call_param_type.token_range.clone(),
                                     message: format!(
                                         "Function parameters have incompatible type. Expected: {}, Supplied: {}.",
-                                        param,
-                                        call_param_type
+                                        expected_param_typekind,
+                                        call_param_typekind
                                     ),
                                 });
                             }
@@ -475,17 +557,17 @@ impl TypeChecker {
                                 token_range: callee_type.token_range.clone(),
                                 message: format!(
                                     "Function needs {} parameters, but only {} were supplied.",
-                                    declared_params.len(),
+                                    function.params.len(),
                                     params.len()
                                 ),
                             });
                         }
                     }
 
-                    Ok(if let Some(res) = &result {
-                        res.as_ref().clone()
+                    Ok(if let Some(res) = &function.result {
+                        Type::new_empty_range(res.upgrade().unwrap().clone())
                     } else {
-                        Type::new_empty_range(TypeKind::Void)
+                        Type::new_empty_range(wrap_typekind(TypeKind::Void))
                     })
                 } else {
                     Err(CompileError {
@@ -498,17 +580,18 @@ impl TypeChecker {
                 let lookup_token =
                     Token::from_range(&expr.tokens, TokenKind::IdToken(name.get_id()));
                 let struct_type = self.lookup_type(&lookup_token)?;
-                if let TypeKind::Struct(declared_struct) = &struct_type.kind {
+
+                if let TypeKind::Struct(declared_struct) = &*struct_type.kind.borrow() {
                     let declared_field_number = declared_struct.number_of_fields;
                     let given_field_number = values.len();
                     if declared_field_number != given_field_number {
-                        Err(CompileError {
+                        return Err(CompileError {
                             token_range: expr.tokens.clone(),
                             message: format!(
                                 "Expected {} fields, but {} were given.",
                                 declared_field_number, given_field_number
                             ),
-                        })
+                        });
                     } else {
                         #[allow(clippy::needless_range_loop)]
                         for i in 0..declared_field_number {
@@ -529,7 +612,10 @@ impl TypeChecker {
                             }
 
                             let given_type = self.check_expr(given_type)?;
-                            if *declared_type != given_type {
+                            let rc_declared_type = declared_type.upgrade().unwrap();
+                            let declared_type = &*rc_declared_type.borrow();
+
+                            if declared_type != &*given_type.kind.borrow() {
                                 return Err(CompileError {
                                     token_range: given_type.token_range.clone(),
                                     message: format!(
@@ -539,20 +625,20 @@ impl TypeChecker {
                                 });
                             }
                         }
-
-                        Ok(struct_type)
                     }
                 } else {
-                    Err(CompileError {
+                    return Err(CompileError {
                         token_range: expr.tokens.clone(),
                         message: "Cannot instantiate anything other than a struct".to_owned(),
-                    })
+                    });
                 }
+                Ok(struct_type)
             }
             ExpressionKind::Access { expr, name } => {
                 let expr_type = self.check_expr(expr)?;
+                let expr_type_kind = &*expr_type.kind.borrow();
 
-                if let TypeKind::Struct(strct) = &expr_type.kind {
+                if let TypeKind::Struct(strct) = expr_type_kind {
                     let field_type = strct.fields.iter().find(|elem| elem.0 == name.get_id());
 
                     let field_type = field_type.ok_or_else(|| CompileError {
@@ -564,7 +650,9 @@ impl TypeChecker {
                         ),
                     })?;
 
-                    Ok(field_type.1.clone())
+                    Ok(Type::new_empty_range(
+                        field_type.1.upgrade().unwrap().clone(),
+                    ))
                 } else {
                     Err(CompileError {
                         token_range: expr.tokens.clone(),
@@ -605,10 +693,10 @@ impl TypeChecker {
         let declared_ret_type = if let Some(return_type) = return_token {
             self.lookup_type(return_type)?
         } else {
-            Type::new_empty_range(TypeKind::Void)
+            Type::new_empty_range(wrap_typekind(TypeKind::Void))
         };
 
-        if declared_ret_type.kind != TypeKind::Void && return_types.is_empty() {
+        if *declared_ret_type.kind.borrow() != TypeKind::Void && return_types.is_empty() {
             return Err(CompileError {
                 token_range: declared_ret_type.token_range.clone(),
                 message: format!("This function has to return a type {}.", declared_ret_type),
@@ -638,20 +726,22 @@ impl TypeChecker {
     ) -> Result<Type, CompileError> {
         let mut params = Vec::new();
         for (_, type_token) in params_tokens {
-            let ty = self.lookup_type(type_token)?;
+            let ty = Rc::downgrade(&self.lookup_type_ref(type_token)?);
             params.push(ty);
         }
         let result = if let Some(return_ty) = return_token {
-            Some(Box::new(self.lookup_type(return_ty)?))
+            Some(Rc::downgrade(&self.lookup_type_ref(return_ty)?))
         } else {
             None
         };
 
-        Ok(Type::new_empty_range(TypeKind::Func {
-            name: name.clone(),
-            params,
-            result,
-        }))
+        Ok(Type::new_empty_range(wrap_typekind(TypeKind::Func(
+            Function {
+                name: name.clone(),
+                params,
+                result,
+            },
+        ))))
     }
 
     // Local Variables
@@ -704,7 +794,7 @@ impl TypeChecker {
         println!("\nSymbol Table");
         println!("============");
         for (_name, symbol) in self.symbol_table.iter() {
-            println!("{}", symbol);
+            println!("{}", symbol.borrow());
         }
     }
 }
