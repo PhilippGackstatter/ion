@@ -14,15 +14,27 @@ impl Dog {
     }
 }
 
-fn main() {
-    var dog = Dog {
-        name: "Jonas",
-        age: 23,
-    };
-
-    dog.set_name("Johnny");
-
-    print dog.get_name();
+struct Human {
+    name: str,
+    pet: Dog,
 }
 
-main();
+impl Human {
+
+    fn pet_name() -> str {
+        return self.pet.get_name();
+    }
+
+}
+
+var human = Human {
+    name: "Johnny",
+    pet: Dog {
+        name: "Jonas",
+        age: 23,
+    },
+};
+
+human.pet.name = "Puppy";
+
+print human.pet_name();

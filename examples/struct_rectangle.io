@@ -3,8 +3,10 @@ struct Rectangle {
     height: i32,
 }
 
-fn area(rect: Rectangle) -> i32 {
-    return rect.width * rect.height;
+impl Rectangle {
+    fn area() -> i32 {
+        return self.width * self.height;
+    }
 }
 
 var rect = Rectangle {
@@ -12,4 +14,4 @@ var rect = Rectangle {
     height: 3,
 };
 
-print area(rect);
+print rect.area();
