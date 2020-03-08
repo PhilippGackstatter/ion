@@ -58,26 +58,34 @@ impl std::fmt::Display for TypeKind {
                 write!(f, "{}", strct.name)?;
                 write!(f, "(")?;
                 for field in strct.fields.iter() {
-                    write!(f, "{}: {}, ", field.0, field.1.upgrade().unwrap().borrow())?;
+                    write!(f, "{}: {}, ", field.0, fmt_typekind_exit(field.1.clone()))?;
                 }
                 write!(f, ")")
             }
             TypeKind::Func(function) => {
                 write!(f, "{} (", function.name)?;
                 for param in function.params.iter() {
-                    write!(f, "{}, ", param.upgrade().unwrap().borrow())?;
+                    write!(f, "{}, ", fmt_typekind_exit(param.clone()))?;
                 }
                 write!(
                     f,
                     ") -> {}",
                     if let Some(ret_ty) = &function.result {
-                        format!("{}", ret_ty.upgrade().unwrap().borrow())
+                        format!("{}", fmt_typekind_exit(ret_ty.clone()))
                     } else {
                         "void".into()
                     }
                 )
             }
         }
+    }
+}
+
+fn fmt_typekind_exit(ty: WeakTypeKind) -> String {
+    match &*ty.upgrade().unwrap().borrow() {
+        TypeKind::Func(func) => func.name.clone(),
+        TypeKind::Struct(struct_) => struct_.name.clone(),
+        other => format!("{}", other),
     }
 }
 
