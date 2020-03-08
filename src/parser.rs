@@ -40,6 +40,7 @@ impl<'a> Parser<'a> {
             VarToken => self.variable_declaration(),
             Fun => self.function_declaration(),
             StructToken => self.struct_declaration(),
+            ImplToken => self.impl_declaration(),
             _ => Ok(StatementDecl(self.statement()?)),
         }
     }
@@ -99,6 +100,32 @@ impl<'a> Parser<'a> {
         self.advance();
 
         Ok(StructDecl(name, fields))
+    }
+
+    fn impl_declaration(&mut self) -> DeclarationResult {
+        self.advance();
+
+        if !self.peek().is_id_token() {
+            return Err(self.error(
+                self.peek().clone().into(),
+                "Expected an identifier as struct name.",
+            ));
+        }
+        let name = self.advance().clone();
+
+        self.consume(LeftBrace, "Expected '{' after struct.")?;
+
+        let mut methods = Vec::new();
+
+        while self.peek().kind != RightBrace {
+            let fn_decl = self.function_declaration()?;
+            methods.push(fn_decl);
+        }
+
+        // Consume }
+        self.advance();
+
+        Ok(ImplDecl { struct_name: name, methods })
     }
 
     fn variable_declaration(&mut self) -> DeclarationResult {
@@ -446,6 +473,7 @@ impl<'a> Parser<'a> {
                         });
                     }
                 }
+                // TODO: Fix case when struct has size 0
                 let last_token_end = fields[fields.len() - 1].1.tokens.end;
                 expr = Expression::new(
                     expr.tokens.start..last_token_end,
@@ -894,6 +922,43 @@ mod tests {
         let second_call = Call(expr!(second_access), vec![]);
 
         let expected = VarDecl("chain_result".into(), dexpr!(second_call));
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_impl_block() {
+        let input = r#"
+            impl MyStruct {
+                fn print_something() {}
+                fn is_positive(arg1: int) -> bool {}
+            }
+        "#;
+
+        let parse_result = lex_and_parse(&input);
+
+        let expected = Declaration::ImplDecl {
+            struct_name: token!(IdToken("MyStruct".into())),
+            methods: vec![
+                FnDecl(
+                    "print_something".into(),
+                    vec![],
+                    None,
+                    Block(vec![StatementDecl(Ret(None))]),
+                ),
+                FnDecl(
+                    "is_positive".into(),
+                    vec![
+                        (
+                            token!(IdToken("arg1".into())),
+                            token!(IdToken("int".into())),
+                        )
+                    ],
+                    Some(token!(IdToken("bool".into()))),
+                    Block(vec![StatementDecl(Ret(None))]),
+                ),
+            ],
+        };
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }

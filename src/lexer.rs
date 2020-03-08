@@ -30,6 +30,7 @@ impl Lexer {
         keywords.insert("var".to_owned(), VarToken);
         keywords.insert("while".to_owned(), WhileToken);
         keywords.insert("struct".to_owned(), StructToken);
+        keywords.insert("impl".to_owned(), ImplToken);
 
         Lexer {
             tokens: vec![],

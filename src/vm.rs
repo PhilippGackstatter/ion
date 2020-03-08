@@ -2,7 +2,10 @@ use crate::types::{
     Bytecode::{self, *},
     Chunk, Object, Value,
 };
+use std::cell::RefCell;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 #[derive(Debug, Default)]
 pub struct VM {
@@ -49,22 +52,28 @@ impl VM {
                 }
                 OpDefineGlobal => {
                     let index = self.read_u16(chunk, &mut i);
-                    let assign = self.pop();
-                    if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
-                        self.globals.insert(str_.clone(), assign);
+                    let new_val = self.pop();
+                    if let Value::Obj(obj) = &chunk.constants[index as usize] {
+                        if let Object::StringObj(str_) = obj.borrow().clone() {
+                            self.globals.insert(str_, new_val);
+                        }
                     }
                 }
                 OpSetGlobal => {
                     let index = self.read_u16(chunk, &mut i);
                     let new_val = self.pop();
-                    if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
-                        self.globals.insert(str_.clone(), new_val);
+                    if let Value::Obj(obj) = &chunk.constants[index as usize] {
+                        if let Object::StringObj(str_) = obj.borrow().clone() {
+                            self.globals.insert(str_, new_val);
+                        }
                     }
                 }
                 OpGetGlobal => {
                     let index = self.read_u16(chunk, &mut i);
-                    if let Value::Obj(Object::StringObj(str_)) = &chunk.constants[index as usize] {
-                        self.push(self.globals.get(str_).unwrap().clone());
+                    if let Value::Obj(obj) = &chunk.constants[index as usize] {
+                        if let Object::StringObj(str_) = obj.borrow().clone() {
+                            self.push(self.globals.get(&str_).unwrap().clone());
+                        }
                     }
                 }
                 OpGetLocal => {
@@ -91,72 +100,151 @@ impl VM {
                 }
                 OpStructInit => {
                     let struct_length = self.read_u8(chunk, &mut i);
-                    let mut field_value_map = HashMap::new();
+                    let struct_name = self.pop().unwrap_string();
+
+                    // Use a copy of the struct prototype if it exists, otherwise use an empty hmap
+                    let mut field_value_map = if let Some(entry) = self.globals.get(&struct_name) {
+                        // If an entry exists it contains only functions.
+                        // If we simply clone the entry, the Rc<RefCell> will be cloned
+                        // but not the nested Function Objects.
+                        // Later, when we set the receiver, it will overwrite whatever other receiver
+                        // was in there before.
+                        // Consequently, each function must be deep-cloned.
+                        let mut fn_objs = HashMap::new();
+                        if let Value::Obj(obj) = entry {
+                            if let Object::StructObj { fields, .. } = unsafe { &*obj.as_ptr() } {
+                                for (key, val) in fields.iter() {
+                                    if let Value::Obj(inner_obj) = val {
+                                        let fn_obj = unsafe { &*inner_obj.as_ptr() }.clone();
+                                        fn_objs.insert(
+                                            key.clone(),
+                                            Value::Obj(Rc::new(RefCell::new(fn_obj))),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        fn_objs
+                    } else {
+                        HashMap::new()
+                    };
+
+                    let method_names: Vec<String> =
+                        field_value_map.keys().map(|k| k.to_owned()).collect();
+
                     for _ in 0..struct_length {
-                        let field_name = self.pop().unwrap_obj().unwrap_string();
+                        let field_name = self.pop().unwrap_string();
                         let field_value = self.pop();
                         field_value_map.insert(field_name, field_value);
                     }
 
-                    self.push(Value::Obj(Object::StructObj {
+                    let struct_obj = Rc::new(RefCell::new(Object::StructObj {
+                        name: struct_name,
                         fields: field_value_map,
                     }));
-                }
-                OpStructAccess => {
-                    let field_name = self.pop().unwrap_obj().unwrap_string();
-                    let fields = self.pop().unwrap_obj().unwrap_struct();
-                    self.push(fields.get(&field_name).unwrap().clone());
-                }
-                OpStructWrite => {
-                    let struct_stack_index = self.read_u8(chunk, &mut i) as usize;
-                    let write_depth = self.read_u8(chunk, &mut i) as usize;
 
-                    let mut field_names = Vec::with_capacity(write_depth as usize);
-
-                    for _ in 0..write_depth {
-                        field_names.push(self.pop().unwrap_obj().unwrap_string());
-                    }
-
-                    let new_field_value = self.pop();
-
-                    let struct_ = &mut self.stack[self.frame_pointer + struct_stack_index];
-                    let mut value_ptr = struct_ as *mut Value;
-
-                    for field_name in field_names {
-                        // Type Checker guarantees that every new field we lookup is a struct
-                        if let Value::Obj(Object::StructObj { fields }) = unsafe { &mut *value_ptr }
+                    for method in method_names {
+                        if let Object::StructObj { fields, .. } =
+                            unsafe { &mut *struct_obj.as_ptr() }
                         {
-                            match fields.get_mut(&field_name) {
-                                Some(value @ Value::Obj(_)) => {
-                                    value_ptr = value as *mut Value;
+                            fields.entry(method).and_modify(|e| {
+                                if let Value::Obj(obj) = e {
+                                    if let Object::FnObj { receiver, .. } =
+                                        unsafe { &mut *obj.as_ptr() }
+                                    {
+                                        *receiver = Some(Rc::clone(&struct_obj));
+                                    }
                                 }
-                                _ => panic!("Expected struct or field"),
-                            }
-                        } else {
-                            panic!("Expected struct");
+                            });
                         }
                     }
 
-                    // After the loop exits, value_ptr points at the innermost field
-                    // that we want to write the new value to
-                    unsafe {
-                        *value_ptr = new_field_value;
+                    self.push(Value::Obj(struct_obj));
+                }
+                OpStructGetField => {
+                    let field_name = self.pop().unwrap_string();
+                    let fields = self.pop().unwrap_struct();
+                    self.push(fields.get(&field_name).unwrap().clone());
+                }
+                OpStructSetField => {
+                    let field_name = self.pop().unwrap_string();
+                    let struct_ = self.pop();
+                    let new_value = self.pop();
+
+                    if let Value::Obj(obj) = struct_ {
+                        if let Object::StructObj { fields, .. } = unsafe { &mut *obj.as_ptr() } {
+                            *fields.get_mut(&field_name).unwrap() = new_value;
+                        }
+                    }
+                }
+                OpStructMethod => {
+                    let struct_name_index = self.read_u16(chunk, &mut i);
+                    let struct_name = chunk.constants[struct_name_index as usize]
+                        .clone()
+                        .unwrap_string();
+
+                    let method_name_index = self.read_u16(chunk, &mut i);
+                    let method_name = &chunk.constants[method_name_index as usize];
+
+                    let method = self.pop();
+
+                    let struct_entry = self.globals.entry(struct_name.clone());
+
+                    match struct_entry {
+                        Entry::Occupied(mut e) => {
+                            if let Value::Obj(obj) = e.get_mut() {
+                                if let Object::StructObj { fields, .. } =
+                                    unsafe { &mut *obj.as_ptr() }
+                                {
+                                    fields.insert(method_name.clone().unwrap_string(), method);
+                                } else {
+                                    panic!("Should not call OpStructMethod on a non-struct.")
+                                }
+                            } else {
+                                panic!("Should not call OpStructMethod on a non-object.")
+                            }
+                        }
+                        Entry::Vacant(e) => {
+                            let mut fields = HashMap::new();
+                            fields.insert(method_name.clone().unwrap_string(), method);
+
+                            let struct_obj = Rc::new(RefCell::new(Object::StructObj {
+                                name: struct_name,
+                                fields,
+                            }));
+                            e.insert(Value::Obj(struct_obj));
+                        }
                     }
                 }
                 OpCall => {
-                    if let Value::Obj(Object::FnObj(_name, chunk, arity)) = self.pop() {
-                        // Save the position of the current frame pointer
-                        let current_frame_pointer = self.frame_pointer;
+                    if let Value::Obj(ref mut obj) = self.pop() {
+                        if let Object::FnObj {
+                            chunk,
+                            arity,
+                            receiver,
+                            ..
+                        } = unsafe { &mut *obj.as_ptr() }
+                        {
+                            // Save the position of the current frame pointer
+                            let current_frame_pointer = self.frame_pointer;
 
-                        // The frame pointer points to the first parameter of the function on the stack
-                        self.frame_pointer = self.stack.len() - arity as usize;
+                            // The frame pointer points to the first parameter of the function on the stack
+                            self.frame_pointer = self.stack.len() - *arity as usize;
+                            if let Some(recv) = receiver {
+                                // If we have a method, then we have the additional argument self at local index 0
+                                self.frame_pointer -= 1;
+                                self.stack[self.frame_pointer] = Value::Obj(Rc::clone(recv));
+                            }
 
-                        self.interpet(&chunk);
+                            self.interpet(&chunk);
 
-                        // And restore it after the function returns
-                        self.frame_pointer = current_frame_pointer;
+                            // And restore it after the function returns
+                            self.frame_pointer = current_frame_pointer;
+                        } else {
+                            panic!("Expected a function object on the stack.");
+                        }
                     } else {
-                        panic!("Expected function object on the stack.");
+                        panic!("Expected an object on the stack.");
                     }
                 }
                 OpPrint => {
@@ -247,7 +335,7 @@ impl VM {
     fn apply_bool_op(&mut self, byte: Bytecode) {
         match byte {
             OpEqual => {
-                let res = self.pop().unwrap_bool() == self.pop().unwrap_bool();
+                let res = self.pop() == self.pop();
                 self.push(Value::Bool(res));
             }
             OpNot => {

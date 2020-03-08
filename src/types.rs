@@ -1,15 +1,42 @@
+use std::cell::RefCell;
+use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::fmt;
+use std::fmt::Debug;
 use std::ops::Range;
+use std::rc::Rc;
 
 pub type Program = Vec<Declaration>;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone)]
 pub enum Value {
     Bool(bool),
     Int(i32),
     Double(f32),
-    Obj(Object),
+    Obj(Rc<RefCell<Object>>),
+}
+
+impl Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            Value::Bool(boolean) => write!(f, "{:?}", boolean),
+            Value::Int(int) => write!(f, "{:?}", int),
+            Value::Double(double) => write!(f, "{:?}", double),
+            Value::Obj(obj) => write!(f, "{:?}", obj.borrow().clone()),
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Bool(lboolean), Value::Bool(rboolean)) => lboolean == rboolean,
+            (Value::Int(lint), Value::Int(rint)) => lint == rint,
+            (Value::Double(ldouble), Value::Double(rdouble)) => ldouble == rdouble,
+            (Value::Obj(lobj), Value::Obj(robj)) => lobj.borrow().clone() == robj.borrow().clone(),
+            (_, _) => false,
+        }
+    }
 }
 
 impl Value {
@@ -21,7 +48,7 @@ impl Value {
         }
     }
 
-    pub fn unwrap_obj(self) -> Object {
+    pub fn unwrap_obj(self) -> Rc<RefCell<Object>> {
         if let Value::Obj(obj) = self {
             obj
         } else {
@@ -44,13 +71,38 @@ impl Value {
             panic!("Expected f32.");
         }
     }
+
+    pub fn unwrap_string(self) -> String {
+        if let Object::StringObj(str_) = self.unwrap_obj().borrow().clone() {
+            str_
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    pub fn unwrap_struct(self) -> HashMap<String, Value> {
+        let obj = self.unwrap_obj().borrow().clone();
+        if let Object::StructObj { fields, .. } = obj {
+            fields
+        } else {
+            panic!("Expected struct, got {:?}", obj);
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     StringObj(String),
-    FnObj(String, Chunk, u8),
-    StructObj { fields: HashMap<String, Value> },
+    FnObj {
+        name: String,
+        receiver: Option<Rc<RefCell<Object>>>,
+        chunk: Chunk,
+        arity: u8,
+    },
+    StructObj {
+        name: String,
+        fields: HashMap<String, Value>,
+    },
 }
 
 impl Object {
@@ -63,7 +115,7 @@ impl Object {
     }
 
     pub fn unwrap_struct(self) -> HashMap<String, Value> {
-        if let Object::StructObj { fields } = self {
+        if let Object::StructObj { fields, .. } = self {
             fields
         } else {
             panic!("Expected struct obj.");
@@ -97,8 +149,9 @@ pub enum Bytecode {
     OpLoop,
     OpCall,
     OpStructInit,
-    OpStructAccess,
-    OpStructWrite,
+    OpStructGetField,
+    OpStructSetField,
+    OpStructMethod,
     OpPrint,
     OpReturn,
 }
@@ -228,6 +281,7 @@ pub enum TokenKind {
     VarToken,
     WhileToken,
     StructToken,
+    ImplToken,
     IdToken(String),
     PrintToken,
     IfToken,
@@ -248,6 +302,10 @@ pub enum Declaration {
     VarDecl(String, Expression),
     StructDecl(Token, Vec<(Token, Token)>),
     FnDecl(String, Vec<(Token, Token)>, Option<Token>, Statement),
+    ImplDecl {
+        struct_name: Token,
+        methods: Vec<Declaration>,
+    },
 }
 
 #[derive(PartialEq)]
@@ -326,7 +384,7 @@ impl fmt::Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Int(int) => write!(f, "{}", int),
             Value::Double(float) => write!(f, "{}", float),
-            Value::Obj(obj) => write!(f, "{}", obj),
+            Value::Obj(obj) => write!(f, "{}", obj.borrow().clone()),
         }
     }
 }
@@ -335,8 +393,19 @@ impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Object::StringObj(str_) => write!(f, "{}", str_),
-            Object::FnObj(name, _chunk, arity) => write!(f, "{} (args: {})", name, arity),
-            Object::StructObj { .. } => write!(f, "struct"),
+            Object::FnObj {
+                name,
+                arity,
+                receiver,
+                ..
+            } => {
+                if let Some(recv) = receiver {
+                    write!(f, "{} ({}) <{}>", name, arity, recv.borrow())
+                } else {
+                    write!(f, "{} ({})", name, arity)
+                }
+            }
+            Object::StructObj { name, .. } => write!(f, "{} {{}}", name),
         }
     }
 }
@@ -369,8 +438,8 @@ fn byte_to_opcode(
         let byte = unsafe { std::mem::transmute::<u8, Bytecode>(*byte_) };
         let res = match byte {
             OpPop | OpMul | OpAdd | OpDiv | OpSub | OpNot | OpEqual | OpNegate | OpGreater
-            | OpLess | OpGreaterEqual | OpLessEqual | OpPrint | OpStructAccess | OpCall
-            | OpStructWrite => format!("{:?}", byte),
+            | OpLess | OpGreaterEqual | OpLessEqual | OpPrint | OpStructGetField | OpCall
+            | OpStructSetField => format!("{:?}", byte),
             OpConstant => {
                 let index = read_u16(bytes);
                 format!("{:?} {}", byte, constants[index as usize])
@@ -410,6 +479,13 @@ fn byte_to_opcode(
             OpStructInit => {
                 let index = read_u8(bytes);
                 format!("{:?} of len {}", byte, index)
+            }
+            OpStructMethod => {
+                let index = read_u16(bytes);
+                let struct_name = &constants[index as usize];
+                let index = read_u16(bytes);
+                let method_name = &constants[index as usize];
+                format!("{:?} Add {} to {}", byte, method_name, struct_name)
             }
             OpReturn => {
                 let retvals = read_u8(bytes);

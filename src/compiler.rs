@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::convert::TryInto;
+use std::rc::Rc;
 
 use crate::types::{
     Bytecode, Chunk,
@@ -18,10 +20,11 @@ pub struct CompilerError {
     pub message: &'static str,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum FunctionType {
     Script,
     Function,
+    Method,
 }
 
 pub struct Compiler {
@@ -43,7 +46,11 @@ impl Compiler {
     pub fn new(fn_type: FunctionType) -> Self {
         Compiler {
             chunk: Chunk::new(),
-            locals: vec![],
+            locals: if fn_type == FunctionType::Method {
+                vec![("self".to_owned(), 1)]
+            } else {
+                vec![]
+            },
             scope_depth: if fn_type == FunctionType::Script {
                 0
             } else {
@@ -69,7 +76,7 @@ impl Compiler {
                 self.compile_expr(expr);
 
                 if self.scope_depth == 0 {
-                    let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                    let index = self.add_constant(make_string_value(id));
                     self.emit_op_byte(Bytecode::OpDefineGlobal);
                     self.emit_u16(index);
                 } else {
@@ -84,32 +91,37 @@ impl Compiler {
                 }
             }
             FnDecl(name, params, _, stmt) => {
-                let mut fn_compiler = Compiler::new(FunctionType::Function);
-
-                for param in params {
-                    fn_compiler.add_local(param.0.get_id().clone());
-                }
-
-                fn_compiler.compile_stmt(stmt);
-
-                // Provide the final parameter to OpReturn: number of arguments to pop
-                fn_compiler.emit_byte(fn_compiler.locals.len() as u8);
-
-                // Create the function object as constant, load it on the stack at runtime
-                let fn_obj = Object::FnObj(
-                    name.clone(),
-                    fn_compiler.chunk().clone(),
-                    params.len() as u8,
-                );
-                let index = self.add_constant(Value::Obj(fn_obj));
-
-                self.emit_op_byte(Bytecode::OpConstant);
-                self.emit_u16(index);
+                self.compile_fn_decl(name, params, stmt, FunctionType::Function);
 
                 // Declare the fn obj on the stack as a global variable associated with its name
-                let index_name = self.add_constant(Value::Obj(Object::StringObj(name.clone())));
+                let index_name = self.add_constant(make_string_value(name));
                 self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index_name);
+            }
+            // TODO: This should be compiled in a first pass, otherwise a StructInit that comes before an impl block in the source
+            // code, will be created without the methods from that later impl block!
+            ImplDecl {
+                struct_name,
+                methods,
+            } => {
+                for method in methods {
+                    if let FnDecl(name, params, _, stmt) = method {
+                        let method_name = name;
+
+                        // Puts the compiled Function Object on the stack
+                        self.compile_fn_decl(&method_name, params, stmt, FunctionType::Method);
+
+                        // Associate the Function Object with the method name on the struct
+                        self.emit_op_byte(Bytecode::OpStructMethod);
+
+                        let struct_name_index =
+                            self.add_constant(make_string_value(&struct_name.get_id()));
+                        self.emit_u16(struct_name_index);
+
+                        let method_name_index = self.add_constant(make_string_value(name));
+                        self.emit_u16(method_name_index);
+                    }
+                }
             }
             StructDecl(_, _) => (),
         }
@@ -181,6 +193,9 @@ impl Compiler {
                 self.unary_op(op);
             }
             Call(callee, params) => {
+                self.emit_op_byte(Bytecode::OpConstant);
+                let index = self.add_constant(make_string_value("<SELF>"));
+                self.emit_u16(index);
                 // Put the arguments on the stack, s.t. they're available as locals for the callee
                 for param in params {
                     self.compile_expr(param);
@@ -192,44 +207,26 @@ impl Compiler {
             }
             Assign { target, value } => {
                 self.compile_expr(value);
+
                 if let Identifier(ident) = &target.kind {
                     if let Some(index) = self.find_local_variable(ident) {
                         self.emit_op_byte(Bytecode::OpSetLocal);
                         self.emit_byte(index);
                     } else {
-                        let index = self
-                            .add_constant(Value::Obj(Object::StringObj(target.get_id().clone())));
-                        self.emit_op_byte(Bytecode::OpSetGlobal);
-                        self.emit_u16(index);
+                        panic!("No local variable with name {}", ident);
                     }
                 } else if let Access { expr, name } = &target.kind {
+                    self.compile_expr(expr);
 
-                    let mut field_names = vec![name];
-                    let mut expr_ptr = expr;
-
-                    while let Access { expr: nested_expr, name: nested_name } = &expr_ptr.kind {
-                        field_names.push(&nested_name);
-                        expr_ptr = nested_expr;
-                    }
-
-                    if let Some(index) = self.find_local_variable(&expr_ptr.get_id()) {
-                        let no_fields = field_names.len().try_into().unwrap();
-
-                        for field_name in field_names {
-                            let const_index =
-                            self.add_constant(Value::Obj(Object::StringObj(field_name.get_id().clone())));
-                            self.emit_op_byte(Bytecode::OpConstant);
-                            self.emit_u16(const_index);
-                        }
-
-                        self.emit_op_byte(Bytecode::OpStructWrite);
-                        self.emit_byte(index);
-                        self.emit_byte(no_fields);
+                    if let Identifier(ident) = &name.kind {
+                        let index = self.add_constant(make_string_value(ident));
+                        self.emit_op_byte(Bytecode::OpConstant);
+                        self.emit_u16(index);
                     } else {
-                        panic!("Expected to find local variable.");
+                        panic!("Expected property to be an identifier.");
                     }
-                } else {
-                    panic!("Unsupported target for assignment.");
+
+                    self.emit_op_byte(Bytecode::OpStructSetField);
                 }
             }
             Integer { int, .. } => {
@@ -243,7 +240,7 @@ impl Compiler {
                 self.emit_u16(index);
             }
             Str { string } => {
-                let index = self.add_constant(Value::Obj(Object::StringObj(string.clone())));
+                let index = self.add_constant(make_string_value(string));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
             }
@@ -262,19 +259,22 @@ impl Compiler {
                     self.emit_op_byte(Bytecode::OpGetLocal);
                     self.emit_byte(index);
                 } else {
-                    let index = self.add_constant(Value::Obj(Object::StringObj(id.clone())));
+                    let index = self.add_constant(make_string_value(id));
                     self.emit_op_byte(Bytecode::OpGetGlobal);
                     self.emit_u16(index);
                 }
             }
-            StructInit { values, .. } => {
+            StructInit { name, values } => {
                 for (field_name, field_value) in values.iter() {
                     self.compile_expr(field_value);
-                    let index =
-                        self.add_constant(Value::Obj(Object::StringObj(field_name.get_id())));
+                    let index = self.add_constant(make_string_value(&field_name.get_id()));
                     self.emit_op_byte(Bytecode::OpConstant);
                     self.emit_u16(index);
                 }
+
+                let index = self.add_constant(make_string_value(&name.get_id()));
+                self.emit_op_byte(Bytecode::OpConstant);
+                self.emit_u16(index);
 
                 self.emit_op_byte(Bytecode::OpStructInit);
                 self.emit_byte(values.len().try_into().unwrap());
@@ -282,11 +282,11 @@ impl Compiler {
             Access { expr, name } => {
                 self.compile_expr(expr);
 
-                let index = self.add_constant(Value::Obj(Object::StringObj(name.get_id())));
+                let index = self.add_constant(make_string_value(&name.get_id()));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
 
-                self.emit_op_byte(Bytecode::OpStructAccess);
+                self.emit_op_byte(Bytecode::OpStructGetField);
             }
         }
     }
@@ -341,6 +341,43 @@ impl Compiler {
             }
             _ => unreachable!(),
         }
+    }
+
+    fn compile_fn_decl(
+        &mut self,
+        name: &String,
+        params: &Vec<(Token, Token)>,
+        stmt: &Statement,
+        function_type: FunctionType,
+    ) {
+        let mut fn_compiler = Compiler::new(function_type.clone());
+
+        for param in params {
+            fn_compiler.add_local(param.0.get_id().clone());
+        }
+
+        fn_compiler.compile_stmt(stmt);
+
+        // Provide the final parameter to OpReturn: number of arguments to pop
+        let num_locals = if function_type == FunctionType::Function {
+            fn_compiler.locals.len() as u8 + 1
+        } else {
+            fn_compiler.locals.len() as u8
+        };
+
+        fn_compiler.emit_byte(num_locals);
+
+        // Create the function object as constant, load it on the stack at runtime
+        let fn_obj = Object::FnObj {
+            name: name.clone(),
+            receiver: None,
+            chunk: fn_compiler.chunk().clone(),
+            arity: params.len() as u8,
+        };
+        let index = self.add_constant(Value::Obj(Rc::new(RefCell::new(fn_obj))));
+
+        self.emit_op_byte(Bytecode::OpConstant);
+        self.emit_u16(index);
     }
 
     // Helpers
@@ -425,4 +462,8 @@ impl Compiler {
 
         self.scope_depth -= 1;
     }
+}
+
+fn make_string_value(str_: &str) -> Value {
+    Value::Obj(Rc::new(RefCell::new(Object::StringObj(str_.to_owned()))))
 }
