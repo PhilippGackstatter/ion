@@ -967,4 +967,14 @@ mod tests {
             .message
             .contains("Expression of type str can not be assigned to variable of type i32"));
     }
+
+    #[test]
+    fn test_struct_access_impl() {
+        let res = lex_parse_check("struct_impl.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("Type NumWrap not declared in this scope."));
+    }
 }
