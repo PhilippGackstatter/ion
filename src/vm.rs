@@ -112,10 +112,10 @@ impl VM {
                         // Consequently, each function must be deep-cloned.
                         let mut fn_objs = HashMap::new();
                         if let Value::Obj(obj) = entry {
-                            if let Object::StructObj { fields, .. } = unsafe { &*obj.as_ptr() } {
+                            if let Object::StructObj { fields, .. } = &mut *obj.borrow_mut() {
                                 for (key, val) in fields.iter() {
                                     if let Value::Obj(inner_obj) = val {
-                                        let fn_obj = unsafe { &*inner_obj.as_ptr() }.clone();
+                                        let fn_obj = (&mut *inner_obj.borrow_mut()).clone();
                                         fn_objs.insert(
                                             key.clone(),
                                             Value::Obj(Rc::new(RefCell::new(fn_obj))),
@@ -144,14 +144,10 @@ impl VM {
                     }));
 
                     for method in method_names {
-                        if let Object::StructObj { fields, .. } =
-                            unsafe { &mut *struct_obj.as_ptr() }
-                        {
+                        if let Object::StructObj { fields, .. } = &mut *struct_obj.borrow_mut() {
                             fields.entry(method).and_modify(|e| {
                                 if let Value::Obj(obj) = e {
-                                    if let Object::FnObj { receiver, .. } =
-                                        unsafe { &mut *obj.as_ptr() }
-                                    {
+                                    if let Object::FnObj { receiver, .. } = &mut *obj.borrow_mut() {
                                         *receiver = Some(Rc::clone(&struct_obj));
                                     }
                                 }
@@ -172,7 +168,7 @@ impl VM {
                     let new_value = self.pop();
 
                     if let Value::Obj(obj) = struct_ {
-                        if let Object::StructObj { fields, .. } = unsafe { &mut *obj.as_ptr() } {
+                        if let Object::StructObj { fields, .. } = &mut *obj.borrow_mut() {
                             *fields.get_mut(&field_name).unwrap() = new_value;
                         }
                     }
@@ -193,9 +189,7 @@ impl VM {
                     match struct_entry {
                         Entry::Occupied(mut e) => {
                             if let Value::Obj(obj) = e.get_mut() {
-                                if let Object::StructObj { fields, .. } =
-                                    unsafe { &mut *obj.as_ptr() }
-                                {
+                                if let Object::StructObj { fields, .. } = &mut *obj.borrow_mut() {
                                     fields.insert(method_name.clone().unwrap_string(), method);
                                 } else {
                                     panic!("Should not call OpStructMethod on a non-struct.")
@@ -223,7 +217,7 @@ impl VM {
                             arity,
                             receiver,
                             ..
-                        } = unsafe { &mut *obj.as_ptr() }
+                        } = &mut *obj.borrow_mut()
                         {
                             // Save the position of the current frame pointer
                             let current_frame_pointer = self.frame_pointer;
