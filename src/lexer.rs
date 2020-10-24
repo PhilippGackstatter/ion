@@ -9,6 +9,7 @@ pub struct Lexer {
     pub tokens: Vec<Token>,
     current: usize,
     keywords: HashMap<String, TokenKind>,
+    is_newline: bool,
 }
 
 impl Lexer {
@@ -36,6 +37,7 @@ impl Lexer {
             tokens: vec![],
             current: 0,
             keywords,
+            is_newline: true,
         }
     }
 
@@ -102,9 +104,13 @@ impl Lexer {
                 '"' => {
                     self.string(&mut chars);
                 }
+                '\n' => self.is_newline = true,
                 c => {
                     if c.is_whitespace() {
-                        continue;
+                        if !self.is_newline {
+                            continue;
+                        }
+                        self.whitespace(c, &mut chars);
                     } else if c.is_ascii_digit() {
                         self.number(c, &mut chars);
                     } else {
@@ -180,6 +186,21 @@ impl Lexer {
         }
     }
 
+    fn whitespace(&mut self, first: char, chars: &mut Peekable<CharIndices<'_>>) {
+        let mut whitespace_count = 1;
+
+        while let Some((_index, char_)) = chars.peek() {
+            // Assume responsible input for now...
+            if first == *char_ && (*char_ == ' ' || *char_ == '\t') {
+                whitespace_count += 1;
+                chars.next();
+            } else {
+                self.add_token(whitespace_count, WhiteSpace(whitespace_count));
+                break;
+            }
+        }
+    }
+
     // Check if the next character matches the given one, and consume if it does
     fn match_(&mut self, chars: &mut Peekable<CharIndices<'_>>, check: char) -> bool {
         if let Some((_, char_)) = chars.peek() {
@@ -192,6 +213,7 @@ impl Lexer {
     }
 
     fn add_token(&mut self, length: u8, kind: TokenKind) {
+        self.is_newline = false;
         self.tokens
             .push(Token::new(self.current as u32, length, kind));
     }
