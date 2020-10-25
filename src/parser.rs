@@ -18,6 +18,7 @@ type DeclarationResult = Result<Declaration, CompileError>;
 pub struct Parser<'a> {
     lexer: &'a Lexer,
     current: usize,
+    wstack: Vec<u8>,
 }
 
 impl<'a> Parser<'a> {
@@ -41,6 +42,14 @@ impl<'a> Parser<'a> {
             Fun => self.function_declaration(),
             StructToken => self.struct_declaration(),
             ImplToken => self.impl_declaration(),
+            WhiteSpace(_) => {
+                self.advance();
+                self.declaration()
+            }
+            NewLine => {
+                self.advance();
+                self.declaration()
+            }
             _ => Ok(StatementDecl(self.statement()?)),
         }
     }
@@ -56,48 +65,41 @@ impl<'a> Parser<'a> {
         }
         let name = self.advance().clone();
 
-        self.consume(LeftBrace, "Expected '{' after struct.")?;
         let mut fields = Vec::new();
 
-        while self.peek().kind != RightBrace {
-            if !self.peek().is_id_token() {
-                return Err(self.error(
-                    self.peek().clone().into(),
-                    "Expected an identifier as field name.",
-                ));
-            }
+        self.expect_newline()?;
 
-            let name_token = self.advance().clone();
+        if self.set_next_indentation()? {
+            while let WhiteSpace(_) = self.peek().kind {
+                self.expect_whitespace()?;
 
-            self.consume(Colon, "Expected ':' after name.")?;
-
-            if !self.peek().is_id_token() {
-                return Err(self.error(
-                    self.peek().clone().into(),
-                    "Expected a type identifier after field name.",
-                ));
-            }
-
-            let type_token = self.advance().clone();
-
-            if self.peek().kind != RightBrace {
-                if self.peek().kind == Comma {
-                    self.advance();
-                } else {
+                if !self.peek().is_id_token() {
                     return Err(self.error(
                         self.peek().clone().into(),
-                        "Expected a ',' inbetween fields.",
+                        "Expected an identifier as field name.",
                     ));
                 }
-            } else if self.peek().kind == Comma {
-                // Allow trailing comma
-                self.advance();
-            }
 
-            fields.push((name_token, type_token));
+                let name_token = self.advance().clone();
+
+                self.consume(Colon, "Expected ':' after name.")?;
+
+                if !self.peek().is_id_token() {
+                    return Err(self.error(
+                        self.peek().clone().into(),
+                        "Expected a type identifier after field name.",
+                    ));
+                }
+
+                let type_token = self.advance().clone();
+
+                fields.push((name_token, type_token));
+
+                self.expect_newline()?;
+            }
         }
-        // Consume }
-        self.advance();
+
+        self.pop_indentation();
 
         Ok(StructDecl(name, fields))
     }
@@ -125,7 +127,10 @@ impl<'a> Parser<'a> {
         // Consume }
         self.advance();
 
-        Ok(ImplDecl { struct_name: name, methods })
+        Ok(ImplDecl {
+            struct_name: name,
+            methods,
+        })
     }
 
     fn variable_declaration(&mut self) -> DeclarationResult {
@@ -578,6 +583,50 @@ impl<'a> Parser<'a> {
         self.lexer.tokens[self.current].clone().into()
     }
 
+    fn set_next_indentation(&mut self) -> Result<bool, CompileError> {
+        if let WhiteSpace(indent) = self.peek().kind {
+            if *self.wstack.last().unwrap() < indent {
+                self.wstack.push(indent);
+                Ok(true)
+            } else {
+                Err(self.error(self.peek().clone().into(), "Expected indentation"))
+            }
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn expect_whitespace(&mut self) -> Result<(), CompileError> {
+        if let WhiteSpace(indent) = self.peek().kind {
+            if !self.wstack.last().unwrap() == indent {
+                let err_msg = format!(
+                    "Expected indentation of {} but got {}",
+                    self.wstack.last().unwrap(),
+                    indent
+                );
+                Err(self.error(self.peek().clone().into(), &err_msg))
+            } else {
+                self.advance();
+                Ok(())
+            }
+        } else {
+            Err(self.error(self.peek().clone().into(), "Expected indentation"))
+        }
+    }
+
+    fn expect_newline(&mut self) -> Result<(), CompileError> {
+        match self.peek().kind {
+            EndOfFile => Ok(()),
+            _ => self.consume(NewLine, "Expected newline"),
+        }
+    }
+
+    fn pop_indentation(&mut self) {
+        if self.wstack.len() > 1 {
+            self.wstack.pop();
+        }
+    }
+
     // Errors
 
     fn consume(&mut self, token: TokenKind, error_msg: &'static str) -> Result<(), CompileError> {
@@ -589,7 +638,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn error(&self, token_range: Range<usize>, message: &'static str) -> CompileError {
+    fn error(&self, token_range: Range<usize>, message: &str) -> CompileError {
         CompileError {
             token_range,
             message: message.into(),
@@ -616,7 +665,11 @@ impl<'a> Parser<'a> {
     // Misc
 
     pub fn new(lexer: &'a Lexer) -> Self {
-        Parser { lexer, current: 0 }
+        Parser {
+            lexer,
+            current: 0,
+            wstack: vec![0],
+        }
     }
 }
 
@@ -728,7 +781,11 @@ mod tests {
 
     #[test]
     fn test_struct_decl() {
-        let input = "struct MyStruct { field1: str, field2: bool }";
+        let input = "
+        struct MyStruct
+            field1: str
+            field2: bool
+        ";
 
         let parse_result = lex_and_parse(&input);
 
@@ -745,6 +802,53 @@ mod tests {
                 ),
             ],
         );
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_struct_decl_whitespace() {
+        let input = "
+        struct MyStruct
+            // A comment
+            field1: str
+
+            // Another one!
+            field2: bool
+
+        ";
+
+        let parse_result = lex_and_parse(&input);
+
+        let expected = StructDecl(
+            token!(IdToken("MyStruct".into())),
+            vec![
+                (
+                    token!(IdToken("field1".into())),
+                    token!(IdToken("str".into())),
+                ),
+                (
+                    token!(IdToken("field2".into())),
+                    token!(IdToken("bool".into())),
+                ),
+            ],
+        );
+
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_struct_decl_no_fields() {
+        let input = "
+        // Various amount of whitespace
+        struct MyStruct
+            
+   
+        ";
+
+        let parse_result = lex_and_parse(&input);
+
+        let expected = StructDecl(token!(IdToken("MyStruct".into())), vec![]);
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
@@ -948,12 +1052,10 @@ mod tests {
                 ),
                 FnDecl(
                     "is_positive".into(),
-                    vec![
-                        (
-                            token!(IdToken("arg1".into())),
-                            token!(IdToken("int".into())),
-                        )
-                    ],
+                    vec![(
+                        token!(IdToken("arg1".into())),
+                        token!(IdToken("int".into())),
+                    )],
                     Some(token!(IdToken("bool".into()))),
                     Block(vec![StatementDecl(Ret(None))]),
                 ),

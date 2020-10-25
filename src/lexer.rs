@@ -104,13 +104,27 @@ impl Lexer {
                 '"' => {
                     self.string(&mut chars);
                 }
-                '\n' => self.is_newline = true,
+                '\n' => {
+                    if !self.is_newline {
+                        self.add_token(0, NewLine);
+                    }
+
+                    while self.match_(&mut chars, '\n') {}
+                    self.is_newline = true
+                }
                 c => {
                     if c.is_whitespace() {
                         if !self.is_newline {
                             continue;
                         }
-                        self.whitespace(c, &mut chars);
+
+                        let count = self.whitespace(c, &mut chars);
+
+                        // Only add whitespace if there is a useful token in this line
+                        // i.e. not newline or EOF
+                        if !self.match_(&mut chars, '\n') && chars.peek().is_some() {
+                            self.add_token(count, WhiteSpace(count));
+                        }
                     } else if c.is_ascii_digit() {
                         self.number(c, &mut chars);
                     } else {
@@ -186,19 +200,21 @@ impl Lexer {
         }
     }
 
-    fn whitespace(&mut self, first: char, chars: &mut Peekable<CharIndices<'_>>) {
+    // Parses whitespace (spaces or tabs) and returns the parsed number
+    // Does *not* add a token
+    fn whitespace(&mut self, first: char, chars: &mut Peekable<CharIndices<'_>>) -> u8 {
         let mut whitespace_count = 1;
 
         while let Some((_index, char_)) = chars.peek() {
-            // Assume responsible input for now...
+            // Assume responsible (non-mixed) input for now...
             if first == *char_ && (*char_ == ' ' || *char_ == '\t') {
                 whitespace_count += 1;
                 chars.next();
             } else {
-                self.add_token(whitespace_count, WhiteSpace(whitespace_count));
                 break;
             }
         }
+        whitespace_count
     }
 
     // Check if the next character matches the given one, and consume if it does
