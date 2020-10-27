@@ -69,6 +69,12 @@ impl<'a> Parser<'a> {
 
         self.expect_newline()?;
 
+        // This could easily be removed and handled in set_next_indentation if
+        // structs without fields wouldn't be allowed
+        if self.id_and_colon_tokens_follow() {
+            return Err(self.error(self.peek().clone().into(), "Expected fields to be indented"));
+        }
+
         if self.set_next_indentation()? {
             while let WhiteSpace(_) = self.peek().kind {
                 self.expect_whitespace()?;
@@ -97,9 +103,9 @@ impl<'a> Parser<'a> {
 
                 self.expect_newline()?;
             }
-        }
 
-        self.pop_indentation();
+            self.pop_indentation();
+        }
 
         Ok(StructDecl(name, fields))
     }
@@ -570,6 +576,14 @@ impl<'a> Parser<'a> {
         &self.lexer.tokens[self.current]
     }
 
+    fn peek_next(&self) -> Option<&Token> {
+        if self.current + 1 < self.lexer.tokens.len() {
+            Some(&self.lexer.tokens[self.current + 1])
+        } else {
+            None
+        }
+    }
+
     fn is_at_end(&self) -> bool {
         self.peek().kind == EndOfFile
     }
@@ -624,6 +638,18 @@ impl<'a> Parser<'a> {
     fn pop_indentation(&mut self) {
         if self.wstack.len() > 1 {
             self.wstack.pop();
+        }
+    }
+
+    fn id_and_colon_tokens_follow(&mut self) -> bool {
+        if let Some(token) = self.peek_next() {
+            if let Colon = token.kind {
+                self.peek().is_id_token()
+            } else {
+                false
+            }
+        } else {
+            false
         }
     }
 
@@ -702,10 +728,18 @@ mod tests {
     }
 
     fn lex_and_parse(input: &str) -> Program {
+        lex_and_parse_impl(input).unwrap()
+    }
+
+    fn lex_and_parse_err(input: &str) -> CompileError {
+        lex_and_parse_impl(input).unwrap_err()
+    }
+
+    fn lex_and_parse_impl(input: &str) -> Result<Program, CompileError> {
         let mut lexer = Lexer::new();
         lexer.lex(&input);
         let mut parser = Parser::new(&lexer);
-        parser.parse().unwrap()
+        parser.parse()
     }
 
     #[test]
@@ -851,6 +885,15 @@ mod tests {
         let expected = StructDecl(token!(IdToken("MyStruct".into())), vec![]);
 
         assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_struct_decl_missing_indentation_error() {
+        let input = "struct MyStruct\nfield: type";
+
+        let parse_err = lex_and_parse_err(&input);
+
+        assert_eq!(parse_err.message, "Expected fields to be indented");
     }
 
     #[test]
