@@ -39,7 +39,13 @@ impl<'a> Parser<'a> {
     fn declaration(&mut self) -> DeclarationResult {
         match &self.peek().kind {
             VarToken => self.variable_declaration(),
-            Fun => self.function_declaration(),
+            IdToken(_) => {
+                if self.is_function_declaration() {
+                    self.function_declaration()
+                } else {
+                    Ok(StatementDecl(self.statement()?))
+                }
+            }
             StructToken => self.struct_declaration(),
             ImplToken => self.impl_declaration(),
             WhiteSpace(_) => {
@@ -77,7 +83,7 @@ impl<'a> Parser<'a> {
 
         if self.set_next_indentation()? {
             while let WhiteSpace(_) = self.peek().kind {
-                self.expect_whitespace()?;
+                self.expect_indentation()?;
 
                 if !self.peek().is_id_token() {
                     return Err(self.error(
@@ -157,17 +163,36 @@ impl<'a> Parser<'a> {
         Ok(VarDecl(id.clone(), expr))
     }
 
-    fn function_declaration(&mut self) -> DeclarationResult {
-        self.advance();
+    fn is_function_declaration(&mut self) -> bool {
+        let current = self.current;
 
-        let id = if let IdToken(id_) = &self.advance().kind {
-            Ok(id_.clone())
-        } else {
-            Err(self.error(
-                self.peek().clone().into(),
-                "Expected an identifier after function declaration.",
-            ))
-        }?;
+        let mut is_fn_decl = false;
+
+        while self.peek().kind != EndOfFile {
+            match self.advance().kind {
+                NewLine => {
+                    if let WhiteSpace(indent) = self.peek().kind {
+                        if self.is_indented(indent) {
+                            is_fn_decl = true;
+                        }
+                    }
+                    break;
+                }
+
+                StructToken => break,
+                ImplToken => break,
+
+                _ => (),
+            }
+        }
+
+        self.current = current;
+
+        is_fn_decl
+    }
+
+    fn function_declaration(&mut self) -> DeclarationResult {
+        let id = self.advance().get_id();
 
         self.consume(LeftParen, "Expected '(' after function name.")?;
 
@@ -221,7 +246,6 @@ impl<'a> Parser<'a> {
                 decls.push(StatementDecl(Ret(None)));
             }
         }
-
         Ok(FnDecl(id, params, return_token, body))
     }
 
@@ -241,14 +265,15 @@ impl<'a> Parser<'a> {
     fn block(&mut self) -> StatementResult {
         self.advance();
         let mut decls = Vec::new();
-        let mut unexpected_eof = false;
+        let unexpected_eof = false;
 
-        while !self.match_(RightBrace) {
-            if self.is_at_end() {
-                unexpected_eof = true;
-                break;
+        if self.set_next_indentation()? {
+            while let WhiteSpace(_) = self.peek().kind {
+                self.expect_indentation()?;
+                decls.push(self.declaration()?);
             }
-            decls.push(self.declaration()?);
+
+            self.pop_indentation();
         }
 
         if unexpected_eof {
@@ -263,14 +288,14 @@ impl<'a> Parser<'a> {
 
     fn expression_statement(&mut self) -> StatementResult {
         let res = self.expression()?;
-        self.consume(Semicolon, "Expected ';' after expression.")?;
+        self.expect_newline()?;
         Ok(ExpressionStmt(res))
     }
 
     fn print_statement(&mut self) -> StatementResult {
         self.advance();
         let expr = self.expression()?;
-        self.consume(Semicolon, "Expected ';' after expression.")?;
+        self.expect_newline()?;
         Ok(Print(expr))
     }
 
@@ -280,7 +305,7 @@ impl<'a> Parser<'a> {
             Ok(Ret(None))
         } else {
             let expr = self.expression()?;
-            self.consume(Semicolon, "Expected ';' after return statement.")?;
+            self.expect_newline()?;
             Ok(Ret(Some(expr)))
         }
     }
@@ -610,7 +635,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect_whitespace(&mut self) -> Result<(), CompileError> {
+    fn expect_indentation(&mut self) -> Result<(), CompileError> {
         if let WhiteSpace(indent) = self.peek().kind {
             if !self.wstack.last().unwrap() == indent {
                 let err_msg = format!(
@@ -626,6 +651,10 @@ impl<'a> Parser<'a> {
         } else {
             Err(self.error(self.peek().clone().into(), "Expected indentation"))
         }
+    }
+
+    fn is_indented(&self, indent: u8) -> bool {
+        *self.wstack.last().unwrap() < indent
     }
 
     fn expect_newline(&mut self) -> Result<(), CompileError> {
