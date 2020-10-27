@@ -917,6 +917,40 @@ mod tests {
     }
 
     #[test]
+    fn test_fn_decl() {
+        let input = "
+foo(arg: i32) -> i32
+    bar()
+    x = 10 / 2
+    print 3
+    return 5";
+
+        let parse_result = lex_and_parse(&input);
+
+        let bar_call = Call(expr!(Identifier("bar".into())), vec![]);
+
+        let expected = FnDecl(
+            "foo".into(),
+            vec![(token!(IdToken("arg".into())), token!(IdToken("i32".into())))],
+            Some(token!(IdToken("i32".into()))),
+            Block(vec![
+                StatementDecl(ExpressionStmt(dexpr!(bar_call))),
+                StatementDecl(ExpressionStmt(Expression::new_debug(Assign {
+                    target: expr!(Identifier("x".into())),
+                    value: expr!(Binary(
+                        expr!(Integer { int: 10 }),
+                        token!(Slash),
+                        expr!(Integer { int: 2 }),
+                    )),
+                }))),
+                StatementDecl(Print(Expression::new_debug(Integer { int: 3 }))),
+                StatementDecl(Ret(Some(dexpr!(Integer { int: 5 })))),
+            ]),
+        );
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
     fn test_struct_decl_missing_indentation_error() {
         let input = "struct MyStruct\nfield: type";
 
