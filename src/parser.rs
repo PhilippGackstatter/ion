@@ -1083,26 +1083,8 @@ foo(arg: i32) -> i32
     }
 
     #[test]
-    fn test_block() {
-        let input = "{
-            struct _MyStruct {}
-            print 5;
-        }";
-        let parse_result = lex_and_parse(&input);
-
-        let expected = StatementDecl(Block(vec![
-            StructDecl(token!(IdToken("_MyStruct".into())), vec![]),
-            StatementDecl(Print(Expression::new_debug(Integer { int: 5 }))),
-        ]));
-
-        assert_eq!(*parse_result.first().unwrap(), expected)
-    }
-
-    #[test]
     fn test_var_decl() {
-        let input = r#"
-            var magic_number = "37";
-        "#;
+        let input = r#"var magic_number = "37""#;
         let parse_result = lex_and_parse(&input);
 
         let expected = VarDecl(
@@ -1118,10 +1100,10 @@ foo(arg: i32) -> i32
     #[test]
     fn test_struct_instantiation() {
         let input = r#"
-            var my_struct = MyStruct {
-                field1: 1 + 3,
-                field2: "strings", // trailing comma required atm
-            };
+var my_struct = MyStruct {
+    field1: 1 + 3,
+    field2: "strings", // trailing comma required atm
+}
         "#;
 
         let parse_result = lex_and_parse(&input);
@@ -1153,9 +1135,7 @@ foo(arg: i32) -> i32
 
     #[test]
     fn test_access() {
-        let input = r#"
-            var chain_result = my_struct.method().chain();
-        "#;
+        let input = "var chain_result = my_struct.method().chain()";
 
         let parse_result = lex_and_parse(&input);
 
