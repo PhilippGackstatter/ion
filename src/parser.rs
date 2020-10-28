@@ -48,10 +48,7 @@ impl<'a> Parser<'a> {
             }
             StructToken => self.struct_declaration(),
             ImplToken => self.impl_declaration(),
-            WhiteSpace(_) => {
-                self.advance();
-                self.declaration()
-            }
+            WhiteSpace(_) => Err(self.error(self.peek().clone().into(), "Unexpected whitespace")),
             NewLine => {
                 self.advance();
                 self.declaration()
@@ -848,9 +845,9 @@ mod tests {
     #[test]
     fn test_struct_decl() {
         let input = "
-        struct MyStruct
-            field1: str
-            field2: bool
+struct MyStruct
+    field1: str
+    field2: bool
         ";
 
         let parse_result = lex_and_parse(&input);
@@ -875,12 +872,12 @@ mod tests {
     #[test]
     fn test_struct_decl_whitespace() {
         let input = "
-        struct MyStruct
-            // A comment
-            field1: str
+struct MyStruct
+    // A comment
+    field1: str
 
-            // Another one!
-            field2: bool
+    // Another one!
+    field2: bool
 
         ";
 
@@ -906,8 +903,8 @@ mod tests {
     #[test]
     fn test_struct_decl_no_fields() {
         let input = "
-        // Various amount of whitespace
-        struct MyStruct
+// Various amount of whitespace
+struct MyStruct
             
    
         ";
