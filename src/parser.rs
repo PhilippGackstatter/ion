@@ -637,7 +637,7 @@ impl<'a> Parser<'a> {
 
     fn expect_indentation(&mut self) -> Result<(), CompileError> {
         if let WhiteSpace(indent) = self.peek().kind {
-            if !self.wstack.last().unwrap() == indent {
+            if !(*self.wstack.last().unwrap() == indent) {
                 let err_msg = format!(
                     "Expected indentation of {} but got {}",
                     self.wstack.last().unwrap(),
@@ -917,6 +917,15 @@ mod tests {
     }
 
     #[test]
+    fn test_struct_decl_missing_indentation_error() {
+        let input = "struct MyStruct\nfield: type";
+
+        let parse_err = lex_and_parse_err(&input);
+
+        assert_eq!(parse_err.message, "Expected fields to be indented");
+    }
+
+    #[test]
     fn test_fn_decl() {
         let input = "
 foo(arg: i32) -> i32
@@ -951,12 +960,17 @@ foo(arg: i32) -> i32
     }
 
     #[test]
-    fn test_struct_decl_missing_indentation_error() {
-        let input = "struct MyStruct\nfield: type";
+    fn test_fn_decl_indentation_error() {
+        let input = "
+foo(arg: i32) -> i32
+    bar()
+    x = 10 / 2
+  print 3
+    return 5";
 
         let parse_err = lex_and_parse_err(&input);
 
-        assert_eq!(parse_err.message, "Expected fields to be indented");
+        assert_eq!(parse_err.message, "Expected indentation of 4 but got 2");
     }
 
     #[test]
