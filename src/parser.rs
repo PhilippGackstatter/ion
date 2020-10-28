@@ -128,7 +128,13 @@ impl<'a> Parser<'a> {
 
         if self.set_next_indentation()? {
             while self.has_same_indentation()? {
-                methods.push(self.function_declaration()?);
+                if self.is_function_declaration() {
+                    methods.push(self.function_declaration()?);
+                } else {
+                    return Err(
+                        self.error(self.peek().clone().into(), "Expected function declaration")
+                    );
+                }
             }
 
             self.pop_indentation();
@@ -634,7 +640,6 @@ impl<'a> Parser<'a> {
             let mut rev_iter = self.wstack.iter().rev();
             let current_indent = *rev_iter.next().unwrap();
             let previous_indent = *rev_iter.next().unwrap();
-
             if previous_indent == indent {
                 Ok(false)
             } else if current_indent == indent {
@@ -1175,12 +1180,14 @@ foo(arg: i32) -> i32
 
     #[test]
     fn test_impl_block() {
-        let input = r#"
-            impl MyStruct {
-                fn print_something() {}
-                fn is_positive(arg1: int) -> bool {}
-            }
-        "#;
+        let input = "
+impl MyStruct
+    print_something()
+        return 0
+
+    is_positive(arg1: int) -> i32
+        return 0
+        ";
 
         let parse_result = lex_and_parse(&input);
 
@@ -1191,7 +1198,7 @@ foo(arg: i32) -> i32
                     "print_something".into(),
                     vec![],
                     None,
-                    Block(vec![StatementDecl(Ret(None))]),
+                    Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
                 ),
                 FnDecl(
                     "is_positive".into(),
@@ -1199,12 +1206,26 @@ foo(arg: i32) -> i32
                         token!(IdToken("arg1".into())),
                         token!(IdToken("int".into())),
                     )],
-                    Some(token!(IdToken("bool".into()))),
-                    Block(vec![StatementDecl(Ret(None))]),
+                    Some(token!(IdToken("i32".into()))),
+                    Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
                 ),
             ],
         };
 
         assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_impl_block_declaration_error() {
+        let input = "
+impl MyStruct
+
+    is_positive(arg1: int) -> i32
+    return 0
+        ";
+
+        let parse_err = lex_and_parse_err(&input);
+
+        assert_eq!(parse_err.message, "Expected function declaration");
     }
 }
