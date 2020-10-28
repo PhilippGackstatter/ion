@@ -960,6 +960,29 @@ foo(arg: i32) -> i32
     }
 
     #[test]
+    fn test_fn_decl_multiline_params() {
+        let input = "
+long_function_name(
+    arg: i32,
+    oth: str
+) -> i32
+    return 5";
+
+        let parse_result = lex_and_parse(&input);
+
+        let expected = FnDecl(
+            "long_function_name".into(),
+            vec![
+                (token!(IdToken("arg".into())), token!(IdToken("i32".into()))),
+                (token!(IdToken("oth".into())), token!(IdToken("str".into()))),
+            ],
+            Some(token!(IdToken("i32".into()))),
+            Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 5 }))))]),
+        );
+        assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
     fn test_fn_decl_indentation_error() {
         let input = "
 foo(arg: i32) -> i32
