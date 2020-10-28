@@ -9,7 +9,10 @@ pub struct Lexer {
     pub tokens: Vec<Token>,
     current: usize,
     keywords: HashMap<String, TokenKind>,
+    // Don't parse subsequent newlines
     is_newline: bool,
+    // Don't lex spaces and newlines inside () or {}
+    ignore_whitespace: bool,
 }
 
 impl Lexer {
@@ -38,6 +41,7 @@ impl Lexer {
             current: 0,
             keywords,
             is_newline: true,
+            ignore_whitespace: false,
         }
     }
 
@@ -47,12 +51,24 @@ impl Lexer {
         while let Some((index, char_)) = chars.next() {
             self.current = index;
             match char_ {
-                '(' => self.add_token(1, LeftParen),
-                ')' => self.add_token(1, RightParen),
+                '(' => {
+                    self.ignore_whitespace = true;
+                    self.add_token(1, LeftParen)
+                }
+                ')' => {
+                    self.ignore_whitespace = false;
+                    self.add_token(1, RightParen)
+                }
                 '+' => self.add_token(1, Plus),
                 '*' => self.add_token(1, Star),
-                '{' => self.add_token(1, LeftBrace),
-                '}' => self.add_token(1, RightBrace),
+                '{' => {
+                    self.ignore_whitespace = true;
+                    self.add_token(1, LeftBrace)
+                }
+                '}' => {
+                    self.ignore_whitespace = false;
+                    self.add_token(1, RightBrace)
+                }
                 ',' => self.add_token(1, Comma),
                 '.' => self.add_token(1, Dot),
                 ';' => self.add_token(1, Semicolon),
@@ -105,7 +121,7 @@ impl Lexer {
                     self.string(&mut chars);
                 }
                 '\n' => {
-                    if !self.is_newline {
+                    if !self.ignore_whitespace && !self.is_newline {
                         self.add_token(0, NewLine);
                     }
 
@@ -114,7 +130,7 @@ impl Lexer {
                 }
                 c => {
                     if c.is_whitespace() {
-                        if !self.is_newline {
+                        if !self.is_newline || self.ignore_whitespace {
                             continue;
                         }
 
