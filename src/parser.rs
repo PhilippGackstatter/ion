@@ -159,7 +159,7 @@ impl<'a> Parser<'a> {
 
         self.consume(Equal, "Expected '=' after variable declaration.")?;
         let expr = self.expression()?;
-        self.consume(Semicolon, "Expected ';' after expression.")?;
+        self.expect_newline()?;
         Ok(VarDecl(id.clone(), expr))
     }
 
