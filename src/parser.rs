@@ -82,9 +82,7 @@ impl<'a> Parser<'a> {
         }
 
         if self.set_next_indentation()? {
-            while let WhiteSpace(_) = self.peek().kind {
-                self.expect_indentation()?;
-
+            while self.has_same_indentation()? {
                 if !self.peek().is_id_token() {
                     return Err(self.error(
                         self.peek().clone().into(),
@@ -127,17 +125,17 @@ impl<'a> Parser<'a> {
         }
         let name = self.advance().clone();
 
-        self.consume(LeftBrace, "Expected '{' after struct.")?;
+        self.expect_newline()?;
 
         let mut methods = Vec::new();
 
-        while self.peek().kind != RightBrace {
-            let fn_decl = self.function_declaration()?;
-            methods.push(fn_decl);
-        }
+        if self.set_next_indentation()? {
+            while self.has_same_indentation()? {
+                methods.push(self.function_declaration()?);
+            }
 
-        // Consume }
-        self.advance();
+            self.pop_indentation();
+        }
 
         Ok(ImplDecl {
             struct_name: name,
@@ -263,13 +261,12 @@ impl<'a> Parser<'a> {
     }
 
     fn block(&mut self) -> StatementResult {
-        self.advance();
+        self.expect_newline()?;
         let mut decls = Vec::new();
         let unexpected_eof = false;
 
         if self.set_next_indentation()? {
-            while let WhiteSpace(_) = self.peek().kind {
-                self.expect_indentation()?;
+            while self.has_same_indentation()? {
                 decls.push(self.declaration()?);
             }
 
@@ -635,21 +632,27 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect_indentation(&mut self) -> Result<(), CompileError> {
+    fn has_same_indentation(&mut self) -> Result<bool, CompileError> {
         if let WhiteSpace(indent) = self.peek().kind {
-            if !(*self.wstack.last().unwrap() == indent) {
+            let mut rev_iter = self.wstack.iter().rev();
+            let current_indent = *rev_iter.next().unwrap();
+            let previous_indent = *rev_iter.next().unwrap();
+
+            if previous_indent == indent {
+                Ok(false)
+            } else if current_indent == indent {
+                self.advance();
+                Ok(true)
+            } else {
                 let err_msg = format!(
                     "Expected indentation of {} but got {}",
                     self.wstack.last().unwrap(),
                     indent
                 );
                 Err(self.error(self.peek().clone().into(), &err_msg))
-            } else {
-                self.advance();
-                Ok(())
             }
         } else {
-            Err(self.error(self.peek().clone().into(), "Expected indentation"))
+            Ok(false)
         }
     }
 
