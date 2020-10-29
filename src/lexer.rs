@@ -11,6 +11,8 @@ pub struct Lexer {
     keywords: HashMap<String, TokenKind>,
     // Don't parse subsequent newlines
     is_newline: bool,
+    // Used to track the beginnings and ends of () and {}
+    parentheses_stack: u8,
     // Don't lex spaces and newlines inside () or {}
     ignore_whitespace: bool,
 }
@@ -41,6 +43,7 @@ impl Lexer {
             current: 0,
             keywords,
             is_newline: true,
+            parentheses_stack: 0,
             ignore_whitespace: false,
         }
     }
@@ -52,21 +55,26 @@ impl Lexer {
             self.current = index;
             match char_ {
                 '(' => {
+                    self.parentheses_stack += 1;
                     self.ignore_whitespace = true;
                     self.add_token(1, LeftParen)
                 }
                 ')' => {
-                    self.ignore_whitespace = false;
+                    self.parentheses_stack -= 1;
+                    self.ignore_whitespace = self.parentheses_stack != 0;
                     self.add_token(1, RightParen)
                 }
                 '+' => self.add_token(1, Plus),
                 '*' => self.add_token(1, Star),
                 '{' => {
+                    self.parentheses_stack += 1;
                     self.ignore_whitespace = true;
                     self.add_token(1, LeftBrace)
                 }
                 '}' => {
-                    self.ignore_whitespace = false;
+                    self.parentheses_stack -= 1;
+                    self.ignore_whitespace = self.parentheses_stack != 0;
+
                     self.add_token(1, RightBrace)
                 }
                 ',' => self.add_token(1, Comma),
