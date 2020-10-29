@@ -317,21 +317,24 @@ impl<'a> Parser<'a> {
 
         let if_stmt = self.block()?;
 
-        let else_stmt = if let Some(token) = self.peek_next() {
-            if let ElseToken = token.kind {
-                if self.has_same_indentation()? {
-                    // Consume else
-                    self.advance();
-                    Some(Box::new(self.block()?))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+        let mut else_stmt = None;
+
+        if self.match_(ElseToken) {
+            // Without leading whitespace
+            else_stmt = Some(Box::new(self.block()?));
         } else {
-            None
-        };
+            // With leading whitespace
+            if let Some(token) = self.peek_next() {
+                if let ElseToken = token.kind {
+                    if self.has_same_indentation()? {
+                        // Consume else
+                        self.advance();
+                        else_stmt = Some(Box::new(self.block()?));
+                    }
+                }
+            }
+        }
+
         Ok(If(condition_expr, Box::new(if_stmt), else_stmt))
     }
 
@@ -1064,19 +1067,16 @@ if x != 3
 
     #[test]
     fn test_if_stmt_with_else() {
-        // For now else branches require Whitespace
-        // so a top-level if-else is currently impossible
         let input = "
-multiline_if_else()
-    if (x 
-        != 3)
-        x = 10 / 2
-    else
-        x = 15 * 3
+if (x 
+    != 3)
+    x = 10 / 2
+else
+    x = 15 * 3
     ";
         let parse_result = lex_and_parse(&input);
 
-        let expected_body = StatementDecl(If(
+        let expected = StatementDecl(If(
             Expression::new_debug(Binary(
                 expr!(Identifier("x".into())),
                 token!(BangEqual),
@@ -1103,13 +1103,6 @@ multiline_if_else()
                 }),
             ))]))),
         ));
-
-        let expected = FnDecl(
-            "multiline_if_else".into(),
-            vec![],
-            None,
-            Block(vec![expected_body, StatementDecl(Ret(None))]),
-        );
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
