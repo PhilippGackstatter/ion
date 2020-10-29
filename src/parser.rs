@@ -1064,32 +1064,52 @@ if x != 3
 
     #[test]
     fn test_if_stmt_with_else() {
-        let input = "if (x != 3) x = 10 / 2; else x = 15 * 3;";
+        // For now else branches require Whitespace
+        // so a top-level if-else is currently impossible
+        let input = "
+multiline_if_else()
+    if (x 
+        != 3)
+        x = 10 / 2
+    else
+        x = 15 * 3
+    ";
         let parse_result = lex_and_parse(&input);
 
-        let expected = StatementDecl(If(
+        let expected_body = StatementDecl(If(
             Expression::new_debug(Binary(
                 expr!(Identifier("x".into())),
                 token!(BangEqual),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(ExpressionStmt(Expression::new_debug(Assign {
-                target: expr!(Identifier("x".into())),
-                value: expr!(Binary(
-                    expr!(Integer { int: 10 }),
-                    token!(Slash),
-                    expr!(Integer { int: 2 }),
-                )),
-            }))),
-            Some(Box::new(ExpressionStmt(Expression::new_debug(Assign {
-                target: expr!(Identifier("x".into())),
-                value: expr!(Binary(
-                    expr!(Integer { int: 15 }),
-                    token!(Star),
-                    expr!(Integer { int: 3 }),
-                )),
-            })))),
+            Box::new(Block(vec![StatementDecl(ExpressionStmt(
+                Expression::new_debug(Assign {
+                    target: expr!(Identifier("x".into())),
+                    value: expr!(Binary(
+                        expr!(Integer { int: 10 }),
+                        token!(Slash),
+                        expr!(Integer { int: 2 }),
+                    )),
+                }),
+            ))])),
+            Some(Box::new(Block(vec![StatementDecl(ExpressionStmt(
+                Expression::new_debug(Assign {
+                    target: expr!(Identifier("x".into())),
+                    value: expr!(Binary(
+                        expr!(Integer { int: 15 }),
+                        token!(Star),
+                        expr!(Integer { int: 3 }),
+                    )),
+                }),
+            ))]))),
         ));
+
+        let expected = FnDecl(
+            "multiline_if_else".into(),
+            vec![],
+            None,
+            Block(vec![expected_body, StatementDecl(Ret(None))]),
+        );
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
