@@ -312,18 +312,27 @@ impl<'a> Parser<'a> {
 
     fn if_statement(&mut self) -> StatementResult {
         self.advance();
-        self.consume(LeftParen, "Expected '(' after if.")?;
-        let condition_expr = self.expression()?;
-        self.consume(RightParen, "Expected ')' after condition.")?;
-        let if_stmt = self.statement()?;
 
-        let else_branch = if self.match_(ElseToken) {
-            Some(Box::new(self.statement()?))
+        let condition_expr = self.expression()?;
+
+        let if_stmt = self.block()?;
+
+        let else_stmt = if let Some(token) = self.peek_next() {
+            if let ElseToken = token.kind {
+                if self.has_same_indentation()? {
+                    // Consume else
+                    self.advance();
+                    Some(Box::new(self.block()?))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
         } else {
             None
         };
-
-        Ok(If(condition_expr, Box::new(if_stmt), else_branch))
+        Ok(If(condition_expr, Box::new(if_stmt), else_stmt))
     }
 
     fn while_statement(&mut self) -> StatementResult {
@@ -361,7 +370,6 @@ impl<'a> Parser<'a> {
                 return Err(self.error(equals.into(), "Invalid assignment target."));
             }
         }
-
         left_hand
     }
 
@@ -1027,7 +1035,9 @@ foo(arg: i32) -> i32
 
     #[test]
     fn test_if_stmt() {
-        let input = "if (x != 3) x = 10 / 2;";
+        let input = "
+if x != 3
+    x = 10 / 2";
         let parse_result = lex_and_parse(&input);
 
         let expected = StatementDecl(If(
@@ -1036,14 +1046,16 @@ foo(arg: i32) -> i32
                 token!(BangEqual),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(ExpressionStmt(Expression::new_debug(Assign {
-                target: expr!(Identifier("x".into())),
-                value: expr!(Binary(
-                    expr!(Integer { int: 10 }),
-                    token!(Slash),
-                    expr!(Integer { int: 2 }),
-                )),
-            }))),
+            Box::new(Block(vec![StatementDecl(ExpressionStmt(
+                Expression::new_debug(Assign {
+                    target: expr!(Identifier("x".into())),
+                    value: expr!(Binary(
+                        expr!(Integer { int: 10 }),
+                        token!(Slash),
+                        expr!(Integer { int: 2 }),
+                    )),
+                }),
+            ))])),
             None,
         ));
 
