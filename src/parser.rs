@@ -340,10 +340,10 @@ impl<'a> Parser<'a> {
 
     fn while_statement(&mut self) -> StatementResult {
         self.advance();
-        self.consume(LeftParen, "Expected '(' after while.")?;
+
         let condition_expr = self.expression()?;
-        self.consume(RightParen, "Expected ')' after condition.")?;
-        let body = self.statement()?;
+
+        let body = self.block()?;
 
         Ok(While(condition_expr, Box::new(body)))
     }
