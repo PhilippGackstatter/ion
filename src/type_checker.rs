@@ -970,7 +970,7 @@ mod tests {
 
     #[test]
     fn test_struct_access_impl() {
-        let res = lex_parse_check("struct_impl.io");
+        let res = lex_parse_check("struct_access_impl.io");
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
