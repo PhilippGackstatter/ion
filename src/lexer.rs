@@ -161,11 +161,16 @@ impl Lexer {
 
     fn identifier(&mut self, first: char, chars: &mut Peekable<CharIndices<'_>>) {
         let mut identifier = String::new();
-        identifier.push(first);
+
+        if Self::is_valid_identifier_char(first) {
+            identifier.push(first);
+        } else {
+            // TODO: Turn into LexerError
+            panic!("Unexpected '{}'", first);
+        }
+
         while let Some((_index, char_)) = chars.peek() {
-            if *char_ == '\0' {
-                panic!("Premature EOF");
-            } else if char_.is_alphanumeric() || *char_ == '_' {
+            if Self::is_valid_identifier_char(*char_) {
                 identifier.push(*char_);
                 chars.next();
             } else {
@@ -179,6 +184,10 @@ impl Lexer {
         } else {
             self.add_token(identifier.len() as u8, IdToken(identifier));
         }
+    }
+
+    fn is_valid_identifier_char(c: char) -> bool {
+        c.is_alphanumeric() || c == '_'
     }
 
     fn string(&mut self, chars: &mut Peekable<CharIndices<'_>>) {
