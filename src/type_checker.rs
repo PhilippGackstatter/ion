@@ -540,7 +540,6 @@ impl TypeChecker {
             ExpressionKind::Call(callee, params) => {
                 let callee_type = self.check_expr(&callee)?;
                 let callee_type_kind = &*callee_type.kind.borrow();
-
                 if let TypeKind::Func(function) = callee_type_kind {
                     for (index, param) in function.params.iter().enumerate() {
                         if let Some(call_param) = params.get(index) {
@@ -564,7 +563,8 @@ impl TypeChecker {
                             return Err(CompileError {
                                 token_range: callee_type.token_range.clone(),
                                 message: format!(
-                                    "Function needs {} parameters, but only {} were supplied.",
+                                    "{} needs {} parameters, but only {} were supplied.",
+                                    function.name,
                                     function.params.len(),
                                     params.len()
                                 ),
@@ -970,7 +970,7 @@ mod tests {
 
     #[test]
     fn test_struct_access_impl() {
-        let res = lex_parse_check("struct_impl.io");
+        let res = lex_parse_check("struct_access_impl.io");
         assert!(res.is_err());
         assert!(res
             .unwrap_err()

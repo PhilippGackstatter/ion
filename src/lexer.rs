@@ -9,6 +9,12 @@ pub struct Lexer {
     pub tokens: Vec<Token>,
     current: usize,
     keywords: HashMap<String, TokenKind>,
+    // Don't parse subsequent newlines
+    is_newline: bool,
+    // Used to track the beginnings and ends of () and {}
+    parentheses_stack: u8,
+    // Don't lex spaces and newlines inside () or {}
+    ignore_whitespace: bool,
 }
 
 impl Lexer {
@@ -36,6 +42,9 @@ impl Lexer {
             tokens: vec![],
             current: 0,
             keywords,
+            is_newline: true,
+            parentheses_stack: 0,
+            ignore_whitespace: false,
         }
     }
 
@@ -45,15 +54,31 @@ impl Lexer {
         while let Some((index, char_)) = chars.next() {
             self.current = index;
             match char_ {
-                '(' => self.add_token(1, LeftParen),
-                ')' => self.add_token(1, RightParen),
+                '(' => {
+                    self.parentheses_stack += 1;
+                    self.ignore_whitespace = true;
+                    self.add_token(1, LeftParen)
+                }
+                ')' => {
+                    self.parentheses_stack -= 1;
+                    self.ignore_whitespace = self.parentheses_stack != 0;
+                    self.add_token(1, RightParen)
+                }
                 '+' => self.add_token(1, Plus),
                 '*' => self.add_token(1, Star),
-                '{' => self.add_token(1, LeftBrace),
-                '}' => self.add_token(1, RightBrace),
+                '{' => {
+                    self.parentheses_stack += 1;
+                    self.ignore_whitespace = true;
+                    self.add_token(1, LeftBrace)
+                }
+                '}' => {
+                    self.parentheses_stack -= 1;
+                    self.ignore_whitespace = self.parentheses_stack != 0;
+
+                    self.add_token(1, RightBrace)
+                }
                 ',' => self.add_token(1, Comma),
                 '.' => self.add_token(1, Dot),
-                ';' => self.add_token(1, Semicolon),
                 ':' => self.add_token(1, Colon),
                 '-' => {
                     if self.match_(&mut chars, '>') {
@@ -102,9 +127,27 @@ impl Lexer {
                 '"' => {
                     self.string(&mut chars);
                 }
+                '\n' => {
+                    if !self.ignore_whitespace && !self.is_newline {
+                        self.add_token(0, NewLine);
+                    }
+
+                    while self.match_(&mut chars, '\n') {}
+                    self.is_newline = true
+                }
                 c => {
                     if c.is_whitespace() {
-                        continue;
+                        if !self.is_newline || self.ignore_whitespace {
+                            continue;
+                        }
+
+                        let count = self.whitespace(c, &mut chars);
+
+                        // Only add whitespace if there is a useful token in this line
+                        // i.e. not newline or EOF
+                        if !self.match_(&mut chars, '\n') && chars.peek().is_some() {
+                            self.add_token(count, WhiteSpace(count));
+                        }
                     } else if c.is_ascii_digit() {
                         self.number(c, &mut chars);
                     } else {
@@ -118,11 +161,16 @@ impl Lexer {
 
     fn identifier(&mut self, first: char, chars: &mut Peekable<CharIndices<'_>>) {
         let mut identifier = String::new();
-        identifier.push(first);
+
+        if Self::is_valid_identifier_char(first) {
+            identifier.push(first);
+        } else {
+            // TODO: Turn into LexerError
+            panic!("Unexpected '{}'", first);
+        }
+
         while let Some((_index, char_)) = chars.peek() {
-            if *char_ == '\0' {
-                panic!("Premature EOF");
-            } else if char_.is_alphanumeric() || *char_ == '_' {
+            if Self::is_valid_identifier_char(*char_) {
                 identifier.push(*char_);
                 chars.next();
             } else {
@@ -138,10 +186,13 @@ impl Lexer {
         }
     }
 
+    fn is_valid_identifier_char(c: char) -> bool {
+        c.is_alphanumeric() || c == '_'
+    }
+
     fn string(&mut self, chars: &mut Peekable<CharIndices<'_>>) {
         let mut str_lit = String::new();
         let mut reached_end_of_string = false;
-        // while let Some((_index, char_)) = chars.next() {
         for (_index, char_) in chars {
             if char_ != '"' {
                 str_lit.push(char_);
@@ -180,6 +231,23 @@ impl Lexer {
         }
     }
 
+    // Parses whitespace (spaces or tabs) and returns the parsed number
+    // Does *not* add a token
+    fn whitespace(&mut self, first: char, chars: &mut Peekable<CharIndices<'_>>) -> u8 {
+        let mut whitespace_count = 1;
+
+        while let Some((_index, char_)) = chars.peek() {
+            // Assume responsible (non-mixed) input for now...
+            if first == *char_ && (*char_ == ' ' || *char_ == '\t') {
+                whitespace_count += 1;
+                chars.next();
+            } else {
+                break;
+            }
+        }
+        whitespace_count
+    }
+
     // Check if the next character matches the given one, and consume if it does
     fn match_(&mut self, chars: &mut Peekable<CharIndices<'_>>, check: char) -> bool {
         if let Some((_, char_)) = chars.peek() {
@@ -192,6 +260,7 @@ impl Lexer {
     }
 
     fn add_token(&mut self, length: u8, kind: TokenKind) {
+        self.is_newline = false;
         self.tokens
             .push(Token::new(self.current as u32, length, kind));
     }
@@ -220,13 +289,21 @@ impl Lexer {
 mod tests {
     use super::*;
 
+    fn unpacked_tokens(tokens: Vec<Token>) -> Vec<TokenKind> {
+        tokens
+            .iter()
+            .map(|tk| tk.kind.clone())
+            .collect::<Vec<TokenKind>>()
+    }
+
     #[test]
     fn test_var_while_loop() {
-        let input = r#"
-            var i = 0;
-            while (i < 5) i = i + 1;
-            print i;
-        "#;
+        let input = "
+var i = 0
+while i < 5
+    i = i + 1
+print i
+        ";
         let mut lexer = Lexer::new();
         lexer.lex(input);
 
@@ -235,75 +312,67 @@ mod tests {
             IdToken("i".to_owned()),
             Equal,
             Num(0),
-            Semicolon,
+            NewLine,
             WhileToken,
-            LeftParen,
             IdToken("i".to_owned()),
             Less,
             Num(5),
-            RightParen,
+            NewLine,
+            WhiteSpace(4),
             IdToken("i".to_owned()),
             Equal,
             IdToken("i".to_owned()),
             Plus,
             Num(1),
-            Semicolon,
+            NewLine,
             PrintToken,
             IdToken("i".to_owned()),
-            Semicolon,
+            NewLine,
             EndOfFile,
         ];
 
-        assert_eq!(
-            lexer
-                .tokens
-                .iter()
-                .map(|tk| tk.kind.clone())
-                .collect::<Vec<TokenKind>>(),
-            expected
-        );
+        assert_eq!(unpacked_tokens(lexer.tokens), expected);
     }
 
     #[test]
     fn test_if_print() {
         // Comments need a newline
-        let input = "// Just a comment\nif (6 >= 2) print 5; else print 9;";
+        let input = "
+// Just a comment
+if 6 >= 2
+    print 5
+else
+    print 9
+    ";
 
         let mut lexer = Lexer::new();
         lexer.lex(input);
 
         let expected = vec![
             IfToken,
-            LeftParen,
             Num(6),
             GreaterEqual,
             Num(2),
-            RightParen,
+            NewLine,
+            WhiteSpace(4),
             PrintToken,
             Num(5),
-            Semicolon,
+            NewLine,
             ElseToken,
+            NewLine,
+            WhiteSpace(4),
             PrintToken,
             Num(9),
-            Semicolon,
+            NewLine,
             EndOfFile,
         ];
 
-        assert_eq!(
-            lexer
-                .tokens
-                .iter()
-                .map(|tk| tk.kind.clone())
-                .collect::<Vec<TokenKind>>(),
-            expected
-        );
+        assert_eq!(unpacked_tokens(lexer.tokens), expected);
     }
 
     #[test]
     fn test_expression_precedence() {
-        let input = r#"
-            print 8 + 3 * 4 - 10 / 2;
-        "#;
+        let input = "print 8 + 3 * 4 - 10 / 2";
         let mut lexer = Lexer::new();
         lexer.lex(input);
 
@@ -318,17 +387,50 @@ mod tests {
             Num(10),
             Slash,
             Num(2),
-            Semicolon,
             EndOfFile,
         ];
 
-        assert_eq!(
-            lexer
-                .tokens
-                .iter()
-                .map(|tk| tk.kind.clone())
-                .collect::<Vec<TokenKind>>(),
-            expected
-        );
+        assert_eq!(unpacked_tokens(lexer.tokens), expected);
+    }
+
+    #[test]
+    fn test_ignore_whitespace_in_nested_parens() {
+        let input = "
+var x = Outer {
+    field: 1,
+    inner: Inner {
+        field: 3,
+    }
+}
+        
+";
+        let mut lexer = Lexer::new();
+        lexer.lex(input);
+
+        let expected = vec![
+            VarToken,
+            IdToken("x".into()),
+            Equal,
+            IdToken("Outer".into()),
+            LeftBrace,
+            IdToken("field".into()),
+            Colon,
+            Num(1),
+            Comma,
+            IdToken("inner".into()),
+            Colon,
+            IdToken("Inner".into()),
+            LeftBrace,
+            IdToken("field".into()),
+            Colon,
+            Num(3),
+            Comma,
+            RightBrace,
+            RightBrace,
+            NewLine,
+            EndOfFile,
+        ];
+
+        assert_eq!(unpacked_tokens(lexer.tokens), expected);
     }
 }

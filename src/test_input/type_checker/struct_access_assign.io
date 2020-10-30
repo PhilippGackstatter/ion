@@ -1,8 +1,6 @@
-struct NumWrap {
-    integer: i32,
-}
+struct NumWrap
+    integer: i32
 
-{
-    var wrapper = NumWrap { integer: 234, };
-    wrapper.integer = "asdf";
-}
+
+var wrapper = NumWrap { integer: 234, }
+wrapper.integer = "asdf"

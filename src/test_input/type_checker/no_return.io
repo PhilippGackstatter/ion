@@ -1,4 +1,4 @@
 // Should fail since bar should return a bool value
-fn bar() -> bool {
-    print "something";
-}
+bar() -> bool
+    print "something"
+

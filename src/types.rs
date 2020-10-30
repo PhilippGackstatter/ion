@@ -251,7 +251,8 @@ pub struct CompileError {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
-    Semicolon,
+    WhiteSpace(u8),
+    NewLine,
     Colon,
     Arrow,
     LeftParen,

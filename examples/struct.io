@@ -1,15 +1,14 @@
-struct MyType {}
+struct MyType
+  field1: i32
 
-struct MyType2 {
-    field1: str
-}
+struct MyType3
 
-struct MyType3 {
-    field1: MyType,
-}
+    // Comment
+    field5: str
+    
+    // More Commenting
+    field2: bool
+  
 
-struct MyType4 {
-    field1: MyType,
-    field2: MyType2,
-    field3: MyType3,
-}
+struct NoFields
+
