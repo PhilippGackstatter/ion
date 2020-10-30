@@ -282,13 +282,21 @@ impl Lexer {
 mod tests {
     use super::*;
 
+    fn unpacked_tokens(tokens: Vec<Token>) -> Vec<TokenKind> {
+        tokens
+            .iter()
+            .map(|tk| tk.kind.clone())
+            .collect::<Vec<TokenKind>>()
+    }
+
     #[test]
     fn test_var_while_loop() {
-        let input = r#"
-            var i = 0;
-            while (i < 5) i = i + 1;
-            print i;
-        "#;
+        let input = "
+var i = 0
+while i < 5
+    i = i + 1
+print i
+        ";
         let mut lexer = Lexer::new();
         lexer.lex(input);
 
@@ -297,75 +305,67 @@ mod tests {
             IdToken("i".to_owned()),
             Equal,
             Num(0),
-            Semicolon,
+            NewLine,
             WhileToken,
-            LeftParen,
             IdToken("i".to_owned()),
             Less,
             Num(5),
-            RightParen,
+            NewLine,
+            WhiteSpace(4),
             IdToken("i".to_owned()),
             Equal,
             IdToken("i".to_owned()),
             Plus,
             Num(1),
-            Semicolon,
+            NewLine,
             PrintToken,
             IdToken("i".to_owned()),
-            Semicolon,
+            NewLine,
             EndOfFile,
         ];
 
-        assert_eq!(
-            lexer
-                .tokens
-                .iter()
-                .map(|tk| tk.kind.clone())
-                .collect::<Vec<TokenKind>>(),
-            expected
-        );
+        assert_eq!(unpacked_tokens(lexer.tokens), expected);
     }
 
     #[test]
     fn test_if_print() {
         // Comments need a newline
-        let input = "// Just a comment\nif (6 >= 2) print 5; else print 9;";
+        let input = "
+// Just a comment
+if 6 >= 2
+    print 5
+else
+    print 9
+    ";
 
         let mut lexer = Lexer::new();
         lexer.lex(input);
 
         let expected = vec![
             IfToken,
-            LeftParen,
             Num(6),
             GreaterEqual,
             Num(2),
-            RightParen,
+            NewLine,
+            WhiteSpace(4),
             PrintToken,
             Num(5),
-            Semicolon,
+            NewLine,
             ElseToken,
+            NewLine,
+            WhiteSpace(4),
             PrintToken,
             Num(9),
-            Semicolon,
+            NewLine,
             EndOfFile,
         ];
 
-        assert_eq!(
-            lexer
-                .tokens
-                .iter()
-                .map(|tk| tk.kind.clone())
-                .collect::<Vec<TokenKind>>(),
-            expected
-        );
+        assert_eq!(unpacked_tokens(lexer.tokens), expected);
     }
 
     #[test]
     fn test_expression_precedence() {
-        let input = r#"
-            print 8 + 3 * 4 - 10 / 2;
-        "#;
+        let input = "print 8 + 3 * 4 - 10 / 2";
         let mut lexer = Lexer::new();
         lexer.lex(input);
 
@@ -380,17 +380,9 @@ mod tests {
             Num(10),
             Slash,
             Num(2),
-            Semicolon,
             EndOfFile,
         ];
 
-        assert_eq!(
-            lexer
-                .tokens
-                .iter()
-                .map(|tk| tk.kind.clone())
-                .collect::<Vec<TokenKind>>(),
-            expected
-        );
+        assert_eq!(unpacked_tokens(lexer.tokens), expected);
     }
 }
