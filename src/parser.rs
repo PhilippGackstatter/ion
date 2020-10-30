@@ -266,7 +266,6 @@ impl<'a> Parser<'a> {
     fn block(&mut self) -> StatementResult {
         self.expect_newline()?;
         let mut decls = Vec::new();
-        let unexpected_eof = false;
 
         if self.set_next_indentation()? {
             while self.has_same_indentation()? {
@@ -276,14 +275,7 @@ impl<'a> Parser<'a> {
             self.pop_indentation();
         }
 
-        if unexpected_eof {
-            Err(self.error(
-                self.previous().clone().into(),
-                "Unclosed block, missing a '}'.",
-            ))
-        } else {
-            Ok(Block(decls))
-        }
+        Ok(Block(decls))
     }
 
     fn expression_statement(&mut self) -> StatementResult {
