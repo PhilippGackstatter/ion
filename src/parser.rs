@@ -790,15 +790,7 @@ mod tests {
     #[test]
     fn test_multiplication() {
         // Test 9 + 1 / 4
-        let lexer = Lexer::new_from_tokenkind(vec![
-            Num(9),
-            Plus,
-            Num(1),
-            Slash,
-            Num(4),
-            Semicolon,
-            EndOfFile,
-        ]);
+        let lexer = Lexer::new_from_tokenkind(vec![Num(9), Plus, Num(1), Slash, Num(4), EndOfFile]);
         let mut parser = Parser::new(&lexer);
         if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
             let expected = expr![Binary(
@@ -819,7 +811,7 @@ mod tests {
     #[test]
     fn test_unary() {
         // Test "!!false"
-        let lexer = Lexer::new_from_tokenkind(vec![Bang, Bang, FalseToken, Semicolon, EndOfFile]);
+        let lexer = Lexer::new_from_tokenkind(vec![Bang, Bang, FalseToken, EndOfFile]);
         let mut parser = Parser::new(&lexer);
         if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
             assert_eq!(
@@ -832,30 +824,6 @@ mod tests {
         } else {
             panic!();
         }
-    }
-
-    #[test]
-    fn test_function_decl() {
-        let input = "fn foo(arg1: str, arg2: bool) {}";
-        let parse_result = lex_and_parse(&input);
-
-        let expected = FnDecl(
-            "foo".into(),
-            vec![
-                (
-                    token!(IdToken("arg1".into())),
-                    token!(IdToken("str".into())),
-                ),
-                (
-                    token!(IdToken("arg2".into())),
-                    token!(IdToken("bool".into())),
-                ),
-            ],
-            None,
-            Block(vec![StatementDecl(Ret(None))]),
-        );
-
-        assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
     #[test]
@@ -1014,7 +982,10 @@ foo(arg: i32) -> i32
 
     #[test]
     fn test_while_stmt() {
-        let input = "while (i < 3) i = i + 1;";
+        let input = "
+while i < 3
+    i = i + 1
+";
         let parse_result = lex_and_parse(&input);
 
         let expected = StatementDecl(While(
@@ -1023,14 +994,16 @@ foo(arg: i32) -> i32
                 token!(Less),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(ExpressionStmt(Expression::new_debug(Assign {
-                target: expr!(Identifier("i".into())),
-                value: expr!(Binary(
-                    expr!(Identifier("i".into())),
-                    token!(Plus),
-                    expr!(Integer { int: 1 }),
-                )),
-            }))),
+            Box::new(Block(vec![StatementDecl(ExpressionStmt(
+                Expression::new_debug(Assign {
+                    target: expr!(Identifier("i".into())),
+                    value: expr!(Binary(
+                        expr!(Identifier("i".into())),
+                        token!(Plus),
+                        expr!(Integer { int: 1 })
+                    )),
+                }),
+            ))])),
         ));
 
         assert_eq!(*parse_result.first().unwrap(), expected)
