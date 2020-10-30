@@ -293,7 +293,7 @@ impl<'a> Parser<'a> {
 
     fn return_statement(&mut self) -> StatementResult {
         self.advance();
-        if self.match_(Semicolon) {
+        if self.match_(NewLine) {
             Ok(Ret(None))
         } else {
             let expr = self.expression()?;
