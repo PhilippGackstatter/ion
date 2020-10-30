@@ -569,10 +569,14 @@ impl<'a> Parser<'a> {
             _ => {
                 if self.match_(LeftParen) {
                     let expr = self.expression()?;
-                    self.consume(RightParen, "Expected '('.")?;
-                    Ok(expr)
+
+                    if !self.match_(RightParen) {
+                        Err(self.error(self.previous().clone().into(), "Expected ')'."))
+                    } else {
+                        Ok(expr)
+                    }
                 } else {
-                    Err(self.error(self.peek().clone().into(), "Expect expression."))
+                    Err(self.error(self.peek().clone().into(), "Expected expression."))
                 }
             }
         }
