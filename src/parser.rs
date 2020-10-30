@@ -18,7 +18,7 @@ type DeclarationResult = Result<Declaration, CompileError>;
 pub struct Parser<'a> {
     lexer: &'a Lexer,
     current: usize,
-    wstack: Vec<u8>,
+    whitespace_stack: Vec<u8>,
 }
 
 impl<'a> Parser<'a> {
@@ -627,8 +627,8 @@ impl<'a> Parser<'a> {
 
     fn set_next_indentation(&mut self) -> Result<bool, CompileError> {
         if let WhiteSpace(indent) = self.peek().kind {
-            if *self.wstack.last().unwrap() < indent {
-                self.wstack.push(indent);
+            if *self.whitespace_stack.last().unwrap() < indent {
+                self.whitespace_stack.push(indent);
                 Ok(true)
             } else {
                 Err(self.error(self.peek().clone().into(), "Expected indentation"))
@@ -640,7 +640,7 @@ impl<'a> Parser<'a> {
 
     fn has_same_indentation(&mut self) -> Result<bool, CompileError> {
         if let WhiteSpace(indent) = self.peek().kind {
-            let mut rev_iter = self.wstack.iter().rev();
+            let mut rev_iter = self.whitespace_stack.iter().rev();
             let current_indent = *rev_iter.next().unwrap();
             let previous_indent = *rev_iter.next().unwrap();
             if previous_indent == indent {
@@ -651,7 +651,7 @@ impl<'a> Parser<'a> {
             } else {
                 let err_msg = format!(
                     "Expected indentation of {} but got {}",
-                    self.wstack.last().unwrap(),
+                    self.whitespace_stack.last().unwrap(),
                     indent
                 );
                 Err(self.error(self.peek().clone().into(), &err_msg))
@@ -662,7 +662,7 @@ impl<'a> Parser<'a> {
     }
 
     fn is_indented(&self, indent: u8) -> bool {
-        *self.wstack.last().unwrap() < indent
+        *self.whitespace_stack.last().unwrap() < indent
     }
 
     fn expect_newline(&mut self) -> Result<(), CompileError> {
@@ -673,8 +673,8 @@ impl<'a> Parser<'a> {
     }
 
     fn pop_indentation(&mut self) {
-        if self.wstack.len() > 1 {
-            self.wstack.pop();
+        if self.whitespace_stack.len() > 1 {
+            self.whitespace_stack.pop();
         }
     }
 
@@ -731,7 +731,7 @@ impl<'a> Parser<'a> {
         Parser {
             lexer,
             current: 0,
-            wstack: vec![0],
+            whitespace_stack: vec![0],
         }
     }
 }
