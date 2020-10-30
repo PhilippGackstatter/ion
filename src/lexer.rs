@@ -385,4 +385,45 @@ else
 
         assert_eq!(unpacked_tokens(lexer.tokens), expected);
     }
+
+    #[test]
+    fn test_ignore_whitespace_in_nested_parens() {
+        let input = "
+var x = Outer {
+    field: 1,
+    inner: Inner {
+        field: 3,
+    }
+}
+        
+";
+        let mut lexer = Lexer::new();
+        lexer.lex(input);
+
+        let expected = vec![
+            VarToken,
+            IdToken("x".into()),
+            Equal,
+            IdToken("Outer".into()),
+            LeftBrace,
+            IdToken("field".into()),
+            Colon,
+            Num(1),
+            Comma,
+            IdToken("inner".into()),
+            Colon,
+            IdToken("Inner".into()),
+            LeftBrace,
+            IdToken("field".into()),
+            Colon,
+            Num(3),
+            Comma,
+            RightBrace,
+            RightBrace,
+            NewLine,
+            EndOfFile,
+        ];
+
+        assert_eq!(unpacked_tokens(lexer.tokens), expected);
+    }
 }
