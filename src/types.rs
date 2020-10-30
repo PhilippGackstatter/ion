@@ -253,7 +253,6 @@ pub struct CompileError {
 pub enum TokenKind {
     WhiteSpace(u8),
     NewLine,
-    Semicolon,
     Colon,
     Arrow,
     LeftParen,
