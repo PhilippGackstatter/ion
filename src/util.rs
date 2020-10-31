@@ -38,7 +38,7 @@ impl Options {
     }
 }
 
-pub fn get_repl_parser(opt: &mut Options) -> ArgumentParser {
+pub fn get_cli_parser(opt: &mut Options) -> ArgumentParser {
     let mut parser = ArgumentParser::new();
 
     parser.set_description("ion language");

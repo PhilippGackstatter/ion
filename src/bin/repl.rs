@@ -7,7 +7,7 @@ fn main() {
     let mut opt = Options::new();
 
     {
-        let parser = ion::util::get_repl_parser(&mut opt);
+        let parser = ion::util::get_cli_parser(&mut opt);
         parser.parse_args_or_exit();
     }
 
