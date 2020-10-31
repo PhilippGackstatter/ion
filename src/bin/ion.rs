@@ -2,8 +2,6 @@ extern crate argparse;
 extern crate ion;
 use argparse::Store;
 use ion::util::Options;
-use std::io;
-use std::io::prelude::*;
 
 fn main() {
     let mut file_path = String::new();
@@ -18,22 +16,11 @@ fn main() {
     }
 
     if file_path == "" {
-        println!("ion v{}", env!("CARGO_PKG_VERSION"));
-        loop {
-            print!(">> ");
-            io::stdout().flush().expect("Could not flush stdout");
-
-            let mut input = String::new();
-            match io::stdin().read_line(&mut input) {
-                Ok(_) => {
-                    ion::util::run(input, &opt);
-                }
-                Err(error) => println!("error: {}", error),
-            }
-        }
+        println!("Please provide a path to a file to execute.");
     } else {
-        let input = ion::util::file_to_string(&file_path);
-
-        ion::util::run(input, &opt);
+        match ion::util::file_to_string(&file_path) {
+            Ok(input) => ion::util::run(input, &opt),
+            Err(err) => println!("{}", err),
+        }
     }
 }

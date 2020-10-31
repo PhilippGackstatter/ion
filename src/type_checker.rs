@@ -815,7 +815,7 @@ mod tests {
 
     fn lex_parse_check(path: &str) -> Result<(), CompileError> {
         let test_path: &Path = "src/test_input/type_checker/".as_ref();
-        let input = util::file_to_string(&test_path.join(&path));
+        let input = util::file_to_string(&test_path.join(&path)).unwrap();
         let mut lexer = Lexer::new();
         lexer.lex(&input);
         let mut parser = Parser::new(&lexer);

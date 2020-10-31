@@ -292,14 +292,14 @@ fn pretty_write_stmt(
     }
 }
 
-pub fn file_to_string<P: AsRef<Path>>(path: &P) -> String {
+pub fn file_to_string<P: AsRef<Path>>(path: &P) -> Result<String, Box<dyn std::error::Error>> {
     let full_path = env::current_dir().unwrap().join(path);
-    let mut file = File::open(full_path).unwrap();
+    let mut file = File::open(full_path)?;
     let mut file_buf = Vec::new();
-    file.read_to_end(&mut file_buf).unwrap();
+    file.read_to_end(&mut file_buf)?;
 
-    String::from_utf8(file_buf)
-        .unwrap_or_else(|_| panic!("Please provide a valid UTF-8 encoded file."))
+    let res = String::from_utf8(file_buf)?;
+    Ok(res)
 }
 
 pub fn run(program: String, options: &Options) {
