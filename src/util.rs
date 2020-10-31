@@ -199,7 +199,7 @@ fn pretty_write_decl(
                 level,
                 is_child,
                 &format!(
-                    "fn {}({}) -> {}",
+                    "{}({}) -> {}",
                     name,
                     params
                         .iter()
