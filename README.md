@@ -6,7 +6,7 @@ A type-checked, interpreted, clean programming language.
 
 An object-oriented example with vectors.
 
-Run this using `cargo run --bin file -- examples/struct_vector.io`
+Run this using `cargo run examples/vector.io`
 
 ```
 // Declaring a new type called Vector
@@ -48,10 +48,10 @@ All you need to run `ion` is Rust, by installing it from [rustup.rs](https://rus
 Invoke `ion` with the `--help` option to see the options.
 
 ```sh
-cargo run --bin file -- --help
+cargo run -- --help
 
 Usage:
-  target/debug/file [OPTIONS] [FILE]
+  target/debug/ion [OPTIONS] [FILE]
 
 ion language
 
@@ -73,7 +73,7 @@ Optional arguments:
 Run sample scripts
 
 ```sh
-cargo run --bin file -- examples/vector.io
+cargo run examples/vector.io
 ```
 
 ## Architecture
