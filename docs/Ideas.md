@@ -202,6 +202,151 @@ person = Person {
         }
 
 longer = longer_part(person, person.first_name)
+```
 
+## Cases
+
+Trying to write down the possible cases.
+
+### Pass-by-mutable-reference
 
 ```
+name = "Jon"
+
+name.push_str(" Snow")
+
+println("Hello $name!")
+```
+
+translates to
+
+```rust
+let mut name = String::from("Jon");
+
+name.push_str(" Snow");
+
+println!("Hello {}!", name);
+```
+
+### Pass-by-reference
+
+```
+printit(name)
+    println(name);
+
+name = "Jon"
+
+printit(name)
+
+println(name)
+```
+
+translates to
+
+```rust
+fn printit(name: &str) {
+    println!("{}", name);
+}
+
+let name = "Jon";
+
+println!("{}", name);
+```
+
+### Clone
+
+```
+data Person
+    name: String
+
+impl Person
+    new(name)
+        Person { name }
+
+name = "Jon"
+
+person = Person/new(name)
+
+println(name)
+println(person)
+```
+
+translates to
+
+```rust
+struct Person {
+    name: String
+}
+
+impl Person {
+    fn new(name: String) {
+        Person { name }
+    }
+}
+
+let name = String::from("Jon")
+
+let person = Person::new(name.clone());
+
+println!("{}", name);
+println!("{:?}", person);
+```
+
+### Return mut reference
+
+Continuing aboves Person example.
+
+```
+impl Person
+    name()
+        self.name
+
+    extend(lastname: String)
+        self.name().push_str(lastname)
+        println(self.name)
+
+person = Person("Jon")
+
+person.extend(" Snow")
+```
+
+Now, `name()`'s Rust signature would have to be `fn name(&mut self) -> &mut String`.
+So we need to "backtrack" these mut-or-ref-or-clone dependencies.
+
+When we parse `name()` we need some placeholder for its "mutability-indicator" that resolves later, once the
+indicator for the return value has resolved, which resolves once all usages have been determined.
+
+We resolve the dependencies by building the tree first.
+
+(Made with [asciiflow](http://asciiflow.com/))
+
+```
++---------+        +-----------+        +-----------+
+|         |        |           |        |           |
+| name(?) |  +-->  |name() -> ?|  +-->  | extend(?) |
+|         |        |           |        |           |
++---------+        +-----------+        +-----------+
+
+                                              +         +------------+
+                                              |         |            |
+                                              +-------> | push_str(?)|
+                                              |         |            |
+                                              |         +------------+
+                                              |
+                                              |
+                                              |         +------------+
+                                              |         |            |
+                                              +-------> | println(?) |
+                                                        |            |
+                                                        +------------+
+```
+
+Then we resolve starting from the leafs.
+
+- We find that println needs only `&self.name`
+- We find that push_str needs `&mut self.name`
+- Hence, we take the weaker guarantee and find that extend needs `&mut self` as well
+- Hence, name needs to return a `&mut self.name`
+- Hence, name needs to take a `&mut self`
+
+(Well actually this tree isn't entirely correct because I was changing the example as I went along... but oh well, you get the idea.)
