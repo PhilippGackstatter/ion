@@ -366,13 +366,18 @@ impl TypeChecker {
                             for (method_name, method_type) in methods {
                                 let (name_token, struct_method) = struct_method_types
                                     .get(method_name.get_id().as_str())
-                                    .ok_or_else(|| CompileError {
-                                        // TODO: Combine token range to point at the entire impl trait.
-                                        token_range: struct_name.clone().into(),
-                                        message: format!(
-                                            "Not all trait items implemented, missing {}",
-                                            method_name.get_id()
-                                        ),
+                                    .ok_or_else(|| {
+                                        let struct_range: Range<usize> = struct_name.clone().into();
+                                        let trait_range: Range<usize> = trt.clone().into();
+
+                                        CompileError {
+                                            // Provide better error by pointing to a larger part of the impl trait range.
+                                            token_range: trait_range.start..struct_range.end,
+                                            message: format!(
+                                                "Not all trait items implemented, missing {}",
+                                                method_name.get_id()
+                                            ),
+                                        }
                                     })?;
 
                                 let rc_method_type = method_type.upgrade().unwrap();
