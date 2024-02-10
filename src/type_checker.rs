@@ -84,7 +84,7 @@ impl std::fmt::Display for TypeKind {
                 Ok(())
             }
             TypeKind::Func(function) => {
-                write!(f, "{} (", function.name)?;
+                write!(f, "{}(", function.name)?;
 
                 let stringified = function
                     .params
@@ -364,6 +364,7 @@ impl TypeChecker {
                         let type_kind = trait_type.kind.borrow();
                         if let TypeKind::Trait(Trait { methods, .. }) = &*type_kind {
                             for (method_name, method_type) in methods {
+                              // TODO: Allow methods with default_impl to be missing.
                                 let (name_token, struct_method) = struct_method_types
                                     .get(method_name.get_id().as_str())
                                     .ok_or_else(|| {
