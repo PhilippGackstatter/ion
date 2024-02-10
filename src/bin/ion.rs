@@ -15,7 +15,7 @@ fn main() {
         parser.parse_args_or_exit();
     }
 
-    if file_path == "" {
+    if file_path.is_empty() {
         println!("Please provide a path to a file to execute.");
     } else {
         match ion::util::file_to_string(&file_path) {

@@ -150,19 +150,19 @@ pub fn pretty_write_expr(
 
 impl Debug for Expression {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        pretty_write_expr(f, 0, false, &self)
+        pretty_write_expr(f, 0, false, self)
     }
 }
 
 impl Debug for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        pretty_write_stmt(f, 0, false, &self)
+        pretty_write_stmt(f, 0, false, self)
     }
 }
 
 impl Debug for Declaration {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        pretty_write_decl(f, 0, false, &self)
+        pretty_write_decl(f, 0, false, self)
     }
 }
 

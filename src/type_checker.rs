@@ -71,7 +71,7 @@ impl std::fmt::Display for TypeKind {
                     f,
                     ") -> {}",
                     if let Some(ret_ty) = &function.result {
-                        format!("{}", fmt_typekind_exit(ret_ty.clone()))
+                        fmt_typekind_exit(ret_ty.clone())
                     } else {
                         "void".into()
                     }
@@ -157,7 +157,7 @@ impl PartialEq for Function {
 
         eq_result = eq_result
             && match (&self.result, &other.result) {
-                (Some(ty), Some(other_ty)) => ty.ptr_eq(&other_ty),
+                (Some(ty), Some(other_ty)) => ty.ptr_eq(other_ty),
                 (None, None) => true,
                 _ => false,
             };
@@ -218,7 +218,7 @@ impl TypeChecker {
         }
     }
 
-    fn build_symbol_table<'a>(&mut self, decl: &'a Declaration) -> Result<(), CompileError> {
+    fn build_symbol_table(&mut self, decl: &Declaration) -> Result<(), CompileError> {
         match decl {
             Declaration::FnDecl(name, params_tokens, return_token, _stmt) => {
                 self.add_symbol(
@@ -421,8 +421,8 @@ impl TypeChecker {
     fn check_expr(&self, expr: &Expression) -> Result<Type, CompileError> {
         match &expr.kind {
             ExpressionKind::Binary(lexpr, op_token, rexpr) => {
-                let ltype = self.check_expr(&lexpr)?;
-                let rtype = self.check_expr(&rexpr)?;
+                let ltype = self.check_expr(lexpr)?;
+                let rtype = self.check_expr(rexpr)?;
                 if ltype == rtype {
                     if [
                         TokenKind::EqualEqual,
@@ -451,7 +451,7 @@ impl TypeChecker {
                 }
             }
             ExpressionKind::Unary(op, rexpr) => {
-                let expr_type = self.check_expr(&rexpr)?;
+                let expr_type = self.check_expr(rexpr)?;
                 match op.kind {
                     TokenKind::Bang => {
                         if *expr_type.kind.borrow() == TypeKind::Bool {
@@ -508,7 +508,7 @@ impl TypeChecker {
                 wrap_typekind(TypeKind::Bool),
             )),
             ExpressionKind::Assign { target, value } => {
-                let value_type = self.check_expr(&value)?;
+                let value_type = self.check_expr(value)?;
                 let target_type = self.check_expr(target)?;
                 if target_type != value_type {
                     Err(CompileError {
@@ -523,7 +523,7 @@ impl TypeChecker {
                 }
             }
             ExpressionKind::Identifier(id) => {
-                if let Some(index) = self.find_local_variable(&id) {
+                if let Some(index) = self.find_local_variable(id) {
                     Ok(self.locals[index as usize].dtype.clone())
                 } else if let Some(ty) = self.symbol_table.get(id) {
                     Ok(Type::new_empty_range(ty.clone()))
@@ -538,7 +538,7 @@ impl TypeChecker {
                 }
             }
             ExpressionKind::Call(callee, params) => {
-                let callee_type = self.check_expr(&callee)?;
+                let callee_type = self.check_expr(callee)?;
                 let callee_type_kind = &*callee_type.kind.borrow();
                 if let TypeKind::Func(function) = callee_type_kind {
                     for (index, param) in function.params.iter().enumerate() {
@@ -786,16 +786,11 @@ impl TypeChecker {
     }
 
     fn find_local_variable(&self, id: &str) -> Option<u8> {
-        if let Some(pos) = self
-            .locals
+        self.locals
             .iter()
             .rev()
             .position(|elem| elem.identifier == *id)
-        {
-            Some((self.locals.len() - 1 - pos).try_into().unwrap())
-        } else {
-            None
-        }
+            .map(|pos| (self.locals.len() - 1 - pos).try_into().unwrap())
     }
 
     fn print_symbol_table(&self) {
@@ -815,7 +810,7 @@ mod tests {
 
     fn lex_parse_check(path: &str) -> Result<(), CompileError> {
         let test_path: &Path = "src/test_input/type_checker/".as_ref();
-        let input = util::file_to_string(&test_path.join(&path)).unwrap();
+        let input = util::file_to_string(&test_path.join(path)).unwrap();
         let mut lexer = Lexer::new();
         lexer.lex(&input);
         let mut parser = Parser::new(&lexer);

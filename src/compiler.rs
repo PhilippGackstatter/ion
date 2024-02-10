@@ -109,7 +109,7 @@ impl Compiler {
                         let method_name = name;
 
                         // Puts the compiled Function Object on the stack
-                        self.compile_fn_decl(&method_name, params, stmt, FunctionType::Method);
+                        self.compile_fn_decl(method_name, params, stmt, FunctionType::Method);
 
                         // Associate the Function Object with the method name on the struct
                         self.emit_op_byte(Bytecode::OpStructMethod);
@@ -255,7 +255,7 @@ impl Compiler {
                 self.emit_u16(index);
             }
             Identifier(id) => {
-                if let Some(index) = self.find_local_variable(&id) {
+                if let Some(index) = self.find_local_variable(id) {
                     self.emit_op_byte(Bytecode::OpGetLocal);
                     self.emit_byte(index);
                 } else {

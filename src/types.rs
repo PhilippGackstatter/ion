@@ -218,11 +218,7 @@ impl Token {
     }
 
     pub fn is_id_token(&self) -> bool {
-        if let TokenKind::IdToken(_) = self.kind {
-            true
-        } else {
-            false
-        }
+        matches!(self.kind, TokenKind::IdToken(_))
     }
 
     pub fn get_id(&self) -> String {
@@ -234,10 +230,10 @@ impl Token {
     }
 }
 
-impl Into<std::ops::Range<usize>> for Token {
-    fn into(self) -> std::ops::Range<usize> {
-        let off = self.offset as usize;
-        off..(off + (self.length as usize))
+impl From<Token> for std::ops::Range<usize> {
+    fn from(token: Token) -> Self {
+        let off = token.offset as usize;
+        off..(off + (token.length as usize))
     }
 }
 

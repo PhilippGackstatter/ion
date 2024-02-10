@@ -115,7 +115,7 @@ impl VM {
                             if let Object::StructObj { fields, .. } = &mut *obj.borrow_mut() {
                                 for (key, val) in fields.iter() {
                                     if let Value::Obj(inner_obj) = val {
-                                        let fn_obj = (&mut *inner_obj.borrow_mut()).clone();
+                                        let fn_obj = (*inner_obj.borrow_mut()).clone();
                                         fn_objs.insert(
                                             key.clone(),
                                             Value::Obj(Rc::new(RefCell::new(fn_obj))),
@@ -230,7 +230,7 @@ impl VM {
                                 self.stack[self.frame_pointer] = Value::Obj(Rc::clone(recv));
                             }
 
-                            self.interpet(&chunk);
+                            self.interpet(chunk);
 
                             // And restore it after the function returns
                             self.frame_pointer = current_frame_pointer;
@@ -253,13 +253,13 @@ impl VM {
                     self.apply_bool_op(byte);
                 }
                 OpReturn => {
-                    let return_value = if self.read_u8(&chunk, &mut i) == 1 {
+                    let return_value = if self.read_u8(chunk, &mut i) == 1 {
                         Some(self.pop())
                     } else {
                         None
                     };
 
-                    let num_locals = self.read_u8(&chunk, &mut i);
+                    let num_locals = self.read_u8(chunk, &mut i);
                     for _ in 0..num_locals {
                         self.pop();
                     }

@@ -778,7 +778,7 @@ mod tests {
 
     fn lex_and_parse_impl(input: &str) -> Result<Program, CompileError> {
         let mut lexer = Lexer::new();
-        lexer.lex(&input);
+        lexer.lex(input);
         let mut parser = Parser::new(&lexer);
         parser.parse()
     }
@@ -830,7 +830,7 @@ struct MyStruct
     field2: bool
         ";
 
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let expected = StructDecl(
             token!(IdToken("MyStruct".into())),
@@ -861,7 +861,7 @@ struct MyStruct
 
         ";
 
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let expected = StructDecl(
             token!(IdToken("MyStruct".into())),
@@ -889,7 +889,7 @@ struct MyStruct
    
         ";
 
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let expected = StructDecl(token!(IdToken("MyStruct".into())), vec![]);
 
@@ -900,7 +900,7 @@ struct MyStruct
     fn test_struct_decl_missing_indentation_error() {
         let input = "struct MyStruct\nfield: type";
 
-        let parse_err = lex_and_parse_err(&input);
+        let parse_err = lex_and_parse_err(input);
 
         assert_eq!(parse_err.message, "Expected fields to be indented");
     }
@@ -914,7 +914,7 @@ foo(arg: i32) -> i32
     print 3
     return 5";
 
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let bar_call = Call(expr!(Identifier("bar".into())), vec![]);
 
@@ -948,7 +948,7 @@ long_function_name(
 ) -> i32
     return 5";
 
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let expected = FnDecl(
             "long_function_name".into(),
@@ -971,7 +971,7 @@ foo(arg: i32) -> i32
   print 3
     return 5";
 
-        let parse_err = lex_and_parse_err(&input);
+        let parse_err = lex_and_parse_err(input);
 
         assert_eq!(parse_err.message, "Expected indentation of 4 but got 2");
     }
@@ -982,7 +982,7 @@ foo(arg: i32) -> i32
 while i < 3
     i = i + 1
 ";
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let expected = StatementDecl(While(
             Expression::new_debug(Binary(
@@ -1010,7 +1010,7 @@ while i < 3
         let input = "
 if x != 3
     x = 10 / 2";
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let expected = StatementDecl(If(
             Expression::new_debug(Binary(
@@ -1043,7 +1043,7 @@ if (x
 else
     x = 15 * 3
     ";
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let expected = StatementDecl(If(
             Expression::new_debug(Binary(
@@ -1079,7 +1079,7 @@ else
     #[test]
     fn test_var_decl() {
         let input = r#"var magic_number = "37""#;
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let expected = VarDecl(
             "magic_number".into(),
@@ -1100,7 +1100,7 @@ var my_struct = MyStruct {
 }
         "#;
 
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let expected_struct = StructInit {
             name: expr!(Identifier("MyStruct".into())),
@@ -1131,7 +1131,7 @@ var my_struct = MyStruct {
     fn test_access() {
         let input = "var chain_result = my_struct.method().chain()";
 
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let first_access = Access {
             expr: expr!(Identifier("my_struct".into())),
@@ -1163,7 +1163,7 @@ impl MyStruct
         return 0
         ";
 
-        let parse_result = lex_and_parse(&input);
+        let parse_result = lex_and_parse(input);
 
         let expected = Declaration::ImplDecl {
             struct_name: token!(IdToken("MyStruct".into())),
@@ -1198,7 +1198,7 @@ impl MyStruct
     return 0
         ";
 
-        let parse_err = lex_and_parse_err(&input);
+        let parse_err = lex_and_parse_err(input);
 
         assert_eq!(parse_err.message, "Expected function declaration");
     }
