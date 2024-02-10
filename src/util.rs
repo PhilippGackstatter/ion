@@ -8,8 +8,9 @@ use crate::types::{
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
-    Program,
+    MethodSelf, Program,
     Statement::{self, *},
+    Token,
 };
 use std::fmt::{self, Debug, Formatter};
 
@@ -143,6 +144,7 @@ pub fn pretty_write_expr(
         Double { float } => write(f, level, is_child, &format!("{}", float)),
         Str { string } => write(f, level, is_child, &format!("\"{}\"", string)),
         Identifier(str_) => write(f, level, is_child, str_),
+        Self_ => write(f, level, is_child, "self"),
         True { .. } => write(f, level, is_child, "true"),
         False { .. } => write(f, level, is_child, "false"),
     }
@@ -174,6 +176,48 @@ pub fn pretty_print(prog: &Program) {
     }
 }
 
+fn pretty_write_callable(
+    f: &mut Formatter<'_>,
+    mut level: u32,
+    is_child: bool,
+    name: &str,
+    self_: Option<&MethodSelf>,
+    params: &[(Token, Token)],
+    return_ty: Option<Token>,
+    body: &Statement,
+) -> fmt::Result {
+    let ret = if return_ty.is_some() {
+        return_ty.as_ref().unwrap().get_id()
+    } else {
+        "void".to_owned()
+    };
+
+    let mut params_str: String = match self_ {
+        Some(method_self) => match &method_self.type_token {
+            Some(type_token) => format!("self: {}, ", type_token.get_id()),
+            None => "self, ".to_owned(),
+        },
+        None => "".to_owned(),
+    };
+
+    params_str.push_str(
+        &params
+            .iter()
+            .map(|p| format!("{}: {}", p.0.get_id(), p.1.get_id()))
+            .collect::<Vec<String>>()
+            .join(", "),
+    );
+
+    write(
+        f,
+        level,
+        is_child,
+        &format!("{}({}) -> {}", name, params_str, ret),
+    )?;
+    level += 2;
+    pretty_write_stmt(f, level, true, &body)
+}
+
 fn pretty_write_decl(
     f: &mut Formatter<'_>,
     mut level: u32,
@@ -188,30 +232,32 @@ fn pretty_write_decl(
             write(f, level, true, id)?;
             pretty_write_expr(f, level, true, expr)
         }
-        FnDecl(name, params, return_ty, stmt) => {
-            let ret = if return_ty.is_some() {
-                return_ty.as_ref().unwrap().get_id()
-            } else {
-                "void".to_owned()
-            };
-            write(
-                f,
-                level,
-                is_child,
-                &format!(
-                    "{}({}) -> {}",
-                    name,
-                    params
-                        .iter()
-                        .map(|p| format!("{}: {}", p.0.get_id(), p.1.get_id()))
-                        .collect::<Vec<String>>()
-                        .join(", "),
-                    ret
-                ),
-            )?;
-            level += 2;
-            pretty_write_stmt(f, level, true, stmt)
-        }
+        FnDecl(name, params, return_ty, body) => pretty_write_callable(
+            f,
+            level,
+            is_child,
+            name,
+            None,
+            params,
+            return_ty.clone(),
+            body,
+        ),
+        MethodDecl {
+            name,
+            self_,
+            params,
+            return_ty,
+            body,
+        } => pretty_write_callable(
+            f,
+            level,
+            is_child,
+            name,
+            self_.as_ref(),
+            params,
+            return_ty.clone(),
+            body,
+        ),
         ImplDecl {
             struct_name,
             methods,

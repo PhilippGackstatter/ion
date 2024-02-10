@@ -29,6 +29,7 @@ impl Lexer {
         keywords.insert("if".to_owned(), IfToken);
         keywords.insert("or".to_owned(), Or);
         keywords.insert("print".to_owned(), PrintToken);
+        keywords.insert("self".to_owned(), SelfToken);
         keywords.insert("return".to_owned(), Return);
         keywords.insert("super".to_owned(), Super);
         keywords.insert("this".to_owned(), This);

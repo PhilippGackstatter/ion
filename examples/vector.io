@@ -6,7 +6,7 @@ struct Vector
 
 impl Vector
 
-    dot_product(other: Vector) -> i32
+    dot_product(self, other: Vector) -> i32
         return self.x * other.x + self.y * other.y + self.z * other.z
 
 

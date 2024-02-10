@@ -1,5 +1,4 @@
 use crate::lexer::Lexer;
-use crate::types::Token;
 use crate::types::TokenKind::{self, *};
 use crate::types::{
     CompileError,
@@ -9,6 +8,7 @@ use crate::types::{
     Program,
     Statement::{self, *},
 };
+use crate::types::{MethodSelf, Token};
 use std::ops::Range;
 
 type StatementResult = Result<Statement, CompileError>;
@@ -19,6 +19,12 @@ pub struct Parser<'a> {
     lexer: &'a Lexer,
     current: usize,
     whitespace_stack: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+enum CallableKind {
+    Function,
+    Method,
 }
 
 impl<'a> Parser<'a> {
@@ -40,7 +46,7 @@ impl<'a> Parser<'a> {
         match &self.peek().kind {
             VarToken => self.variable_declaration(),
             IdToken(_) => {
-                if self.is_function_declaration() {
+                if self.is_callable_declaration() {
                     self.function_declaration()
                 } else {
                     Ok(StatementDecl(self.statement()?))
@@ -128,11 +134,11 @@ impl<'a> Parser<'a> {
 
         if self.set_next_indentation()? {
             while self.has_same_indentation()? {
-                if self.is_function_declaration() {
-                    methods.push(self.function_declaration()?);
+                if self.is_callable_declaration() {
+                    methods.push(self.method_declaration()?);
                 } else {
                     return Err(
-                        self.error(self.peek().clone().into(), "Expected function declaration")
+                        self.error(self.peek().clone().into(), "Expected method declaration")
                     );
                 }
             }
@@ -164,7 +170,7 @@ impl<'a> Parser<'a> {
         Ok(VarDecl(id.clone(), expr))
     }
 
-    fn is_function_declaration(&mut self) -> bool {
+    fn is_callable_declaration(&mut self) -> bool {
         let current = self.current;
 
         let mut is_fn_decl = false;
@@ -192,11 +198,34 @@ impl<'a> Parser<'a> {
         is_fn_decl
     }
 
+    fn method_declaration(&mut self) -> DeclarationResult {
+        self.callable_declaration(CallableKind::Method)
+    }
+
     fn function_declaration(&mut self) -> DeclarationResult {
+        self.callable_declaration(CallableKind::Function)
+    }
+
+    fn parse_callable_parameter_type(&mut self) -> Result<Token, CompileError> {
+        self.consume(Colon, "Expected ':' for type annotation.")?;
+
+        if !self.peek().is_id_token() {
+            return Err(self.error(
+                self.peek().clone().into(),
+                "Expected type identifier after parameter.",
+            ));
+        }
+
+        Ok(self.advance().clone())
+    }
+
+    fn callable_declaration(&mut self, callable_kind: CallableKind) -> DeclarationResult {
         let id = self.advance().get_id();
 
         self.consume(LeftParen, "Expected '(' after function name.")?;
 
+        let mut has_self = false;
+        let mut self_type_token: Option<Token> = None;
         let mut params = Vec::new();
 
         if self.peek().kind != RightParen {
@@ -204,18 +233,31 @@ impl<'a> Parser<'a> {
             while self.peek().kind != RightParen {
                 let name_token = self.advance().clone();
 
-                self.consume(Colon, "Expected ':' for type annotation.")?;
+                if name_token.kind == SelfToken {
+                    if callable_kind != CallableKind::Method {
+                        return Err(self.error(
+                            self.peek().clone().into(),
+                            "'self' can only appear in methods",
+                        ));
+                    }
 
-                if !self.peek().is_id_token() {
-                    return Err(self.error(
-                        self.peek().clone().into(),
-                        "Expected type identifier after parameter.",
-                    ));
+                    if !params.is_empty() {
+                        return Err(self.error(
+                            self.peek().clone().into(),
+                            "'self' can only appear as the first parameter of a method",
+                        ));
+                    }
+
+                    has_self = true;
+
+                    if self.peek().kind == Colon {
+                        self_type_token = Some(self.parse_callable_parameter_type()?);
+                    }
+                } else {
+                    let type_token = self.parse_callable_parameter_type()?;
+
+                    params.push((name_token, type_token));
                 }
-
-                let type_token = self.advance().clone();
-
-                params.push((name_token, type_token));
 
                 if !self.match_(Comma) && self.peek().kind != RightParen {
                     return Err(self.error(
@@ -247,7 +289,19 @@ impl<'a> Parser<'a> {
                 decls.push(StatementDecl(Ret(None)));
             }
         }
-        Ok(FnDecl(id, params, return_token, body))
+
+        match callable_kind {
+            CallableKind::Function => Ok(FnDecl(id, params, return_token, body)),
+            CallableKind::Method => Ok(MethodDecl {
+                name: id,
+                self_: has_self.then_some(MethodSelf {
+                    type_token: self_type_token,
+                }),
+                params,
+                return_ty: return_token,
+                body,
+            }),
+        }
     }
 
     // Statements
@@ -563,6 +617,11 @@ impl<'a> Parser<'a> {
             }
             IdToken(str_) => {
                 let id = Expression::new(self.current_range(), Identifier(str_.clone()));
+                self.advance();
+                Ok(id)
+            }
+            SelfToken => {
+                let id = Expression::new(self.current_range(), Self_);
                 self.advance();
                 Ok(id)
             }
@@ -1168,21 +1227,23 @@ impl MyStruct
         let expected = Declaration::ImplDecl {
             struct_name: token!(IdToken("MyStruct".into())),
             methods: vec![
-                FnDecl(
-                    "print_something".into(),
-                    vec![],
-                    None,
-                    Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
-                ),
-                FnDecl(
-                    "is_positive".into(),
-                    vec![(
+                MethodDecl {
+                    name: "print_something".into(),
+                    self_: None,
+                    params: vec![],
+                    return_ty: None,
+                    body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
+                },
+                MethodDecl {
+                    name: "is_positive".into(),
+                    self_: None,
+                    params: vec![(
                         token!(IdToken("arg1".into())),
                         token!(IdToken("int".into())),
                     )],
-                    Some(token!(IdToken("i32".into()))),
-                    Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
-                ),
+                    return_ty: Some(token!(IdToken("i32".into()))),
+                    body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
+                },
             ],
         };
 
@@ -1200,6 +1261,6 @@ impl MyStruct
 
         let parse_err = lex_and_parse_err(input);
 
-        assert_eq!(parse_err.message, "Expected function declaration");
+        assert_eq!(parse_err.message, "Expected method declaration");
     }
 }

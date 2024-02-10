@@ -281,6 +281,7 @@ pub enum TokenKind {
     ImplToken,
     IdToken(String),
     PrintToken,
+    SelfToken,
     IfToken,
     ElseToken,
     And,
@@ -294,11 +295,23 @@ pub enum TokenKind {
 }
 
 #[derive(PartialEq)]
+pub struct MethodSelf {
+    pub type_token: Option<Token>,
+}
+
+#[derive(PartialEq)]
 pub enum Declaration {
     StatementDecl(Statement),
     VarDecl(String, Expression),
     StructDecl(Token, Vec<(Token, Token)>),
     FnDecl(String, Vec<(Token, Token)>, Option<Token>, Statement),
+    MethodDecl {
+        name: String,
+        self_: Option<MethodSelf>,
+        params: Vec<(Token, Token)>,
+        return_ty: Option<Token>,
+        body: Statement,
+    },
     ImplDecl {
         struct_name: Token,
         methods: Vec<Declaration>,
@@ -342,6 +355,7 @@ pub enum ExpressionKind {
         string: String,
     },
     Identifier(String),
+    Self_,
     False,
     True,
 }

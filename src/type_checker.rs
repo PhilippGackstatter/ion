@@ -337,6 +337,15 @@ impl TypeChecker {
                 let return_types = self.check_function_body(params_tokens, body, None)?;
                 self.check_function_return_types(return_types, return_token)?;
             }
+            Declaration::MethodDecl {
+                name,
+                self_,
+                params,
+                return_ty: ret,
+                body,
+            } => {
+                todo!()
+            }
             Declaration::StructDecl(_name, fields) => {
                 for field in fields.iter() {
                     self.lookup_type(&field.1)?;
@@ -536,6 +545,9 @@ impl TypeChecker {
                         ),
                     })
                 }
+            }
+            ExpressionKind::Self_ => {
+                todo!()
             }
             ExpressionKind::Call(callee, params) => {
                 let callee_type = self.check_expr(callee)?;
