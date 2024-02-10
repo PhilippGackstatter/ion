@@ -273,9 +273,6 @@ impl Compiler {
                     self.emit_u16(index);
                 }
             }
-            Self_ => {
-                todo!()
-            }
             StructInit { name, values } => {
                 for (field_name, field_value) in values.iter() {
                     self.compile_expr(field_value);

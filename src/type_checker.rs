@@ -1,5 +1,6 @@
 use crate::types::{
     CompileError, Declaration, Expression, ExpressionKind, Program, Statement, Token, TokenKind,
+    SELF,
 };
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
@@ -249,10 +250,16 @@ impl TypeChecker {
                 methods,
             } => {
                 for method in methods {
-                    if let Declaration::FnDecl(name, params_tokens, return_token, body) = method {
-                        let fn_type =
-                            self.generate_function_type(name, params_tokens, return_token, body)?;
-                        let struct_method_name = struct_name.get_id() + name;
+                    if let Declaration::MethodDecl {
+                        name,
+                        self_: _,
+                        params,
+                        return_ty,
+                        body,
+                    } = method
+                    {
+                        let fn_type = self.generate_function_type(name, params, return_ty, body)?;
+                        let struct_method_name = format!("{}::{}", struct_name.get_id(), name);
                         let fn_type_ref =
                             Rc::downgrade(self.add_symbol(&struct_method_name, fn_type)?);
                         self.add_struct_method(struct_name, name, fn_type_ref)?;
@@ -334,17 +341,11 @@ impl TypeChecker {
                 // }
             }
             Declaration::FnDecl(_name, params_tokens, return_token, body) => {
-                let return_types = self.check_function_body(params_tokens, body, None)?;
+                let return_types = self.check_function_body(params_tokens, body)?;
                 self.check_function_return_types(return_types, return_token)?;
             }
-            Declaration::MethodDecl {
-                name,
-                self_,
-                params,
-                return_ty: ret,
-                body,
-            } => {
-                todo!()
+            Declaration::MethodDecl { .. } => {
+                panic!("method type checking is handled in ImplDecl")
             }
             Declaration::StructDecl(_name, fields) => {
                 for field in fields.iter() {
@@ -356,10 +357,42 @@ impl TypeChecker {
                 methods,
             } => {
                 for method in methods {
-                    if let Declaration::FnDecl(_name, params_tokens, return_token, body) = method {
-                        let return_types =
-                            self.check_function_body(params_tokens, body, Some(struct_name))?;
-                        self.check_function_return_types(return_types, return_token)?;
+                    if let Declaration::MethodDecl {
+                        name,
+                        self_,
+                        params,
+                        return_ty,
+                        body,
+                    } = method
+                    {
+                        match self_ {
+                            Some(method_self) => {
+                                match &method_self.type_token {
+                                    Some(type_token) => {
+                                        if type_token != struct_name {
+                                            let specified_type = self.lookup_type(&type_token)?;
+                                            return Err(CompileError {
+                                                token_range: type_token.clone().into(),
+                                                message: format!(
+                                                    "'self' in method {} must have type {}, got {}",
+                                                    name,
+                                                    struct_name.get_id(),
+                                                    specified_type,
+                                                ),
+                                            });
+                                        }
+                                    }
+                                    None => {}
+                                }
+
+                                let receiver_type = self.lookup_type(struct_name)?;
+                                self.add_local_to_next_scope(SELF.to_owned(), receiver_type);
+                            }
+                            None => (),
+                        }
+
+                        let return_types = self.check_function_body(params, body)?;
+                        self.check_function_return_types(return_types, return_ty)?;
                     }
                 }
             }
@@ -536,6 +569,11 @@ impl TypeChecker {
                     Ok(self.locals[index as usize].dtype.clone())
                 } else if let Some(ty) = self.symbol_table.get(id) {
                     Ok(Type::new_empty_range(ty.clone()))
+                } else if id == SELF {
+                    Err(CompileError {
+                        token_range: expr.tokens.clone(),
+                        message: format!("method does not have 'self' as a receiver.",),
+                    })
                 } else {
                     Err(CompileError {
                         token_range: expr.tokens.clone(),
@@ -545,9 +583,6 @@ impl TypeChecker {
                         ),
                     })
                 }
-            }
-            ExpressionKind::Self_ => {
-                todo!()
             }
             ExpressionKind::Call(callee, params) => {
                 let callee_type = self.check_expr(callee)?;
@@ -687,18 +722,12 @@ impl TypeChecker {
         &mut self,
         params: &Vec<(Token, Token)>,
         body: &Statement,
-        receiver: Option<&Token>,
     ) -> Result<Vec<Type>, CompileError> {
         for (name_token, param_token) in params {
             let expr_type = self.lookup_type(param_token)?;
             // Make the parameters available as locals to the function body
             // so that they can be found & type checked
             self.add_local_to_next_scope(name_token.get_id(), expr_type);
-        }
-
-        if let Some(receiver) = receiver {
-            let receiver_type = self.lookup_type(receiver)?;
-            self.add_local_to_next_scope("self".to_owned(), receiver_type);
         }
 
         let return_types = self.check_stmt(body)?;

@@ -8,7 +8,7 @@ use crate::types::{
     Program,
     Statement::{self, *},
 };
-use crate::types::{MethodSelf, Token};
+use crate::types::{MethodSelf, Token, SELF};
 use std::ops::Range;
 
 type StatementResult = Result<Statement, CompileError>;
@@ -621,7 +621,7 @@ impl<'a> Parser<'a> {
                 Ok(id)
             }
             SelfToken => {
-                let id = Expression::new(self.current_range(), Self_);
+                let id = Expression::new(self.current_range(), Identifier(SELF.to_owned()));
                 self.advance();
                 Ok(id)
             }

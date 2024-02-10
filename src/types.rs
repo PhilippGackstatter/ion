@@ -237,6 +237,8 @@ impl From<Token> for std::ops::Range<usize> {
     }
 }
 
+pub const SELF: &str = "self";
+
 #[derive(Debug)]
 pub struct CompileError {
     /// The indexes in the source string that are erroneous
@@ -355,7 +357,6 @@ pub enum ExpressionKind {
         string: String,
     },
     Identifier(String),
-    Self_,
     False,
     True,
 }
