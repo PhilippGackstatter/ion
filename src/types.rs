@@ -328,6 +328,7 @@ pub enum Declaration {
     },
     ImplDecl {
         struct_name: Token,
+        trait_name: Option<Token>,
         methods: Vec<MethodDeclaration>,
     },
 }

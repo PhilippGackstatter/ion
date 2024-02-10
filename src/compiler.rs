@@ -103,11 +103,15 @@ impl Compiler {
                 self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index_name);
             }
-            TraitDecl { trait_name, methods } => todo!(),
+            TraitDecl {
+                trait_name,
+                methods,
+            } => todo!(),
             // TODO: This should be compiled in a first pass, otherwise a StructInit that comes before an impl block in the source
             // code, will be created without the methods from that later impl block!
             ImplDecl {
                 struct_name,
+                trait_name,
                 methods,
             } => {
                 for method in methods {

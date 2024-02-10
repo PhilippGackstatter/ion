@@ -199,7 +199,9 @@ fn pretty_write_callable(
 
         match self_ {
             Some(method_self) => match &method_self.type_token {
-                Some(type_token) => format!("self: {}{other_params_separator}", type_token.get_id()),
+                Some(type_token) => {
+                    format!("self: {}{other_params_separator}", type_token.get_id())
+                }
                 None => format!("self{other_params_separator}"),
             },
             None => "".to_owned(),
@@ -287,14 +289,17 @@ fn pretty_write_decl(
         }
         ImplDecl {
             struct_name,
+            trait_name,
             methods,
         } => {
-            write(
-                f,
-                level,
-                is_child,
-                &format!("impl {}", struct_name.get_id()),
-            )?;
+            let stringified = match trait_name {
+                Some(trait_name) => {
+                    format!("impl {} for {}", trait_name.get_id(), struct_name.get_id())
+                }
+                None => format!("impl {}", struct_name.get_id()),
+            };
+
+            write(f, level, is_child, &stringified)?;
             level += 2;
             for method in methods {
                 let MethodDeclaration {

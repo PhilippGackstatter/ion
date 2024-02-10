@@ -159,10 +159,22 @@ impl<'a> Parser<'a> {
         if !self.peek().is_id_token() {
             return Err(self.error(
                 self.peek().clone().into(),
-                "Expected an identifier as struct name.",
+                "Expected an identifier as struct or trait name.",
             ));
         }
-        let name = self.advance().clone();
+        let mut name = self.advance().clone();
+        let mut trait_name: Option<Token> = None;
+
+        if self.match_(For) {
+            if !self.peek().is_id_token() {
+                return Err(self.error(
+                    self.peek().clone().into(),
+                    "Expected an identifier as struct name.",
+                ));
+            }
+            trait_name = Some(name);
+            name = self.advance().clone();
+        }
 
         self.expect_newline()?;
 
@@ -184,6 +196,7 @@ impl<'a> Parser<'a> {
 
         Ok(ImplDecl {
             struct_name: name,
+            trait_name,
             methods,
         })
     }
@@ -1428,6 +1441,7 @@ impl MyStruct
 
         let expected = Declaration::ImplDecl {
             struct_name: token!(IdToken("MyStruct".into())),
+            trait_name: None,
             methods: vec![
                 MethodDeclaration {
                     name: "print_something".into(),
