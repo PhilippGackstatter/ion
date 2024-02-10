@@ -5,10 +5,11 @@ struct Dog
 
 impl Dog
 
-    set_name(name: str)
+    set_name(self, name: str)
         self.name = name
 
-    get_name() -> str
+    // It is legal to specify the type of self.
+    get_name(self: Dog) -> str
         return self.name
 
 
@@ -19,7 +20,7 @@ struct Human
 
 impl Human
 
-    pet_name() -> str
+    pet_name(self) -> str
         return self.pet.get_name()
 
 

@@ -5,8 +5,12 @@ struct Rectangle
 
 impl Rectangle
 
-    area() -> i32
+    area(self) -> i32
         return self.width * self.height
+
+    // Static method without self receiver.
+    name() -> str
+      return "rect"
 
 
 var rect = Rectangle {
@@ -14,4 +18,5 @@ var rect = Rectangle {
     height: 3,
 }
 
+print rect.name()
 print rect.area()

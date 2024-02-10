@@ -8,7 +8,7 @@ use crate::types::{
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
-    MethodSelf, Program,
+    MethodDeclaration, MethodSelf, Program,
     Statement::{self, *},
     Token,
 };
@@ -231,19 +231,8 @@ fn pretty_write_decl(
             write(f, level, true, id)?;
             pretty_write_expr(f, level, true, expr)
         }
-        FnDecl(name, params, return_ty, body) => pretty_write_callable(
-            f,
-            level,
-            is_child,
+        FnDecl {
             name,
-            None,
-            params,
-            return_ty.clone(),
-            body,
-        ),
-        MethodDecl {
-            name,
-            self_,
             params,
             return_ty,
             body,
@@ -252,7 +241,7 @@ fn pretty_write_decl(
             level,
             is_child,
             name,
-            self_.as_ref(),
+            None,
             params,
             return_ty.clone(),
             body,
@@ -269,7 +258,24 @@ fn pretty_write_decl(
             )?;
             level += 2;
             for fn_decl in methods {
-                pretty_write_decl(f, level, true, fn_decl)?;
+                let MethodDeclaration {
+                    name,
+                    self_,
+                    params,
+                    return_ty,
+                    body,
+                } = fn_decl;
+
+                pretty_write_callable(
+                    f,
+                    level,
+                    true,
+                    name,
+                    self_.as_ref(),
+                    params,
+                    return_ty.clone(),
+                    body,
+                )?;
             }
             Ok(())
         }

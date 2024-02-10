@@ -7,7 +7,7 @@ use crate::types::{
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
-    Object, Program,
+    MethodDeclaration, Object, Program,
     Statement::{self, *},
     Token,
     TokenKind::*,
@@ -90,22 +90,18 @@ impl Compiler {
                     self.add_local(id.clone());
                 }
             }
-            FnDecl(name, params, _, stmt) => {
-                self.compile_fn_decl(name, params, stmt, FunctionType::Function);
+            FnDecl {
+                name,
+                params,
+                return_ty: _,
+                body,
+            } => {
+                self.compile_fn_decl(name, params, body, FunctionType::Function);
 
                 // Declare the fn obj on the stack as a global variable associated with its name
                 let index_name = self.add_constant(make_string_value(name));
                 self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index_name);
-            }
-            MethodDecl {
-                name,
-                self_,
-                params,
-                return_ty: ret,
-                body,
-            } => {
-                todo!()
             }
             // TODO: This should be compiled in a first pass, otherwise a StructInit that comes before an impl block in the source
             // code, will be created without the methods from that later impl block!
@@ -114,22 +110,28 @@ impl Compiler {
                 methods,
             } => {
                 for method in methods {
-                    if let FnDecl(name, params, _, stmt) = method {
-                        let method_name = name;
+                    let MethodDeclaration {
+                        name,
+                        self_: _,
+                        params,
+                        return_ty: _,
+                        body,
+                    } = method;
 
-                        // Puts the compiled Function Object on the stack
-                        self.compile_fn_decl(method_name, params, stmt, FunctionType::Method);
+                    let method_name = name;
 
-                        // Associate the Function Object with the method name on the struct
-                        self.emit_op_byte(Bytecode::OpStructMethod);
+                    // Puts the compiled Function Object on the stack
+                    self.compile_fn_decl(method_name, params, body, FunctionType::Method);
 
-                        let struct_name_index =
-                            self.add_constant(make_string_value(&struct_name.get_id()));
-                        self.emit_u16(struct_name_index);
+                    // Associate the Function Object with the method name on the struct
+                    self.emit_op_byte(Bytecode::OpStructMethod);
 
-                        let method_name_index = self.add_constant(make_string_value(name));
-                        self.emit_u16(method_name_index);
-                    }
+                    let struct_name_index =
+                        self.add_constant(make_string_value(&struct_name.get_id()));
+                    self.emit_u16(struct_name_index);
+
+                    let method_name_index = self.add_constant(make_string_value(name));
+                    self.emit_u16(method_name_index);
                 }
             }
             StructDecl(_, _) => (),

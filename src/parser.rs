@@ -8,7 +8,7 @@ use crate::types::{
     Program,
     Statement::{self, *},
 };
-use crate::types::{MethodSelf, Token, SELF};
+use crate::types::{MethodDeclaration, MethodSelf, Token, SELF};
 use std::ops::Range;
 
 type StatementResult = Result<Statement, CompileError>;
@@ -198,14 +198,6 @@ impl<'a> Parser<'a> {
         is_fn_decl
     }
 
-    fn method_declaration(&mut self) -> DeclarationResult {
-        self.callable_declaration(CallableKind::Method)
-    }
-
-    fn function_declaration(&mut self) -> DeclarationResult {
-        self.callable_declaration(CallableKind::Function)
-    }
-
     fn parse_callable_parameter_type(&mut self) -> Result<Token, CompileError> {
         self.consume(Colon, "Expected ':' for type annotation.")?;
 
@@ -219,39 +211,55 @@ impl<'a> Parser<'a> {
         Ok(self.advance().clone())
     }
 
-    fn callable_declaration(&mut self, callable_kind: CallableKind) -> DeclarationResult {
-        let id = self.advance().get_id();
+    fn parse_method_self(&mut self) -> Result<Option<MethodSelf>, CompileError> {
+        if self.peek().kind != SelfToken {
+            return Ok(None);
+        }
 
-        self.consume(LeftParen, "Expected '(' after function name.")?;
+        self.advance();
 
-        let mut has_self = false;
         let mut self_type_token: Option<Token> = None;
+
+        if self.peek().kind == Colon {
+            self_type_token = Some(self.parse_callable_parameter_type()?);
+        }
+
+        if !self.match_(Comma) && self.peek().kind != RightParen {
+            return Err(self.error(
+                self.peek().clone().into(),
+                "Expected ')' or ',' after parameter.",
+            ));
+        }
+
+        Ok(Some(MethodSelf {
+            type_token: self_type_token,
+        }))
+    }
+
+    fn parse_callable_parameters(
+        &mut self,
+        callable_kind: CallableKind,
+    ) -> Result<Vec<(Token, Token)>, CompileError> {
         let mut params = Vec::new();
 
         if self.peek().kind != RightParen {
-            // Consume comma after parameter
             while self.peek().kind != RightParen {
                 let name_token = self.advance().clone();
 
                 if name_token.kind == SelfToken {
-                    if callable_kind != CallableKind::Method {
-                        return Err(self.error(
-                            self.peek().clone().into(),
-                            "'self' can only appear in methods",
-                        ));
-                    }
-
-                    if !params.is_empty() {
-                        return Err(self.error(
-                            self.peek().clone().into(),
-                            "'self' can only appear as the first parameter of a method",
-                        ));
-                    }
-
-                    has_self = true;
-
-                    if self.peek().kind == Colon {
-                        self_type_token = Some(self.parse_callable_parameter_type()?);
+                    match callable_kind {
+                        CallableKind::Method => {
+                            return Err(self.error(
+                                self.peek().clone().into(),
+                                "'self' can only appear as the first parameter of a method",
+                            ));
+                        }
+                        CallableKind::Function => {
+                            return Err(self.error(
+                                self.peek().clone().into(),
+                                "'self' can only appear in methods",
+                            ));
+                        }
                     }
                 } else {
                     let type_token = self.parse_callable_parameter_type()?;
@@ -272,8 +280,12 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.consume(RightParen, "Expected ')' after function parameters.")?;
+        Ok(params)
+    }
 
+    fn parse_callable_return_token_and_body(
+        &mut self,
+    ) -> Result<(Option<Token>, Statement), CompileError> {
         let return_token = if self.match_(Arrow) {
             Some(self.advance().clone())
         } else {
@@ -290,18 +302,45 @@ impl<'a> Parser<'a> {
             }
         }
 
-        match callable_kind {
-            CallableKind::Function => Ok(FnDecl(id, params, return_token, body)),
-            CallableKind::Method => Ok(MethodDecl {
-                name: id,
-                self_: has_self.then_some(MethodSelf {
-                    type_token: self_type_token,
-                }),
-                params,
-                return_ty: return_token,
-                body,
-            }),
-        }
+        Ok((return_token, body))
+    }
+
+    fn method_declaration(&mut self) -> Result<MethodDeclaration, CompileError> {
+        let id = self.advance().get_id();
+        self.consume(LeftParen, "Expected '(' after method name.")?;
+
+        let method_self = self.parse_method_self()?;
+        let params = self.parse_callable_parameters(CallableKind::Method)?;
+
+        self.consume(RightParen, "Expected ')' after method parameters.")?;
+
+        let (return_ty, body) = self.parse_callable_return_token_and_body()?;
+
+        Ok(MethodDeclaration {
+            name: id,
+            self_: method_self,
+            params,
+            return_ty,
+            body,
+        })
+    }
+
+    fn function_declaration(&mut self) -> DeclarationResult {
+        let id = self.advance().get_id();
+        self.consume(LeftParen, "Expected '(' after function name.")?;
+
+        let params = self.parse_callable_parameters(CallableKind::Function)?;
+
+        self.consume(RightParen, "Expected ')' after function parameters.")?;
+
+        let (return_ty, body) = self.parse_callable_return_token_and_body()?;
+
+        Ok(FnDecl {
+            name: id,
+            params,
+            return_ty,
+            body,
+        })
     }
 
     // Statements
@@ -977,11 +1016,11 @@ foo(arg: i32) -> i32
 
         let bar_call = Call(expr!(Identifier("bar".into())), vec![]);
 
-        let expected = FnDecl(
-            "foo".into(),
-            vec![(token!(IdToken("arg".into())), token!(IdToken("i32".into())))],
-            Some(token!(IdToken("i32".into()))),
-            Block(vec![
+        let expected = FnDecl {
+            name: "foo".into(),
+            params: vec![(token!(IdToken("arg".into())), token!(IdToken("i32".into())))],
+            return_ty: Some(token!(IdToken("i32".into()))),
+            body: Block(vec![
                 StatementDecl(ExpressionStmt(dexpr!(bar_call))),
                 StatementDecl(ExpressionStmt(Expression::new_debug(Assign {
                     target: expr!(Identifier("x".into())),
@@ -994,7 +1033,7 @@ foo(arg: i32) -> i32
                 StatementDecl(Print(Expression::new_debug(Integer { int: 3 }))),
                 StatementDecl(Ret(Some(dexpr!(Integer { int: 5 })))),
             ]),
-        );
+        };
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
@@ -1009,15 +1048,15 @@ long_function_name(
 
         let parse_result = lex_and_parse(input);
 
-        let expected = FnDecl(
-            "long_function_name".into(),
-            vec![
+        let expected = FnDecl {
+            name: "long_function_name".into(),
+            params: vec![
                 (token!(IdToken("arg".into())), token!(IdToken("i32".into()))),
                 (token!(IdToken("oth".into())), token!(IdToken("str".into()))),
             ],
-            Some(token!(IdToken("i32".into()))),
-            Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 5 }))))]),
-        );
+            return_ty: Some(token!(IdToken("i32".into()))),
+            body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 5 }))))]),
+        };
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
 
@@ -1227,14 +1266,14 @@ impl MyStruct
         let expected = Declaration::ImplDecl {
             struct_name: token!(IdToken("MyStruct".into())),
             methods: vec![
-                MethodDecl {
+                MethodDeclaration {
                     name: "print_something".into(),
                     self_: None,
                     params: vec![],
                     return_ty: None,
                     body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
                 },
-                MethodDecl {
+                MethodDeclaration {
                     name: "is_positive".into(),
                     self_: None,
                     params: vec![(

@@ -302,21 +302,28 @@ pub struct MethodSelf {
 }
 
 #[derive(PartialEq)]
+pub struct MethodDeclaration {
+    pub name: String,
+    pub self_: Option<MethodSelf>,
+    pub params: Vec<(Token, Token)>,
+    pub return_ty: Option<Token>,
+    pub body: Statement,
+}
+
+#[derive(PartialEq)]
 pub enum Declaration {
     StatementDecl(Statement),
     VarDecl(String, Expression),
     StructDecl(Token, Vec<(Token, Token)>),
-    FnDecl(String, Vec<(Token, Token)>, Option<Token>, Statement),
-    MethodDecl {
+    FnDecl {
         name: String,
-        self_: Option<MethodSelf>,
         params: Vec<(Token, Token)>,
         return_ty: Option<Token>,
         body: Statement,
     },
     ImplDecl {
         struct_name: Token,
-        methods: Vec<Declaration>,
+        methods: Vec<MethodDeclaration>,
     },
 }
 
