@@ -36,6 +36,7 @@ impl Lexer {
         keywords.insert("true".to_owned(), TrueToken);
         keywords.insert("var".to_owned(), VarToken);
         keywords.insert("while".to_owned(), WhileToken);
+        keywords.insert("trait".to_owned(), TraitToken);
         keywords.insert("struct".to_owned(), StructToken);
         keywords.insert("impl".to_owned(), ImplToken);
 
@@ -428,6 +429,33 @@ var x = Outer {
             Comma,
             RightBrace,
             RightBrace,
+            NewLine,
+            EndOfFile,
+        ];
+
+        assert_eq!(unpacked_tokens(lexer.tokens), expected);
+    }
+
+    #[test]
+    fn test_trait_declaration() {
+        let input = "
+trait Shape
+  calculate_area(self) -> i32
+";
+        let mut lexer = Lexer::new();
+        lexer.lex(input);
+
+        let expected = vec![
+            TraitToken,
+            IdToken("Shape".into()),
+            NewLine,
+            WhiteSpace(2),
+            IdToken("calculate_area".into()),
+            LeftParen,
+            SelfToken,
+            RightParen,
+            Arrow,
+            IdToken("i32".into()),
             NewLine,
             EndOfFile,
         ];

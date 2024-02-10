@@ -279,6 +279,7 @@ pub enum TokenKind {
     For,
     VarToken,
     WhileToken,
+    TraitToken,
     StructToken,
     ImplToken,
     IdToken(String),
@@ -314,6 +315,10 @@ pub struct MethodDeclaration {
 pub enum Declaration {
     StatementDecl(Statement),
     VarDecl(String, Expression),
+    TraitDecl {
+        trait_name: Token,
+        methods: Vec<MethodDeclaration>,
+    },
     StructDecl(Token, Vec<(Token, Token)>),
     FnDecl {
         name: String,

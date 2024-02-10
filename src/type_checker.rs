@@ -352,6 +352,7 @@ impl TypeChecker {
                 let return_types = self.check_function_body(params, body)?;
                 self.check_function_return_types(return_types, return_ty)?;
             }
+            Declaration::TraitDecl { trait_name, methods } => todo!(),
             Declaration::StructDecl(_name, fields) => {
                 for field in fields.iter() {
                     self.lookup_type(&field.1)?;

@@ -191,12 +191,19 @@ fn pretty_write_callable(
         "void".to_owned()
     };
 
-    let mut params_str: String = match self_ {
-        Some(method_self) => match &method_self.type_token {
-            Some(type_token) => format!("self: {}, ", type_token.get_id()),
-            None => "self, ".to_owned(),
-        },
-        None => "".to_owned(),
+    let mut params_str: String = {
+        let mut other_params_separator = "";
+        if !params.is_empty() {
+            other_params_separator = ", ";
+        }
+
+        match self_ {
+            Some(method_self) => match &method_self.type_token {
+                Some(type_token) => format!("self: {}{other_params_separator}", type_token.get_id()),
+                None => format!("self{other_params_separator}"),
+            },
+            None => "".to_owned(),
+        }
     };
 
     params_str.push_str(
@@ -246,6 +253,38 @@ fn pretty_write_decl(
             return_ty.clone(),
             body,
         ),
+        TraitDecl {
+            trait_name,
+            methods,
+        } => {
+            write(
+                f,
+                level,
+                is_child,
+                &format!("trait {}", trait_name.get_id()),
+            )?;
+            for method in methods {
+                let MethodDeclaration {
+                    name,
+                    self_,
+                    params,
+                    return_ty,
+                    body,
+                } = method;
+
+                pretty_write_callable(
+                    f,
+                    level,
+                    true,
+                    name,
+                    self_.as_ref(),
+                    params,
+                    return_ty.clone(),
+                    body,
+                )?;
+            }
+            Ok(())
+        }
         ImplDecl {
             struct_name,
             methods,
@@ -257,14 +296,14 @@ fn pretty_write_decl(
                 &format!("impl {}", struct_name.get_id()),
             )?;
             level += 2;
-            for fn_decl in methods {
+            for method in methods {
                 let MethodDeclaration {
                     name,
                     self_,
                     params,
                     return_ty,
                     body,
-                } = fn_decl;
+                } = method;
 
                 pretty_write_callable(
                     f,
@@ -409,7 +448,7 @@ pub fn run(program: String, options: &Options) {
     }
 }
 
-fn print_error(prog: &str, range: std::ops::Range<usize>, msg: &str) {
+pub(crate) fn print_error(prog: &str, range: std::ops::Range<usize>, msg: &str) {
     let mut newline_before_token = 0;
     // Initialized to prog len in case of last line
     let mut newline_after_token = prog.len();

@@ -52,6 +52,7 @@ impl<'a> Parser<'a> {
                     Ok(StatementDecl(self.statement()?))
                 }
             }
+            TraitToken => self.trait_declaration(),
             StructToken => self.struct_declaration(),
             ImplToken => self.impl_declaration(),
             WhiteSpace(_) => Err(self.error(self.peek().clone().into(), "Unexpected whitespace")),
@@ -61,6 +62,41 @@ impl<'a> Parser<'a> {
             }
             _ => Ok(StatementDecl(self.statement()?)),
         }
+    }
+
+    fn trait_declaration(&mut self) -> DeclarationResult {
+        self.advance();
+
+        if !self.peek().is_id_token() {
+            return Err(self.error(
+                self.peek().clone().into(),
+                "Expected an identifier as trait name.",
+            ));
+        }
+        let name = self.advance().clone();
+
+        let mut methods = Vec::new();
+
+        self.expect_newline()?;
+
+        if self.set_next_indentation()? {
+            while self.has_same_indentation()? {
+                if self.is_trait_method_declaration() {
+                    methods.push(self.trait_method_declaration()?);
+                } else {
+                    return Err(
+                        self.error(self.peek().clone().into(), "Expected method declaration")
+                    );
+                }
+            }
+
+            self.pop_indentation();
+        }
+
+        Ok(TraitDecl {
+            trait_name: name,
+            methods,
+        })
     }
 
     fn struct_declaration(&mut self) -> DeclarationResult {
@@ -170,6 +206,19 @@ impl<'a> Parser<'a> {
         Ok(VarDecl(id.clone(), expr))
     }
 
+    // Callables
+
+    fn is_trait_method_declaration(&mut self) -> bool {
+        if let Some(next) = self.peek_next() {
+            matches!(self.peek().kind, IdToken(_)) && matches!(next.kind, LeftParen)
+        } else {
+            false
+        }
+    }
+
+    // Checks if the following tokens are a callable declaration.
+    // Needs to deep-inspect the tokens in order to differentiate a method call in a statement
+    // from a proper declaration, which it does by detecting a new line and whitespace.
     fn is_callable_declaration(&mut self) -> bool {
         let current = self.current;
 
@@ -179,13 +228,14 @@ impl<'a> Parser<'a> {
             match self.advance().kind {
                 NewLine => {
                     if let WhiteSpace(indent) = self.peek().kind {
-                        if self.is_indented(indent) {
+                        if self.exceeds_current_indentation(indent) {
                             is_fn_decl = true;
                         }
                     }
                     break;
                 }
 
+                TraitToken => break,
                 StructToken => break,
                 ImplToken => break,
 
@@ -283,15 +333,17 @@ impl<'a> Parser<'a> {
         Ok(params)
     }
 
-    fn parse_callable_return_token_and_body(
-        &mut self,
-    ) -> Result<(Option<Token>, Statement), CompileError> {
+    fn parse_callable_return_token(&mut self) -> Result<Option<Token>, CompileError> {
         let return_token = if self.match_(Arrow) {
             Some(self.advance().clone())
         } else {
             None
         };
 
+        Ok(return_token)
+    }
+
+    fn parse_callable_body(&mut self) -> Result<Statement, CompileError> {
         let mut body = self.block()?;
 
         // Add a return statement if it does not exist
@@ -302,10 +354,20 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok((return_token, body))
+        Ok(body)
     }
 
-    fn method_declaration(&mut self) -> Result<MethodDeclaration, CompileError> {
+    fn parse_method_header(
+        &mut self,
+    ) -> Result<
+        (
+            String,
+            Option<MethodSelf>,
+            Vec<(Token, Token)>,
+            Option<Token>,
+        ),
+        CompileError,
+    > {
         let id = self.advance().get_id();
         self.consume(LeftParen, "Expected '(' after method name.")?;
 
@@ -314,7 +376,15 @@ impl<'a> Parser<'a> {
 
         self.consume(RightParen, "Expected ')' after method parameters.")?;
 
-        let (return_ty, body) = self.parse_callable_return_token_and_body()?;
+        let return_ty = self.parse_callable_return_token()?;
+
+        Ok((id, method_self, params, return_ty))
+    }
+
+    fn method_declaration(&mut self) -> Result<MethodDeclaration, CompileError> {
+        let (id, method_self, params, return_ty) = self.parse_method_header()?;
+
+        let body = self.parse_callable_body()?;
 
         Ok(MethodDeclaration {
             name: id,
@@ -333,10 +403,47 @@ impl<'a> Parser<'a> {
 
         self.consume(RightParen, "Expected ')' after function parameters.")?;
 
-        let (return_ty, body) = self.parse_callable_return_token_and_body()?;
+        let return_ty = self.parse_callable_return_token()?;
+        let body = self.parse_callable_body()?;
 
         Ok(FnDecl {
             name: id,
+            params,
+            return_ty,
+            body,
+        })
+    }
+
+    // A trait method can either be just a method header or also contain a default implementation.
+    fn trait_method_declaration(&mut self) -> Result<MethodDeclaration, CompileError> {
+        let (id, method_self, params, return_ty) = self.parse_method_header()?;
+
+        // An empty body signals no default implementation.
+        let mut body = Statement::Block(vec![]);
+
+        // If the next indent is greater, we expect a method body, otherwise a newline.
+        if let NewLine = self.peek().kind {
+            match self
+                .peek_next()
+                .expect("should be EndOfFile in worst case")
+                .kind
+            {
+                WhiteSpace(indent) => {
+                    if self.exceeds_current_indentation(indent) {
+                        body = self.parse_callable_body()?;
+                    } else {
+                        self.expect_newline()?;
+                    }
+                }
+                _ => {
+                    self.expect_newline()?;
+                }
+            }
+        }
+
+        Ok(MethodDeclaration {
+            name: id,
+            self_: method_self,
             params,
             return_ty,
             body,
@@ -729,11 +836,15 @@ impl<'a> Parser<'a> {
 
     fn set_next_indentation(&mut self) -> Result<bool, CompileError> {
         if let WhiteSpace(indent) = self.peek().kind {
-            if *self.whitespace_stack.last().unwrap() < indent {
+            let last_indent = *self.whitespace_stack.last().unwrap();
+            if indent > last_indent {
                 self.whitespace_stack.push(indent);
                 Ok(true)
             } else {
-                Err(self.error(self.peek().clone().into(), "Expected indentation"))
+                Err(self.error(
+                    self.peek().clone().into(),
+                    &format!("Expected indentation greater than {last_indent} (found {indent})"),
+                ))
             }
         } else {
             Ok(false)
@@ -763,7 +874,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn is_indented(&self, indent: u8) -> bool {
+    /// Returns true if the given `indent` exceeds the current indentation.
+    fn exceeds_current_indentation(&self, indent: u8) -> bool {
         *self.whitespace_stack.last().unwrap() < indent
     }
 
@@ -840,6 +952,8 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::util;
+
     use super::*;
 
     macro_rules! dexpr {
@@ -867,7 +981,13 @@ mod tests {
     }
 
     fn lex_and_parse(input: &str) -> Program {
-        lex_and_parse_impl(input).unwrap()
+        match lex_and_parse_impl(input) {
+            Ok(res) => res,
+            Err(err) => {
+                util::print_error(&input, err.token_range, &err.message);
+                panic!("lex_and_parse failed");
+            }
+        }
     }
 
     fn lex_and_parse_err(input: &str) -> CompileError {
@@ -1004,7 +1124,7 @@ struct MyStruct
     }
 
     #[test]
-    fn test_fn_decl() {
+    fn test_fn_decl_success() {
         let input = "
 foo(arg: i32) -> i32
     bar()
@@ -1101,6 +1221,49 @@ while i < 3
         ));
 
         assert_eq!(*parse_result.first().unwrap(), expected)
+    }
+
+    #[test]
+    fn test_trait_decl_success() {
+        let input = "
+trait TestTrait
+  to_string(self) -> str
+  method_with_default_impl(arg: i32) -> i32
+    return arg
+  to_int(self) -> i32";
+
+        let parse_result = lex_and_parse(input);
+
+        let expected = TraitDecl {
+            trait_name: token!(IdToken("TestTrait".to_owned())),
+            methods: vec![
+                MethodDeclaration {
+                    name: "to_string".into(),
+                    self_: Some(MethodSelf { type_token: None }),
+                    params: vec![],
+                    return_ty: Some(token!(IdToken("str".into()))),
+                    body: Block(vec![]),
+                },
+                MethodDeclaration {
+                    name: "method_with_default_impl".into(),
+                    self_: None,
+                    params: vec![(token!(IdToken("arg".into())), token!(IdToken("i32".into())))],
+                    return_ty: Some(token!(IdToken("i32".into()))),
+                    body: Block(vec![StatementDecl(Ret(Some(dexpr!(Identifier(
+                        "arg".into()
+                    )))))]),
+                },
+                MethodDeclaration {
+                    name: "to_int".into(),
+                    self_: Some(MethodSelf { type_token: None }),
+                    params: vec![],
+                    return_ty: Some(token!(IdToken("i32".into()))),
+                    body: Block(vec![]),
+                },
+            ],
+        };
+
+        assert_eq!(*parse_result.first().unwrap(), expected,)
     }
 
     #[test]
