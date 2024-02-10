@@ -304,7 +304,7 @@ pub struct MethodSelf {
 
 #[derive(PartialEq)]
 pub struct MethodDeclaration {
-    pub name: String,
+    pub name: Token,
     pub self_: Option<MethodSelf>,
     pub params: Vec<(Token, Token)>,
     pub return_ty: Option<Token>,

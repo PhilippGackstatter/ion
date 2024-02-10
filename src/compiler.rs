@@ -126,7 +126,7 @@ impl Compiler {
                     let method_name = name;
 
                     // Puts the compiled Function Object on the stack
-                    self.compile_fn_decl(method_name, params, body, FunctionType::Method);
+                    self.compile_fn_decl(&method_name.get_id(), params, body, FunctionType::Method);
 
                     // Associate the Function Object with the method name on the struct
                     self.emit_op_byte(Bytecode::OpStructMethod);
@@ -135,7 +135,7 @@ impl Compiler {
                         self.add_constant(make_string_value(&struct_name.get_id()));
                     self.emit_u16(struct_name_index);
 
-                    let method_name_index = self.add_constant(make_string_value(name));
+                    let method_name_index = self.add_constant(make_string_value(&name.get_id()));
                     self.emit_u16(method_name_index);
                 }
             }

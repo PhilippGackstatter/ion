@@ -5,7 +5,7 @@ use crate::types::{
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::convert::TryInto;
-use std::ops::Range;
+use std::ops::{Deref, Range};
 use std::rc::{Rc, Weak};
 
 type RcTypeKind = Rc<RefCell<TypeKind>>;
@@ -39,6 +39,7 @@ enum TypeKind {
     Void,
     Func(Function),
     Struct(Struct),
+    Trait(Trait),
 }
 
 impl PartialEq for Type {
@@ -55,19 +56,44 @@ impl std::fmt::Display for TypeKind {
             TypeKind::Str => write!(f, "str"),
             TypeKind::Bool => write!(f, "bool"),
             TypeKind::Void => write!(f, "void"),
-            TypeKind::Struct(strct) => {
-                write!(f, "{}", strct.name)?;
-                write!(f, "(")?;
-                for field in strct.fields.iter() {
-                    write!(f, "{}: {}, ", field.0, fmt_typekind_exit(field.1.clone()))?;
+            TypeKind::Trait(trt) => {
+                write!(f, "trait {}", trt.name)?;
+                if !trt.methods.is_empty() {
+                    write!(f, " (")?;
+                    for method in trt.methods.iter() {
+                        write!(f, "{}", fmt_typekind_exit(method.1.clone()))?;
+                    }
+                    write!(f, ")")?;
                 }
-                write!(f, ")")
+                Ok(())
+            }
+            TypeKind::Struct(strct) => {
+                write!(f, "struct {}", strct.name)?;
+                if !strct.fields.is_empty() {
+                    write!(f, " (")?;
+
+                    let stringified = strct
+                        .fields
+                        .iter()
+                        .map(|field| format!("{}: {}", field.0, fmt_typekind_exit(field.1.clone())))
+                        .collect::<Vec<String>>()
+                        .join(", ");
+
+                    write!(f, "{stringified})")?;
+                }
+                Ok(())
             }
             TypeKind::Func(function) => {
                 write!(f, "{} (", function.name)?;
-                for param in function.params.iter() {
-                    write!(f, "{}, ", fmt_typekind_exit(param.clone()))?;
-                }
+
+                let stringified = function
+                    .params
+                    .iter()
+                    .map(|param| format!("{}", fmt_typekind_exit(param.clone())))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "{}", stringified)?;
+
                 write!(
                     f,
                     ") -> {}",
@@ -131,6 +157,28 @@ impl PartialEq for Struct {
         for i in 0..self.fields.len() {
             result = result && self.fields[i].0 == other.fields[i].0;
             result = result && self.fields[i].1.ptr_eq(&other.fields[i].1);
+        }
+
+        result
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Trait {
+    pub name: String,
+    methods: Vec<(Token, WeakTypeKind)>,
+}
+
+impl PartialEq for Trait {
+    fn eq(&self, other: &Self) -> bool {
+        let mut result = self.name == other.name && self.methods.len() == other.methods.len();
+
+        if !result {
+            return false;
+        };
+
+        for i in 0..self.methods.len() {
+            result = result && self.methods[i].0 == other.methods[i].0;
         }
 
         result
@@ -250,11 +298,48 @@ impl TypeChecker {
                 );
                 self.add_symbol(&name.get_id(), st)?;
             }
+            Declaration::TraitDecl {
+                trait_name,
+                methods,
+            } => {
+                let name = trait_name.get_id();
+                let mut method_types = Vec::with_capacity(methods.len());
+                for method in methods {
+                    let MethodDeclaration {
+                        name: method_name,
+                        self_: _,
+                        params,
+                        return_ty,
+                        body,
+                    } = method;
+                    let method_type = self.generate_function_type(
+                        &method_name.get_id(),
+                        params,
+                        return_ty,
+                        body,
+                    )?;
+                    let trait_method_name = format!("{}::{}", name, method_name.get_id());
+                    let fn_type_ref =
+                        Rc::downgrade(self.add_symbol(&trait_method_name, method_type)?);
+                    method_types.push((method_name.clone(), fn_type_ref));
+                }
+
+                let trait_type = Type::new(
+                    trait_name.clone().into(),
+                    wrap_typekind(TypeKind::Trait(Trait {
+                        name: name.clone(),
+                        methods: method_types,
+                    })),
+                );
+                self.add_symbol(&name, trait_type)?;
+            }
             Declaration::ImplDecl {
                 struct_name,
                 trait_name,
                 methods,
             } => {
+                let mut struct_method_types = HashMap::with_capacity(methods.len());
+
                 for method in methods {
                     let MethodDeclaration {
                         name,
@@ -264,10 +349,59 @@ impl TypeChecker {
                         body,
                     } = method;
 
-                    let fn_type = self.generate_function_type(name, params, return_ty, &body)?;
+                    let method_type =
+                        self.generate_function_type(&name.get_id(), params, return_ty, &body)?;
+                    struct_method_types.insert(
+                        method.name.clone().get_id(),
+                        (method.name.clone(), method_type),
+                    );
+                }
+
+                match trait_name {
+                    Some(trt) => {
+                        let trait_type = self.lookup_type(trt)?;
+
+                        let type_kind = trait_type.kind.borrow();
+                        if let TypeKind::Trait(Trait { methods, .. }) = &*type_kind {
+                            for (method_name, method_type) in methods {
+                                let (name_token, struct_method) = struct_method_types
+                                    .get(method_name.get_id().as_str())
+                                    .ok_or_else(|| CompileError {
+                                        // TODO: Combine token range to point at the entire impl trait.
+                                        token_range: struct_name.clone().into(),
+                                        message: format!(
+                                            "Not all trait items implemented, missing {}",
+                                            method_name.get_id()
+                                        ),
+                                    })?;
+
+                                let rc_method_type = method_type.upgrade().unwrap();
+
+                                if struct_method.kind.borrow().deref()
+                                    != rc_method_type.borrow().deref()
+                                {
+                                    return Err(CompileError {
+                                        token_range: name_token.clone().into(),
+                                        message: format!(
+                                            "Type mismatch, expected {}, found {}",
+                                            rc_method_type.borrow(),
+                                            struct_method.kind.borrow(),
+                                        ),
+                                    });
+                                }
+                            }
+                        } else {
+                            todo!("compile error")
+                        }
+                    }
+                    None => (),
+                }
+
+                for (name, (_, method_type)) in struct_method_types {
                     let struct_method_name = format!("{}::{}", struct_name.get_id(), name);
-                    let fn_type_ref = Rc::downgrade(self.add_symbol(&struct_method_name, fn_type)?);
-                    self.add_struct_method(struct_name, name, fn_type_ref)?;
+                    let fn_type_ref =
+                        Rc::downgrade(self.add_symbol(&struct_method_name, method_type)?);
+                    self.add_struct_method(struct_name, &name, fn_type_ref)?;
                 }
             }
             _ => (),
@@ -356,7 +490,7 @@ impl TypeChecker {
             Declaration::TraitDecl {
                 trait_name,
                 methods,
-            } => todo!(),
+            } => {}
             Declaration::StructDecl(_name, fields) => {
                 for field in fields.iter() {
                     self.lookup_type(&field.1)?;
@@ -386,7 +520,7 @@ impl TypeChecker {
                                             token_range: type_token.clone().into(),
                                             message: format!(
                                                 "'self' in method {} must have type {}, got {}",
-                                                name,
+                                                name.get_id(),
                                                 struct_name.get_id(),
                                                 specified_type,
                                             ),
@@ -435,6 +569,7 @@ impl TypeChecker {
             }
             Statement::If(condition, if_branch, else_branch_opt) => {
                 let cond_type = self.check_expr(condition)?;
+
                 if *cond_type.kind.borrow() != TypeKind::Bool {
                     return Err(CompileError {
                         token_range: condition.tokens.clone(),
@@ -776,6 +911,7 @@ impl TypeChecker {
         Ok(())
     }
 
+    // TODO: Add self in function type if exists.
     fn generate_function_type(
         &self,
         name: &String,
@@ -847,9 +983,15 @@ impl TypeChecker {
     fn print_symbol_table(&self) {
         println!("\nSymbol Table");
         println!("============");
-        for (_name, symbol) in self.symbol_table.iter() {
-            println!("{}", symbol.borrow());
+        for (name, symbol) in self.symbol_table.iter() {
+            match &*symbol.borrow() {
+                func @ TypeKind::Func(_) => {
+                    println!("{name} ({})", func)
+                }
+                other => println!("{}", other),
+            }
         }
+        println!();
     }
 }
 
@@ -1022,5 +1164,22 @@ mod tests {
             .unwrap_err()
             .message
             .contains("Type NumWrap not declared in this scope."));
+    }
+
+    #[test]
+    fn test_trait_impl_method_missing() {
+        let res = lex_parse_check("trait_impl_method_missing.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("Not all trait items implemented, missing fmt"));
+    }
+
+    #[test]
+    fn test_trait_impl_type_mismatch() {
+        let res = lex_parse_check("trait_impl_type_mismatch.io");
+        assert!(res.is_err());
+        assert!(res.unwrap_err().message.contains("Type mismatch, expected"));
     }
 }

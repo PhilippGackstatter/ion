@@ -374,14 +374,14 @@ impl<'a> Parser<'a> {
         &mut self,
     ) -> Result<
         (
-            String,
+            Token,
             Option<MethodSelf>,
             Vec<(Token, Token)>,
             Option<Token>,
         ),
         CompileError,
     > {
-        let id = self.advance().get_id();
+        let id = self.advance().clone();
         self.consume(LeftParen, "Expected '(' after method name.")?;
 
         let method_self = self.parse_method_self()?;
@@ -1251,14 +1251,14 @@ trait TestTrait
             trait_name: token!(IdToken("TestTrait".to_owned())),
             methods: vec![
                 MethodDeclaration {
-                    name: "to_string".into(),
+                    name: token!(IdToken("to_string".to_owned())),
                     self_: Some(MethodSelf { type_token: None }),
                     params: vec![],
                     return_ty: Some(token!(IdToken("str".into()))),
                     body: Block(vec![]),
                 },
                 MethodDeclaration {
-                    name: "method_with_default_impl".into(),
+                    name: token!(IdToken("method_with_default_impl".to_owned())),
                     self_: None,
                     params: vec![(token!(IdToken("arg".into())), token!(IdToken("i32".into())))],
                     return_ty: Some(token!(IdToken("i32".into()))),
@@ -1267,7 +1267,7 @@ trait TestTrait
                     )))))]),
                 },
                 MethodDeclaration {
-                    name: "to_int".into(),
+                    name: token!(IdToken("to_int".to_owned())),
                     self_: Some(MethodSelf { type_token: None }),
                     params: vec![],
                     return_ty: Some(token!(IdToken("i32".into()))),
@@ -1444,14 +1444,14 @@ impl MyStruct
             trait_name: None,
             methods: vec![
                 MethodDeclaration {
-                    name: "print_something".into(),
+                    name: token!(IdToken("print_something".to_owned())),
                     self_: None,
                     params: vec![],
                     return_ty: None,
                     body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
                 },
                 MethodDeclaration {
-                    name: "is_positive".into(),
+                    name: token!(IdToken("is_positive".to_owned())),
                     self_: None,
                     params: vec![(
                         token!(IdToken("arg1".into())),
