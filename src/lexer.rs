@@ -119,7 +119,7 @@ impl Lexer {
                 }
                 '/' => {
                     if self.match_(&mut chars, '/') {
-                        while !self.match_(&mut chars, '\n') {
+                        while chars.peek().is_some() && !self.match_(&mut chars, '\n') {
                             chars.next();
                         }
                     } else {
