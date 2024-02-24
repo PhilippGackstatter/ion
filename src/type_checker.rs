@@ -364,7 +364,7 @@ impl TypeChecker {
                         let type_kind = trait_type.kind.borrow();
                         if let TypeKind::Trait(Trait { methods, .. }) = &*type_kind {
                             for (method_name, method_type) in methods {
-                              // TODO: Allow methods with default_impl to be missing.
+                                // TODO: Allow methods with default_impl to be missing!
                                 let (name_token, struct_method) = struct_method_types
                                     .get(method_name.get_id().as_str())
                                     .ok_or_else(|| {
@@ -751,7 +751,7 @@ impl TypeChecker {
                                 return Err(CompileError {
                                     token_range: call_param_type.token_range.clone(),
                                     message: format!(
-                                        "Function parameters have incompatible type. Expected: {}, Supplied: {}.",
+                                        "Function parameters have incompatible type.\nExpected: {}\nSupplied: {}.",
                                         expected_param_typekind,
                                         call_param_typekind
                                     ),
@@ -858,6 +858,24 @@ impl TypeChecker {
 
                     Ok(Type::new_empty_range(
                         field_type.1.upgrade().unwrap().clone(),
+                    ))
+                } else if let TypeKind::Trait(trt) = expr_type_kind {
+                    let method_type = trt
+                        .methods
+                        .iter()
+                        .find(|elem| elem.0.get_id() == name.get_id());
+
+                    let method_type = method_type.ok_or_else(|| CompileError {
+                        token_range: name.tokens.clone(),
+                        message: format!(
+                            "Trait {} has no method named `{}`",
+                            trt.name,
+                            name.get_id()
+                        ),
+                    })?;
+
+                    Ok(Type::new_empty_range(
+                        method_type.1.upgrade().unwrap().clone(),
                     ))
                 } else {
                     Err(CompileError {
