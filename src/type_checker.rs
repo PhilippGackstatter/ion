@@ -5,7 +5,7 @@ use crate::types::{
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::convert::TryInto;
-use std::ops::{Deref, Range};
+use std::ops::{Deref, DerefMut, Range};
 use std::rc::{Rc, Weak};
 
 type RcTypeKind = Rc<RefCell<TypeKind>>;
@@ -144,6 +144,8 @@ struct Struct {
     pub name: String,
     fields: Vec<(String, WeakTypeKind)>,
     number_of_fields: usize,
+    /// The traits that this struct implements.
+    traits: HashMap<String, WeakTypeKind>,
 }
 
 impl PartialEq for Struct {
@@ -226,6 +228,7 @@ fn wrap_typekind(kind: TypeKind) -> RcTypeKind {
     Rc::new(RefCell::new(kind))
 }
 
+// TODO: Replace println with log.
 impl TypeChecker {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
@@ -275,12 +278,15 @@ impl TypeChecker {
                 return_ty,
                 body,
             } => {
+                println!("fn {name}");
                 self.add_symbol(
                     name,
                     self.generate_function_type(name, params, return_ty, body)?,
                 )?;
             }
             Declaration::StructDecl(name, token_fields) => {
+                println!("struct {}", name.get_id());
+
                 let mut fields = Vec::new();
                 for (name, ty) in token_fields {
                     let type_ref = Rc::downgrade(&self.lookup_type_ref(ty)?);
@@ -294,6 +300,7 @@ impl TypeChecker {
                         name: name.get_id(),
                         fields,
                         number_of_fields,
+                        traits: HashMap::new(),
                     })),
                 );
                 self.add_symbol(&name.get_id(), st)?;
@@ -302,6 +309,8 @@ impl TypeChecker {
                 trait_name,
                 methods,
             } => {
+                println!("trait {}", trait_name.get_id());
+
                 let name = trait_name.get_id();
                 let mut method_types = Vec::with_capacity(methods.len());
                 for method in methods {
@@ -338,6 +347,8 @@ impl TypeChecker {
                 trait_name,
                 methods,
             } => {
+                println!("impl block {:?}, {}", trait_name, struct_name.get_id());
+
                 let mut struct_method_types = HashMap::with_capacity(methods.len());
 
                 for method in methods {
@@ -396,6 +407,9 @@ impl TypeChecker {
                                     });
                                 }
                             }
+
+                            // If the trait method check was successful, this struct is an implementor of the trait.
+                            self.add_struct_trait_implementor(struct_name, trt)?;
                         } else {
                             todo!("compile error")
                         }
@@ -459,6 +473,27 @@ impl TypeChecker {
                 message: format!("Type {} not declared in this scope.", type_name),
             })
         }
+    }
+
+    fn add_struct_trait_implementor(
+        &mut self,
+        struct_name: &Token,
+        trait_name: &Token,
+    ) -> Result<(), CompileError> {
+        // If the trait method check was successful, this struct is an implementor of the trait.
+        let struct_ref = self.lookup_type_ref(struct_name)?;
+        let mut struct_ref_mut = struct_ref.borrow_mut();
+        if let TypeKind::Struct(ref mut strct) = struct_ref_mut.deref_mut() {
+            let trait_type = self
+                .lookup_type_ref(trait_name)
+                .expect("the trait name should be some in this branch");
+            let weak_trait_type = Rc::downgrade(&trait_type);
+            strct.traits.insert(trait_name.get_id(), weak_trait_type);
+        } else {
+            todo!("compile error, expected typekind struct as trait implementor")
+        }
+
+        Ok(())
     }
 
     fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<Type>, CompileError> {
@@ -745,18 +780,8 @@ impl TypeChecker {
 
                             let expected_param_typekind = param.upgrade().unwrap();
                             let expected_param_typekind = &*expected_param_typekind.borrow();
-                            let call_param_typekind = &*call_param_type.kind.borrow();
 
-                            if expected_param_typekind != call_param_typekind {
-                                return Err(CompileError {
-                                    token_range: call_param_type.token_range.clone(),
-                                    message: format!(
-                                        "Function parameters have incompatible type.\nExpected: {}\nSupplied: {}.",
-                                        expected_param_typekind,
-                                        call_param_typekind
-                                    ),
-                                });
-                            }
+                            self.type_usage_as(&call_param_type, expected_param_typekind)?;
                         } else {
                             return Err(CompileError {
                                 token_range: callee_type.token_range.clone(),
@@ -935,6 +960,51 @@ impl TypeChecker {
         Ok(())
     }
 
+    /// Checks whether `source_type` can be used as `target_type`.
+    fn type_usage_as(
+        &self,
+        source_type: &Type,
+        target_type_kind: &TypeKind,
+    ) -> Result<(), CompileError> {
+        let source_type_kind = &*source_type.kind.borrow();
+
+        // Check if types match trivially.
+        if source_type_kind == target_type_kind {
+            return Ok(());
+        }
+
+        // Otherwise check if a struct can be passed as a trait.
+        match (source_type_kind, target_type_kind) {
+            (
+                TypeKind::Struct(Struct { traits, .. }),
+                TypeKind::Trait(Trait {
+                    name: trait_name, ..
+                }),
+            ) => {
+                if traits.get(trait_name).is_some() {
+                    return Ok(());
+                } else {
+                    return Err(CompileError {
+                        token_range: source_type.token_range.clone(),
+                        message: format!(
+                            "Parameter does not implement trait `{}`.\nExpected: {}\nSupplied: {}.",
+                            trait_name, target_type_kind, source_type_kind
+                        ),
+                    });
+                }
+            }
+            (_, _) => (),
+        }
+
+        Err(CompileError {
+            token_range: source_type.token_range.clone(),
+            message: format!(
+                "Parameter has incompatible type.\nExpected: {}\nSupplied: {}.",
+                target_type_kind, source_type_kind
+            ),
+        })
+    }
+
     // TODO: Add self in function type if exists.
     fn generate_function_type(
         &self,
@@ -1033,7 +1103,13 @@ mod tests {
         let mut parser = Parser::new(&lexer);
         let tree = parser.parse().unwrap();
         let mut checker = crate::type_checker::TypeChecker::new();
-        checker.check(&tree, false)
+        let check_result = checker.check(&tree, false);
+
+        if let Err(err) = &check_result {
+            util::print_error(&input, err.token_range.clone(), &err.message);
+        }
+
+        check_result
     }
 
     #[test]
@@ -1083,7 +1159,7 @@ mod tests {
         assert!(res
             .unwrap_err()
             .message
-            .contains("Function parameters have incompatible type"));
+            .contains("Parameter has incompatible type"));
     }
 
     #[test]
@@ -1205,5 +1281,21 @@ mod tests {
         let res = lex_parse_check("trait_impl_type_mismatch.io");
         assert!(res.is_err());
         assert!(res.unwrap_err().message.contains("Type mismatch, expected"));
+    }
+
+    #[test]
+    fn trait_implementor_struct_passed_as_trait() {
+        let res = lex_parse_check("trait_implementor_struct_passed_as_trait.io");
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn non_trait_implementor_struct_passed_as_trait() {
+        let res = lex_parse_check("non_trait_implementor_struct_passed_as_trait.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("does not implement trait"));
     }
 }
