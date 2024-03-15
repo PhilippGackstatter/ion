@@ -829,6 +829,7 @@ impl TypeChecker {
                             let expected_param_typekind = &*expected_param_typekind.borrow();
 
                             self.type_usage_as(&call_param_type, expected_param_typekind)?;
+                            self.move_variable(&call_param.kind, function.name.clone());
                         } else {
                             return Err(CompileError {
                                 token_range: callee_type.token_range.clone(),
@@ -1373,5 +1374,45 @@ mod tests {
             .unwrap_err()
             .message
             .contains("does not implement trait"));
+    }
+
+    #[test]
+    fn move_with_variable_declaration() {
+        let res = lex_parse_check("move_with_variable_declaration.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("x previously moved into y"));
+    }
+
+    #[test]
+    fn move_with_assignment() {
+        let res = lex_parse_check("move_with_assignment.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("x previously moved into y"));
+    }
+
+    #[test]
+    fn move_with_struct_init() {
+        let res = lex_parse_check("move_with_struct_init.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("x previously moved into num"));
+    }
+
+    #[test]
+    fn move_with_function_call() {
+        let res = lex_parse_check("move_with_function_call.io");
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .message
+            .contains("x previously moved into addOne"));
     }
 }
