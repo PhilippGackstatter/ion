@@ -104,14 +104,17 @@ impl Compiler {
                 self.emit_u16(index_name);
             }
             TraitDecl {
-                trait_name,
-                methods,
-            } => todo!(),
+                trait_name: _,
+                methods: _,
+            } => {
+                // Traits do not need to be compiled.
+                ()
+            }
             // TODO: This should be compiled in a first pass, otherwise a StructInit that comes before an impl block in the source
             // code, will be created without the methods from that later impl block!
             ImplDecl {
                 struct_name,
-                trait_name,
+                trait_name: _,
                 methods,
             } => {
                 for method in methods {

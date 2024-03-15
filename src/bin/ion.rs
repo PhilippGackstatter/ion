@@ -4,6 +4,8 @@ use argparse::Store;
 use ion::util::Options;
 
 fn main() {
+    env_logger::init();
+
     let mut file_path = String::new();
     let mut opt = Options::new();
 

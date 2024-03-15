@@ -228,7 +228,6 @@ fn wrap_typekind(kind: TypeKind) -> RcTypeKind {
     Rc::new(RefCell::new(kind))
 }
 
-// TODO: Replace println with log.
 impl TypeChecker {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
@@ -278,14 +277,14 @@ impl TypeChecker {
                 return_ty,
                 body,
             } => {
-                println!("fn {name}");
+                log::debug!("symbol fn {name}");
                 self.add_symbol(
                     name,
                     self.generate_function_type(name, params, return_ty, body)?,
                 )?;
             }
             Declaration::StructDecl(name, token_fields) => {
-                println!("struct {}", name.get_id());
+                log::debug!("symbol struct {}", name.get_id());
 
                 let mut fields = Vec::new();
                 for (name, ty) in token_fields {
@@ -309,7 +308,7 @@ impl TypeChecker {
                 trait_name,
                 methods,
             } => {
-                println!("trait {}", trait_name.get_id());
+                log::debug!("symbol trait {}", trait_name.get_id());
 
                 let name = trait_name.get_id();
                 let mut method_types = Vec::with_capacity(methods.len());
@@ -347,7 +346,11 @@ impl TypeChecker {
                 trait_name,
                 methods,
             } => {
-                println!("impl block {:?}, {}", trait_name, struct_name.get_id());
+                log::debug!(
+                    "symbol impl block {:?}, {}",
+                    trait_name,
+                    struct_name.get_id()
+                );
 
                 let mut struct_method_types = HashMap::with_capacity(methods.len());
 
@@ -529,8 +532,8 @@ impl TypeChecker {
                 self.check_function_return_types(return_types, return_ty)?;
             }
             Declaration::TraitDecl {
-                trait_name,
-                methods,
+                trait_name: _,
+                methods: _,
             } => {}
             Declaration::StructDecl(_name, fields) => {
                 for field in fields.iter() {
@@ -539,7 +542,7 @@ impl TypeChecker {
             }
             Declaration::ImplDecl {
                 struct_name,
-                trait_name,
+                trait_name: _,
                 methods,
             } => {
                 for method in methods {
