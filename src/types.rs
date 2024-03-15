@@ -343,7 +343,7 @@ pub enum Statement {
     ExpressionStmt(Expression),
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum ExpressionKind {
     Binary(Box<Expression>, Token, Box<Expression>),
     Assign {

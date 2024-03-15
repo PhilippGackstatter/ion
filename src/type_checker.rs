@@ -127,6 +127,8 @@ struct Variable {
     identifier: String,
     scope_depth: u8,
     dtype: Type,
+    /// The identifier that moved the Variable, if any.
+    moved_into: Option<String>,
 }
 
 impl Variable {
@@ -135,6 +137,7 @@ impl Variable {
             identifier,
             scope_depth,
             dtype,
+            moved_into: None,
         }
     }
 }
@@ -519,6 +522,9 @@ impl TypeChecker {
                         message: "Variable is already declared in this scope.".into(),
                     });
                 }
+
+                self.move_variable(&expr.kind, id.to_owned());
+
                 self.add_local(id.clone(), expr_type);
                 // }
             }
@@ -649,7 +655,7 @@ impl TypeChecker {
         }
     }
 
-    fn check_expr(&self, expr: &Expression) -> Result<Type, CompileError> {
+    fn check_expr(&mut self, expr: &Expression) -> Result<Type, CompileError> {
         match &expr.kind {
             ExpressionKind::Binary(lexpr, op_token, rexpr) => {
                 let ltype = self.check_expr(lexpr)?;
@@ -739,22 +745,60 @@ impl TypeChecker {
                 wrap_typekind(TypeKind::Bool),
             )),
             ExpressionKind::Assign { target, value } => {
+                // Lookup type manually to avoid the move check in check_expr. A better solution would be welcome.
+                let (assignment_identifier, target_type): (String, Type) = match &target.kind {
+                    ExpressionKind::Identifier(id) => {
+                        if let Some((_, index)) = self.find_local_variable(id) {
+                            (id.to_owned(), self.locals[index as usize].dtype.clone())
+                        } else {
+                            return Err(CompileError {
+                            token_range: expr.tokens.clone(),
+                            message: format!(
+                                "{} is not defined in the current scope. (Globals are unimplemented.)",
+                                id
+                            ),
+                        });
+                        }
+                    }
+                    ExpressionKind::Access { name, .. } => {
+                        let target_type = self.check_expr(target)?;
+                        (name.get_id(), target_type)
+                    }
+                    other => {
+                        panic!(
+                            "parser should only allow identifier or struct access as assignment target, received {:?}",
+                            other
+                        )
+                    }
+                };
+
                 let value_type = self.check_expr(value)?;
-                let target_type = self.check_expr(target)?;
                 if target_type != value_type {
-                    Err(CompileError {
+                    return Err(CompileError {
                         token_range: value_type.token_range.clone(),
                         message: format!(
                             "Expression of type {} can not be assigned to variable of type {}",
                             value_type, target_type
                         ),
-                    })
-                } else {
-                    Ok(target_type)
+                    });
                 }
+
+                // Even if the variable that was assigned to was previously moved,
+                // assigning means it contains a new value and is thus considered unmoved.
+                self.clear_moved(&assignment_identifier);
+                self.move_variable(&value.kind, assignment_identifier);
+
+                Ok(target_type)
             }
             ExpressionKind::Identifier(id) => {
-                if let Some(index) = self.find_local_variable(id) {
+                if let Some((variable, index)) = self.find_local_variable(id) {
+                    if let Some(moved_into) = variable.moved_into.as_ref() {
+                        return Err(CompileError {
+                            token_range: expr.tokens.clone(),
+                            message: format!("{id} previously moved into {moved_into}"),
+                        });
+                    }
+
                     Ok(self.locals[index as usize].dtype.clone())
                 } else if let Some(ty) = self.symbol_table.get(id) {
                     Ok(Type::new_empty_range(ty.clone()))
@@ -832,7 +876,7 @@ impl TypeChecker {
                             let declared_name = &declared_struct.fields[i].0;
                             let declared_type = &declared_struct.fields[i].1;
                             let given_name = &values[i].0;
-                            let given_type = &values[i].1;
+                            let given_expr = &values[i].1;
 
                             if *declared_name != given_name.get_id() {
                                 return Err(CompileError {
@@ -845,7 +889,7 @@ impl TypeChecker {
                                 });
                             }
 
-                            let given_type = self.check_expr(given_type)?;
+                            let given_type = self.check_expr(given_expr)?;
                             let rc_declared_type = declared_type.upgrade().unwrap();
                             let declared_type = &*rc_declared_type.borrow();
 
@@ -858,6 +902,8 @@ impl TypeChecker {
                                     ),
                                 });
                             }
+
+                            self.move_variable(&given_expr.kind, declared_name.to_owned());
                         }
                     }
                 } else {
@@ -961,6 +1007,22 @@ impl TypeChecker {
             }
         }
         Ok(())
+    }
+
+    fn move_variable(&mut self, variable: &ExpressionKind, moved_into: String) {
+        if let ExpressionKind::Identifier(expression_id) = variable {
+            let variable = self
+                .find_local_variable_mut(expression_id)
+                .expect("type checking of the expression must have suceeded before");
+            variable.moved_into = Some(moved_into.to_owned());
+        }
+    }
+
+    fn clear_moved(&mut self, variable: &str) {
+        let variable = self
+            .find_local_variable_mut(variable)
+            .expect("type checking of the expression must have suceeded before");
+        variable.moved_into = None;
     }
 
     /// Checks whether `source_type` can be used as `target_type`.
@@ -1069,12 +1131,23 @@ impl TypeChecker {
         self.scope_depth -= 1;
     }
 
-    fn find_local_variable(&self, id: &str) -> Option<u8> {
+    fn find_local_variable(&self, id: &str) -> Option<(&Variable, u8)> {
         self.locals
             .iter()
             .rev()
-            .position(|elem| elem.identifier == *id)
-            .map(|pos| (self.locals.len() - 1 - pos).try_into().unwrap())
+            .enumerate()
+            .find(|elem| elem.1.identifier == *id)
+            .map(|(pos, element)| {
+                let index: u8 = (self.locals.len() - 1 - pos).try_into().unwrap();
+                (element, index)
+            })
+    }
+
+    fn find_local_variable_mut(&mut self, id: &str) -> Option<&mut Variable> {
+        self.locals
+            .iter_mut()
+            .rev()
+            .find(|elem| elem.identifier == *id)
     }
 
     fn print_symbol_table(&self) {
