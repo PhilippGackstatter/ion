@@ -1,5 +1,6 @@
 use argparse::{ArgumentParser, Store, StoreTrue};
 use std::env;
+use std::fmt::Write;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -447,59 +448,128 @@ pub fn run(program: String, options: &Options) {
                 }
             }
         }
-        Err(parser_err) => {
-            print_error(&program, parser_err.token_range, &parser_err.message);
-        }
+        Err(parser_err) => print_error(&program, parser_err.token_range, &parser_err.message),
     }
 }
 
 pub(crate) fn print_error(prog: &str, range: std::ops::Range<usize>, msg: &str) {
-    let mut newline_before_token = 0;
+    println!("{}", display_error(&prog, range, msg));
+}
+
+pub(crate) fn display_error(prog: &str, range: std::ops::Range<usize>, msg: &str) -> String {
+    let mut newline_before_token_start = 0;
+    let mut newline_before_token_end = 0;
     // Initialized to prog len in case of last line
-    let mut newline_after_token = prog.len();
+    let mut newline_after_token_end = prog.len();
+    // The number of the line where the first character of the token appears.
+    let mut first_line_number = 1;
+    // The number of lines between the first character of the token and the end of the token,
+    // i.e. how many lines to print in total.
     let mut line_count = 1;
 
-    let mut break_on_next_newline = false;
-    for (i, ch) in prog.bytes().enumerate() {
-        if i >= range.start {
-            break_on_next_newline = true;
+    for (i, ch) in prog
+        .bytes()
+        .enumerate()
+        .rev()
+        .skip(prog.len() - range.start)
+    {
+        if ch == '\n' as u8 {
+            newline_before_token_start = i;
+            break;
         }
-        if ch == 10 {
-            if break_on_next_newline {
-                newline_after_token = i;
-                break;
-            } else {
+    }
+
+    for (i, ch) in prog.bytes().enumerate().rev().skip(prog.len() - range.end) {
+        if ch == '\n' as u8 {
+            newline_before_token_end = i;
+            break;
+        }
+    }
+
+    for (i, ch) in prog.bytes().enumerate().skip(range.end) {
+        if ch == '\n' as u8 {
+            newline_after_token_end = i;
+            break;
+        }
+    }
+
+    for (i, ch) in prog.bytes().enumerate() {
+        if ch == '\n' as u8 {
+            if i < range.start {
+                first_line_number += 1;
+            } else if i >= range.start && i <= range.end {
                 line_count += 1;
-                newline_before_token = i;
+            } else {
+                break;
             }
         }
     }
 
-    println!();
-
     // Handle beginning of file
-    if newline_before_token != 0 {
-        newline_before_token += 1
+    if newline_before_token_start != 0 {
+        newline_before_token_start += 1
     };
 
-    let token = prog[newline_before_token..newline_after_token].to_owned();
+    let token = &prog[newline_before_token_start..newline_after_token_end];
 
-    let token_start_index = range.start - newline_before_token;
-    let token_end_index = range.end - newline_before_token;
-    let line_count_str = format!("{}", line_count);
+    // Get the number of characters needed to display the longest line number in the message.
+    let line_number_indent = ((first_line_number + line_count) as f32).log10() as usize + 1;
 
-    println!("{}: {}", line_count_str, token);
+    let token_split = token.split('\n');
+    let mut error = String::new();
 
-    for _ in 0..=(line_count_str.len() + 1) {
-        print!(" ");
+    for (line_number, line) in token_split.clone().enumerate() {
+        let mut line_number_str: String = format!("{}", first_line_number + line_number);
+        let line_number_str_len = line_number_str.len();
+        if line_number_str_len < line_number_indent {
+            // Indent to match ident of largest line number string.
+            for _ in 0..(line_number_indent - line_number_str_len) {
+                line_number_str.push(' ');
+            }
+        }
+
+        writeln!(&mut error, "{} | {}", line_number_str, line)
+            .expect("writing to String should succeed");
+    }
+
+    // Differentiate between single and multi line errors.
+    // With single line errors we want to be precise within the line.
+    // With multi line error we point at the entire construct.
+    let (token_start_index, token_end_index) = if line_count == 1 {
+        (
+            range.start - newline_before_token_start,
+            range.end - newline_before_token_end,
+        )
+    } else {
+        token_split.fold((usize::MAX, 0), |acc, elem| {
+            (
+                acc.0.min(
+                    elem.chars()
+                        .enumerate()
+                        .find(|(_, ch)| !ch.is_whitespace())
+                        .map(|(pos, _)| pos)
+                        .unwrap_or(usize::MAX),
+                ),
+                acc.1.max(elem.len()),
+            )
+        })
+    };
+
+    // Indent the following arrows.
+    // +3 to account for ` | `.
+    for _ in 0..line_number_indent + 3 {
+        write!(&mut error, " ").expect("writing to String should succeed");
     }
 
     for i in 0..token_end_index {
         if i >= token_start_index {
-            print!("^");
+            write!(&mut error, "^").expect("writing to String should succeed");
         } else {
-            print!(" ");
+            write!(&mut error, " ").expect("writing to String should succeed");
         }
     }
-    println!(" {}", msg);
+
+    write!(&mut error, " {}", msg).expect("writing to String should succeed");
+
+    error
 }

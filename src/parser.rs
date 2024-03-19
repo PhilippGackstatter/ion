@@ -725,8 +725,8 @@ impl<'a> Parser<'a> {
                         });
                     }
                 }
-                // TODO: Fix case when struct has size 0
-                let last_token_end = fields[fields.len() - 1].1.tokens.end;
+                // TODO: Fix case when struct has size 0.
+                let last_token_end = self.current_range().end;
                 expr = Expression::new(
                     expr.tokens.start..last_token_end,
                     StructInit {
