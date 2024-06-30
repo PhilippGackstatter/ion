@@ -7,18 +7,12 @@ use crate::types::{
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
-    MethodDeclaration, Object, Program,
+    IdentifierToken, MethodDeclaration, Object, Program,
     Statement::{self, *},
     Token,
     TokenKind::*,
     Value,
 };
-
-#[derive(Debug)]
-pub struct CompilerError {
-    pub token: Token,
-    pub message: &'static str,
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum FunctionType {
@@ -91,20 +85,20 @@ impl Compiler {
                 }
             }
             FnDecl {
-                name,
+                identifier: name,
                 params,
                 return_ty: _,
                 body,
             } => {
-                self.compile_fn_decl(name, params, body, FunctionType::Function);
+                self.compile_fn_decl(name.as_str(), params, body, FunctionType::Function);
 
                 // Declare the fn obj on the stack as a global variable associated with its name
-                let index_name = self.add_constant(make_string_value(name));
+                let index_name = self.add_constant(make_string_value(name.as_str()));
                 self.emit_op_byte(Bytecode::OpDefineGlobal);
                 self.emit_u16(index_name);
             }
             TraitDecl {
-                trait_name: _,
+                trait_identifier: _,
                 methods: _,
             } => {
                 // Traits do not need to be compiled.
@@ -129,20 +123,20 @@ impl Compiler {
                     let method_name = name;
 
                     // Puts the compiled Function Object on the stack
-                    self.compile_fn_decl(&method_name.get_id(), params, body, FunctionType::Method);
+                    self.compile_fn_decl(&method_name.as_str(), params, body, FunctionType::Method);
 
                     // Associate the Function Object with the method name on the struct
                     self.emit_op_byte(Bytecode::OpStructMethod);
 
                     let struct_name_index =
-                        self.add_constant(make_string_value(&struct_name.get_id()));
+                        self.add_constant(make_string_value(struct_name.as_str()));
                     self.emit_u16(struct_name_index);
 
-                    let method_name_index = self.add_constant(make_string_value(&name.get_id()));
+                    let method_name_index = self.add_constant(make_string_value(name.as_str()));
                     self.emit_u16(method_name_index);
                 }
             }
-            StructDecl(_, _) => (),
+            StructDecl { .. } => (),
         }
     }
 
@@ -286,12 +280,13 @@ impl Compiler {
             StructInit { name, values } => {
                 for (field_name, field_value) in values.iter() {
                     self.compile_expr(field_value);
-                    let index = self.add_constant(make_string_value(&field_name.get_id()));
+                    let index =
+                        self.add_constant(make_string_value(&field_name.unwrap_identifier()));
                     self.emit_op_byte(Bytecode::OpConstant);
                     self.emit_u16(index);
                 }
 
-                let index = self.add_constant(make_string_value(&name.get_id()));
+                let index = self.add_constant(make_string_value(&name.unwrap_identifier()));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
 
@@ -301,7 +296,7 @@ impl Compiler {
             Access { expr, name } => {
                 self.compile_expr(expr);
 
-                let index = self.add_constant(make_string_value(&name.get_id()));
+                let index = self.add_constant(make_string_value(&name.unwrap_identifier()));
                 self.emit_op_byte(Bytecode::OpConstant);
                 self.emit_u16(index);
 
@@ -364,15 +359,15 @@ impl Compiler {
 
     fn compile_fn_decl(
         &mut self,
-        name: &String,
-        params: &Vec<(Token, Token)>,
+        name: &str,
+        params: &Vec<(IdentifierToken, IdentifierToken)>,
         stmt: &Statement,
         function_type: FunctionType,
     ) {
         let mut fn_compiler = Compiler::new(function_type.clone());
 
         for param in params {
-            fn_compiler.add_local(param.0.get_id().clone());
+            fn_compiler.add_local(param.0.name.clone());
         }
 
         fn_compiler.compile_stmt(stmt);
@@ -388,7 +383,7 @@ impl Compiler {
 
         // Create the function object as constant, load it on the stack at runtime
         let fn_obj = Object::FnObj {
-            name: name.clone(),
+            name: name.to_owned(),
             receiver: None,
             chunk: fn_compiler.chunk().clone(),
             arity: params.len() as u8,

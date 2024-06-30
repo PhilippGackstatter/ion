@@ -8,7 +8,8 @@ use crate::types::{
     Program,
     Statement::{self, *},
 };
-use crate::types::{MethodDeclaration, MethodSelf, Token, SELF};
+use crate::types::{IdentifierToken, MethodDeclaration, MethodSelf, Token, SELF};
+use std::convert::TryInto;
 use std::ops::Range;
 
 type StatementResult = Result<Statement, CompileError>;
@@ -73,7 +74,7 @@ impl<'a> Parser<'a> {
                 "Expected an identifier as trait name.",
             ));
         }
-        let name = self.advance().clone();
+        let name = self.advance_identifier()?;
 
         let mut methods = Vec::new();
 
@@ -94,7 +95,7 @@ impl<'a> Parser<'a> {
         }
 
         Ok(TraitDecl {
-            trait_name: name,
+            trait_identifier: name,
             methods,
         })
     }
@@ -108,7 +109,7 @@ impl<'a> Parser<'a> {
                 "Expected an identifier as struct name.",
             ));
         }
-        let name = self.advance().clone();
+        let struct_identifier = self.advance_identifier()?;
 
         let mut fields = Vec::new();
 
@@ -129,7 +130,7 @@ impl<'a> Parser<'a> {
                     ));
                 }
 
-                let name_token = self.advance().clone();
+                let field_identifier = self.advance_identifier()?;
 
                 self.consume(Colon, "Expected ':' after name.")?;
 
@@ -140,9 +141,9 @@ impl<'a> Parser<'a> {
                     ));
                 }
 
-                let type_token = self.advance().clone();
+                let type_token = self.advance_identifier()?;
 
-                fields.push((name_token, type_token));
+                fields.push((field_identifier, type_token));
 
                 self.expect_newline()?;
             }
@@ -150,7 +151,10 @@ impl<'a> Parser<'a> {
             self.pop_indentation();
         }
 
-        Ok(StructDecl(name, fields))
+        Ok(StructDecl {
+            identifier: struct_identifier,
+            fields,
+        })
     }
 
     fn impl_declaration(&mut self) -> DeclarationResult {
@@ -162,8 +166,8 @@ impl<'a> Parser<'a> {
                 "Expected an identifier as struct or trait name.",
             ));
         }
-        let mut name = self.advance().clone();
-        let mut trait_name: Option<Token> = None;
+        let mut name = self.advance_identifier()?;
+        let mut trait_name: Option<IdentifierToken> = None;
 
         if self.match_(For) {
             if !self.peek().is_id_token() {
@@ -173,7 +177,7 @@ impl<'a> Parser<'a> {
                 ));
             }
             trait_name = Some(name);
-            name = self.advance().clone();
+            name = self.advance_identifier()?;
         }
 
         self.expect_newline()?;
@@ -261,7 +265,7 @@ impl<'a> Parser<'a> {
         is_fn_decl
     }
 
-    fn parse_callable_parameter_type(&mut self) -> Result<Token, CompileError> {
+    fn parse_callable_parameter_type(&mut self) -> Result<IdentifierToken, CompileError> {
         self.consume(Colon, "Expected ':' for type annotation.")?;
 
         if !self.peek().is_id_token() {
@@ -271,7 +275,7 @@ impl<'a> Parser<'a> {
             ));
         }
 
-        Ok(self.advance().clone())
+        self.advance_identifier()
     }
 
     fn parse_method_self(&mut self) -> Result<Option<MethodSelf>, CompileError> {
@@ -281,7 +285,7 @@ impl<'a> Parser<'a> {
 
         self.advance();
 
-        let mut self_type_token: Option<Token> = None;
+        let mut self_type_token: Option<IdentifierToken> = None;
 
         if self.peek().kind == Colon {
             self_type_token = Some(self.parse_callable_parameter_type()?);
@@ -302,7 +306,7 @@ impl<'a> Parser<'a> {
     fn parse_callable_parameters(
         &mut self,
         callable_kind: CallableKind,
-    ) -> Result<Vec<(Token, Token)>, CompileError> {
+    ) -> Result<Vec<(IdentifierToken, IdentifierToken)>, CompileError> {
         let mut params = Vec::new();
 
         if self.peek().kind != RightParen {
@@ -327,6 +331,7 @@ impl<'a> Parser<'a> {
                 } else {
                     let type_token = self.parse_callable_parameter_type()?;
 
+                    let name_token = name_token.try_into()?;
                     params.push((name_token, type_token));
                 }
 
@@ -346,9 +351,9 @@ impl<'a> Parser<'a> {
         Ok(params)
     }
 
-    fn parse_callable_return_token(&mut self) -> Result<Option<Token>, CompileError> {
+    fn parse_callable_return_token(&mut self) -> Result<Option<IdentifierToken>, CompileError> {
         let return_token = if self.match_(Arrow) {
-            Some(self.advance().clone())
+            Some(self.advance_identifier()?)
         } else {
             None
         };
@@ -374,14 +379,14 @@ impl<'a> Parser<'a> {
         &mut self,
     ) -> Result<
         (
-            Token,
+            IdentifierToken,
             Option<MethodSelf>,
-            Vec<(Token, Token)>,
-            Option<Token>,
+            Vec<(IdentifierToken, IdentifierToken)>,
+            Option<IdentifierToken>,
         ),
         CompileError,
     > {
-        let id = self.advance().clone();
+        let id = self.advance_identifier()?;
         self.consume(LeftParen, "Expected '(' after method name.")?;
 
         let method_self = self.parse_method_self()?;
@@ -409,7 +414,8 @@ impl<'a> Parser<'a> {
     }
 
     fn function_declaration(&mut self) -> DeclarationResult {
-        let id = self.advance().get_id();
+        let id = self.advance_identifier()?;
+
         self.consume(LeftParen, "Expected '(' after function name.")?;
 
         let params = self.parse_callable_parameters(CallableKind::Function)?;
@@ -420,7 +426,7 @@ impl<'a> Parser<'a> {
         let body = self.parse_callable_body()?;
 
         Ok(FnDecl {
-            name: id,
+            identifier: id,
             params,
             return_ty,
             body,
@@ -648,7 +654,7 @@ impl<'a> Parser<'a> {
             let operator = self.previous().clone();
             let lexpr = self.unary()?;
             Ok(Expression::new(
-                (operator.offset as usize)..lexpr.tokens.end,
+                (operator.range.offset as usize)..lexpr.tokens.end,
                 Unary(operator, Box::new(lexpr)),
             ))
         } else {
@@ -928,6 +934,21 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn advance_identifier(&mut self) -> Result<IdentifierToken, CompileError> {
+        let token = self.advance();
+        if let TokenKind::IdToken(id) = &token.kind {
+            Ok(IdentifierToken {
+                name: id.clone(),
+                range: token.range,
+            })
+        } else {
+            Err(CompileError {
+                token_range: token.range.into(),
+                message: format!("Expected token to be an identifier"),
+            })
+        }
+    }
+
     fn error(&self, token_range: Range<usize>, message: &str) -> CompileError {
         CompileError {
             token_range,
@@ -1063,19 +1084,19 @@ struct MyStruct
 
         let parse_result = lex_and_parse(input);
 
-        let expected = StructDecl(
-            token!(IdToken("MyStruct".into())),
-            vec![
+        let expected = StructDecl {
+            identifier: IdentifierToken::new_debug("MyStruct"),
+            fields: vec![
                 (
-                    token!(IdToken("field1".into())),
-                    token!(IdToken("str".into())),
+                    IdentifierToken::new_debug("field1"),
+                    IdentifierToken::new_debug("str"),
                 ),
                 (
-                    token!(IdToken("field2".into())),
-                    token!(IdToken("bool".into())),
+                    IdentifierToken::new_debug("field2"),
+                    IdentifierToken::new_debug("bool"),
                 ),
             ],
-        );
+        };
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
@@ -1094,19 +1115,19 @@ struct MyStruct
 
         let parse_result = lex_and_parse(input);
 
-        let expected = StructDecl(
-            token!(IdToken("MyStruct".into())),
-            vec![
+        let expected = StructDecl {
+            identifier: IdentifierToken::new_debug("MyStruct"),
+            fields: vec![
                 (
-                    token!(IdToken("field1".into())),
-                    token!(IdToken("str".into())),
+                    IdentifierToken::new_debug("field1"),
+                    IdentifierToken::new_debug("str"),
                 ),
                 (
-                    token!(IdToken("field2".into())),
-                    token!(IdToken("bool".into())),
+                    IdentifierToken::new_debug("field2"),
+                    IdentifierToken::new_debug("bool"),
                 ),
             ],
-        );
+        };
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
@@ -1122,7 +1143,10 @@ struct MyStruct
 
         let parse_result = lex_and_parse(input);
 
-        let expected = StructDecl(token!(IdToken("MyStruct".into())), vec![]);
+        let expected = StructDecl {
+            identifier: IdentifierToken::new_debug("MyStruct"),
+            fields: vec![],
+        };
 
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
@@ -1150,9 +1174,12 @@ foo(arg: i32) -> i32
         let bar_call = Call(expr!(Identifier("bar".into())), vec![]);
 
         let expected = FnDecl {
-            name: "foo".into(),
-            params: vec![(token!(IdToken("arg".into())), token!(IdToken("i32".into())))],
-            return_ty: Some(token!(IdToken("i32".into()))),
+            identifier: IdentifierToken::new_debug("foo"),
+            params: vec![(
+                IdentifierToken::new_debug("arg"),
+                IdentifierToken::new_debug("i32"),
+            )],
+            return_ty: Some(IdentifierToken::new_debug("i32")),
             body: Block(vec![
                 StatementDecl(ExpressionStmt(dexpr!(bar_call))),
                 StatementDecl(ExpressionStmt(Expression::new_debug(Assign {
@@ -1182,12 +1209,18 @@ long_function_name(
         let parse_result = lex_and_parse(input);
 
         let expected = FnDecl {
-            name: "long_function_name".into(),
+            identifier: IdentifierToken::new_debug("long_function_name"),
             params: vec![
-                (token!(IdToken("arg".into())), token!(IdToken("i32".into()))),
-                (token!(IdToken("oth".into())), token!(IdToken("str".into()))),
+                (
+                    IdentifierToken::new_debug("arg"),
+                    IdentifierToken::new_debug("i32"),
+                ),
+                (
+                    IdentifierToken::new_debug("oth"),
+                    IdentifierToken::new_debug("str"),
+                ),
             ],
-            return_ty: Some(token!(IdToken("i32".into()))),
+            return_ty: Some(IdentifierToken::new_debug("i32")),
             body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 5 }))))]),
         };
         assert_eq!(*parse_result.first().unwrap(), expected)
@@ -1248,29 +1281,32 @@ trait TestTrait
         let parse_result = lex_and_parse(input);
 
         let expected = TraitDecl {
-            trait_name: token!(IdToken("TestTrait".to_owned())),
+            trait_identifier: IdentifierToken::new_debug("TestTrait"),
             methods: vec![
                 MethodDeclaration {
-                    name: token!(IdToken("to_string".to_owned())),
+                    name: IdentifierToken::new_debug("to_string"),
                     self_: Some(MethodSelf { type_token: None }),
                     params: vec![],
-                    return_ty: Some(token!(IdToken("str".into()))),
+                    return_ty: Some(IdentifierToken::new_debug("str")),
                     body: Block(vec![]),
                 },
                 MethodDeclaration {
-                    name: token!(IdToken("method_with_default_impl".to_owned())),
+                    name: IdentifierToken::new_debug("method_with_default_impl"),
                     self_: None,
-                    params: vec![(token!(IdToken("arg".into())), token!(IdToken("i32".into())))],
-                    return_ty: Some(token!(IdToken("i32".into()))),
+                    params: vec![(
+                        IdentifierToken::new_debug("arg"),
+                        IdentifierToken::new_debug("i32"),
+                    )],
+                    return_ty: Some(IdentifierToken::new_debug("i32")),
                     body: Block(vec![StatementDecl(Ret(Some(dexpr!(Identifier(
                         "arg".into()
                     )))))]),
                 },
                 MethodDeclaration {
-                    name: token!(IdToken("to_int".to_owned())),
+                    name: IdentifierToken::new_debug("to_int"),
                     self_: Some(MethodSelf { type_token: None }),
                     params: vec![],
-                    return_ty: Some(token!(IdToken("i32".into()))),
+                    return_ty: Some(IdentifierToken::new_debug("i32")),
                     body: Block(vec![]),
                 },
             ],
@@ -1440,24 +1476,24 @@ impl MyStruct
         let parse_result = lex_and_parse(input);
 
         let expected = Declaration::ImplDecl {
-            struct_name: token!(IdToken("MyStruct".into())),
+            struct_name: IdentifierToken::new_debug("MyStruct"),
             trait_name: None,
             methods: vec![
                 MethodDeclaration {
-                    name: token!(IdToken("print_something".to_owned())),
+                    name: IdentifierToken::new_debug("print_something"),
                     self_: None,
                     params: vec![],
                     return_ty: None,
                     body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
                 },
                 MethodDeclaration {
-                    name: token!(IdToken("is_positive".to_owned())),
+                    name: IdentifierToken::new_debug("is_positive"),
                     self_: None,
                     params: vec![(
-                        token!(IdToken("arg1".into())),
-                        token!(IdToken("int".into())),
+                        IdentifierToken::new_debug("arg1"),
+                        IdentifierToken::new_debug("int"),
                     )],
-                    return_ty: Some(token!(IdToken("i32".into()))),
+                    return_ty: Some(IdentifierToken::new_debug("i32")),
                     body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
                 },
             ],

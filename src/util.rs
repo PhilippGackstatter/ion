@@ -9,7 +9,7 @@ use crate::types::{
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
-    MethodDeclaration, MethodSelf, Program,
+    IdentifierToken, MethodDeclaration, MethodSelf, Program,
     Statement::{self, *},
     Token,
 };
@@ -125,7 +125,12 @@ pub fn pretty_write_expr(
             pretty_write_expr(f, level, true, value)
         }
         StructInit { name, values } => {
-            write(f, level, is_child, &format!("Struct {}", name.get_id()))?;
+            write(
+                f,
+                level,
+                is_child,
+                &format!("Struct {}", name.unwrap_identifier()),
+            )?;
             level += 2;
             for (name, value) in values.iter() {
                 let mut temp = level;
@@ -182,12 +187,12 @@ fn pretty_write_callable(
     is_child: bool,
     name: &str,
     self_: Option<&MethodSelf>,
-    params: &[(Token, Token)],
-    return_ty: Option<Token>,
+    params: &[(IdentifierToken, IdentifierToken)],
+    return_ty: Option<IdentifierToken>,
     body: &Statement,
 ) -> fmt::Result {
     let ret = if return_ty.is_some() {
-        return_ty.as_ref().unwrap().get_id()
+        return_ty.as_ref().unwrap().name.clone()
     } else {
         "void".to_owned()
     };
@@ -201,7 +206,7 @@ fn pretty_write_callable(
         match self_ {
             Some(method_self) => match &method_self.type_token {
                 Some(type_token) => {
-                    format!("self: {}{other_params_separator}", type_token.get_id())
+                    format!("self: {}{other_params_separator}", type_token)
                 }
                 None => format!("self{other_params_separator}"),
             },
@@ -212,7 +217,7 @@ fn pretty_write_callable(
     params_str.push_str(
         &params
             .iter()
-            .map(|p| format!("{}: {}", p.0.get_id(), p.1.get_id()))
+            .map(|(param_name, param_type)| format!("{param_name}: {param_type}"))
             .collect::<Vec<String>>()
             .join(", "),
     );
@@ -242,7 +247,7 @@ fn pretty_write_decl(
             pretty_write_expr(f, level, true, expr)
         }
         FnDecl {
-            name,
+            identifier: name,
             params,
             return_ty,
             body,
@@ -250,22 +255,17 @@ fn pretty_write_decl(
             f,
             level,
             is_child,
-            name,
+            name.as_str(),
             None,
             params,
             return_ty.clone(),
             body,
         ),
         TraitDecl {
-            trait_name,
+            trait_identifier: trait_name,
             methods,
         } => {
-            write(
-                f,
-                level,
-                is_child,
-                &format!("trait {}", trait_name.get_id()),
-            )?;
+            write(f, level, is_child, &format!("trait {}", trait_name))?;
             for method in methods {
                 let MethodDeclaration {
                     name,
@@ -279,7 +279,7 @@ fn pretty_write_decl(
                     f,
                     level,
                     true,
-                    &name.get_id(),
+                    name.as_str(),
                     self_.as_ref(),
                     params,
                     return_ty.clone(),
@@ -295,9 +295,9 @@ fn pretty_write_decl(
         } => {
             let stringified = match trait_name {
                 Some(trait_name) => {
-                    format!("impl {} for {}", trait_name.get_id(), struct_name.get_id())
+                    format!("impl {} for {}", trait_name.as_str(), struct_name.as_str())
                 }
-                None => format!("impl {}", struct_name.get_id()),
+                None => format!("impl {}", struct_name),
             };
 
             write(f, level, is_child, &stringified)?;
@@ -315,7 +315,7 @@ fn pretty_write_decl(
                     f,
                     level,
                     true,
-                    &name.get_id(),
+                    name.as_str(),
                     self_.as_ref(),
                     params,
                     return_ty.clone(),
@@ -324,16 +324,11 @@ fn pretty_write_decl(
             }
             Ok(())
         }
-        StructDecl(name, fields) => {
-            write(f, level, is_child, &format!("struct {}", name.get_id()))?;
+        StructDecl { identifier, fields } => {
+            write(f, level, is_child, &format!("struct {}", identifier))?;
             level += 2;
             for (field, ty) in fields {
-                write(
-                    f,
-                    level,
-                    true,
-                    &format!("{}: {}", field.get_id(), ty.get_id()),
-                )?;
+                write(f, level, true, &format!("{}: {}", field, ty))?;
             }
             Ok(())
         }

@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::cmp::PartialEq;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::Range;
@@ -171,12 +172,18 @@ impl Chunk {
     }
 }
 
-#[derive(Clone)]
-pub struct Token {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct TokenRange {
     /// The offset in bytes in the source file where the lexeme begins
     pub offset: u32,
     /// The length of the lexeme
     pub length: u8,
+}
+
+#[derive(Clone)]
+pub struct Token {
+    /// The range of the token in the source code.
+    pub range: TokenRange,
     /// The kind of the token
     pub kind: TokenKind,
 }
@@ -197,16 +204,17 @@ impl Token {
     #[allow(dead_code)]
     pub fn new(offset: u32, length: u8, kind: TokenKind) -> Self {
         Token {
-            offset,
-            length,
+            range: TokenRange { offset, length },
             kind,
         }
     }
 
     pub fn new_debug(kind: TokenKind) -> Self {
         Token {
-            offset: 0,
-            length: 0,
+            range: TokenRange {
+                offset: 0,
+                length: 0,
+            },
             kind,
         }
     }
@@ -221,7 +229,7 @@ impl Token {
         matches!(self.kind, TokenKind::IdToken(_))
     }
 
-    pub fn get_id(&self) -> String {
+    pub fn unwrap_id(&self) -> String {
         if let TokenKind::IdToken(id) = &self.kind {
             id.clone()
         } else {
@@ -230,10 +238,29 @@ impl Token {
     }
 }
 
+// TODO: Remove after refactor.
 impl From<Token> for std::ops::Range<usize> {
     fn from(token: Token) -> Self {
-        let off = token.offset as usize;
-        off..(off + (token.length as usize))
+        let off = token.range.offset as usize;
+        off..(off + (token.range.length as usize))
+    }
+}
+
+impl From<TokenRange> for std::ops::Range<usize> {
+    fn from(range: TokenRange) -> Self {
+        let off = range.offset as usize;
+        off..(off + (range.length as usize))
+    }
+}
+
+impl From<Range<usize>> for TokenRange {
+    fn from(range: Range<usize>) -> Self {
+        let offset = range.start;
+        let length = range.end - range.start;
+        Self {
+            offset: u32::try_from(offset).expect("offset should be convertable to u32"),
+            length: u8::try_from(length).expect("range length should be convertable to u8"),
+        }
     }
 }
 
@@ -241,7 +268,7 @@ pub const SELF: &str = "self";
 
 #[derive(Debug)]
 pub struct CompileError {
-    /// The indexes in the source string that are erroneous
+    /// The indices in the source string that are erroneous
     pub token_range: Range<usize>,
     /// The error message
     pub message: String,
@@ -297,17 +324,82 @@ pub enum TokenKind {
     EndOfFile,
 }
 
+#[derive(Debug, Clone)]
+pub struct IdentifierToken {
+    pub name: String,
+    pub range: TokenRange,
+}
+
+impl IdentifierToken {
+    pub fn new(range: impl Into<TokenRange>, name: String) -> Self {
+        Self {
+            name,
+            range: range.into(),
+        }
+    }
+
+    pub fn new_debug(name: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            range: TokenRange {
+                offset: 0,
+                length: 0,
+            },
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.name
+    }
+}
+
+impl AsRef<str> for IdentifierToken {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for IdentifierToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl TryFrom<Token> for IdentifierToken {
+    type Error = CompileError;
+
+    fn try_from(token: Token) -> Result<Self, Self::Error> {
+        match token.kind {
+            TokenKind::IdToken(identifier) => Ok(Self {
+                name: identifier,
+                range: token.range,
+            }),
+            _ => Err(CompileError {
+                token_range: token.range.into(),
+                message: "Expected token to be an identifier".to_owned(),
+            }),
+        }
+    }
+}
+
+impl PartialEq for IdentifierToken {
+    fn eq(&self, other: &Self) -> bool {
+        // Do not include range in comparison.
+        self.name == other.name
+    }
+}
+
 #[derive(PartialEq)]
 pub struct MethodSelf {
-    pub type_token: Option<Token>,
+    pub type_token: Option<IdentifierToken>,
 }
 
 #[derive(PartialEq)]
 pub struct MethodDeclaration {
-    pub name: Token,
+    pub name: IdentifierToken,
     pub self_: Option<MethodSelf>,
-    pub params: Vec<(Token, Token)>,
-    pub return_ty: Option<Token>,
+    pub params: Vec<(IdentifierToken, IdentifierToken)>,
+    pub return_ty: Option<IdentifierToken>,
     pub body: Statement,
 }
 
@@ -316,19 +408,22 @@ pub enum Declaration {
     StatementDecl(Statement),
     VarDecl(String, Expression),
     TraitDecl {
-        trait_name: Token,
+        trait_identifier: IdentifierToken,
         methods: Vec<MethodDeclaration>,
     },
-    StructDecl(Token, Vec<(Token, Token)>),
+    StructDecl {
+        identifier: IdentifierToken,
+        fields: Vec<(IdentifierToken, IdentifierToken)>,
+    },
     FnDecl {
-        name: String,
-        params: Vec<(Token, Token)>,
-        return_ty: Option<Token>,
+        identifier: IdentifierToken,
+        params: Vec<(IdentifierToken, IdentifierToken)>,
+        return_ty: Option<IdentifierToken>,
         body: Statement,
     },
     ImplDecl {
-        struct_name: Token,
-        trait_name: Option<Token>,
+        struct_name: IdentifierToken,
+        trait_name: Option<IdentifierToken>,
         methods: Vec<MethodDeclaration>,
     },
 }
@@ -388,7 +483,7 @@ impl Expression {
         Expression { tokens: 0..1, kind }
     }
 
-    pub fn get_id(&self) -> String {
+    pub fn unwrap_identifier(&self) -> String {
         if let ExpressionKind::Identifier(id) = &self.kind {
             id.clone()
         } else {
