@@ -89,7 +89,7 @@ impl std::fmt::Display for TypeKind {
                 let stringified = function
                     .params
                     .iter()
-                    .map(|param| format!("{}", fmt_typekind_exit(param.clone())))
+                    .map(|param| fmt_typekind_exit(param.clone()).to_string())
                     .collect::<Vec<String>>()
                     .join(", ");
                 write!(f, "{}", stringified)?;
@@ -335,7 +335,7 @@ impl TypeChecker {
                 }
 
                 let trait_type = Type::new(
-                    trait_identifier.range.clone().into(),
+                    trait_identifier.range.into(),
                     wrap_typekind(TypeKind::Trait(Trait {
                         name: trait_identifier.to_string(),
                         methods: method_types,
@@ -366,7 +366,7 @@ impl TypeChecker {
                     } = method;
 
                     let method_type =
-                        self.generate_function_type(name.as_str(), params, return_ty, &body)?;
+                        self.generate_function_type(name.as_str(), params, return_ty, body)?;
                     struct_method_types.insert(
                         method.name.clone().to_string(),
                         (method.name.clone(), method_type),
@@ -567,7 +567,7 @@ impl TypeChecker {
                             match &method_self.type_token {
                                 Some(type_token) => {
                                     if type_token != struct_name {
-                                        let specified_type = self.lookup_type(&type_token)?;
+                                        let specified_type = self.lookup_type(type_token)?;
                                         return Err(CompileError {
                                             token_range: type_token.range.into(),
                                             message: format!(
@@ -807,7 +807,7 @@ impl TypeChecker {
                 } else if id == SELF {
                     Err(CompileError {
                         token_range: expr.tokens.clone(),
-                        message: format!("method does not have 'self' as a receiver.",),
+                        message: "method does not have 'self' as a receiver.".to_string(),
                     })
                 } else {
                     Err(CompileError {
@@ -1047,26 +1047,24 @@ impl TypeChecker {
         }
 
         // Otherwise check if a struct can be passed as a trait.
-        match (source_type_kind, target_type_kind) {
-            (
-                TypeKind::Struct(Struct { traits, .. }),
-                TypeKind::Trait(Trait {
-                    name: trait_name, ..
-                }),
-            ) => {
-                if traits.get(trait_name).is_some() {
-                    return Ok(());
-                } else {
-                    return Err(CompileError {
-                        token_range: source_type.token_range.clone(),
-                        message: format!(
-                            "Parameter does not implement trait `{}`.\nExpected: {}\nSupplied: {}.",
-                            trait_name, target_type_kind, source_type_kind
-                        ),
-                    });
-                }
+        if let (
+            TypeKind::Struct(Struct { traits, .. }),
+            TypeKind::Trait(Trait {
+                name: trait_name, ..
+            }),
+        ) = (source_type_kind, target_type_kind)
+        {
+            if traits.get(trait_name).is_some() {
+                return Ok(());
+            } else {
+                return Err(CompileError {
+                    token_range: source_type.token_range.clone(),
+                    message: format!(
+                        "Parameter does not implement trait `{}`.\nExpected: {}\nSupplied: {}.",
+                        trait_name, target_type_kind, source_type_kind
+                    ),
+                });
             }
-            (_, _) => (),
         }
 
         Err(CompileError {

@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::ptr_arg,))]
+#![allow(clippy::ptr_arg)]
 
 pub mod compiler;
 pub mod lexer;

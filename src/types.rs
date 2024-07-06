@@ -498,6 +498,13 @@ impl PartialEq for Expression {
     }
 }
 
+pub struct MethodHeader {
+    pub name: IdentifierToken,
+    pub method_self: Option<MethodSelf>,
+    pub parameters: Vec<(IdentifierToken, IdentifierToken)>,
+    pub return_type: Option<IdentifierToken>,
+}
+
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

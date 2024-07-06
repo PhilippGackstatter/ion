@@ -11,7 +11,6 @@ use crate::types::{
     ExpressionKind::*,
     IdentifierToken, MethodDeclaration, MethodSelf, Program,
     Statement::{self, *},
-    Token,
 };
 use std::fmt::{self, Debug, Formatter};
 
@@ -181,6 +180,7 @@ pub fn pretty_print(prog: &Program) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn pretty_write_callable(
     f: &mut Formatter<'_>,
     mut level: u32,
@@ -191,8 +191,8 @@ fn pretty_write_callable(
     return_ty: Option<IdentifierToken>,
     body: &Statement,
 ) -> fmt::Result {
-    let ret = if return_ty.is_some() {
-        return_ty.as_ref().unwrap().name.clone()
+    let ret = if let Some(identifier) = return_ty.as_ref() {
+        identifier.name.clone()
     } else {
         "void".to_owned()
     };
@@ -229,7 +229,7 @@ fn pretty_write_callable(
         &format!("{}({}) -> {}", name, params_str, ret),
     )?;
     level += 2;
-    pretty_write_stmt(f, level, true, &body)
+    pretty_write_stmt(f, level, true, body)
 }
 
 fn pretty_write_decl(
@@ -448,7 +448,7 @@ pub fn run(program: String, options: &Options) {
 }
 
 pub(crate) fn print_error(prog: &str, range: std::ops::Range<usize>, msg: &str) {
-    println!("{}", display_error(&prog, range, msg));
+    println!("{}", display_error(prog, range, msg));
 }
 
 pub(crate) fn display_error(prog: &str, range: std::ops::Range<usize>, msg: &str) -> String {
@@ -468,28 +468,28 @@ pub(crate) fn display_error(prog: &str, range: std::ops::Range<usize>, msg: &str
         .rev()
         .skip(prog.len() - range.start)
     {
-        if ch == '\n' as u8 {
+        if ch == b'\n' {
             newline_before_token_start = i;
             break;
         }
     }
 
     for (i, ch) in prog.bytes().enumerate().rev().skip(prog.len() - range.end) {
-        if ch == '\n' as u8 {
+        if ch == b'\n' {
             newline_before_token_end = i;
             break;
         }
     }
 
     for (i, ch) in prog.bytes().enumerate().skip(range.end) {
-        if ch == '\n' as u8 {
+        if ch == b'\n' {
             newline_after_token_end = i;
             break;
         }
     }
 
     for (i, ch) in prog.bytes().enumerate() {
-        if ch == '\n' as u8 {
+        if ch == b'\n' {
             if i < range.start {
                 first_line_number += 1;
             } else if i >= range.start && i <= range.end {

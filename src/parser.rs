@@ -8,7 +8,7 @@ use crate::types::{
     Program,
     Statement::{self, *},
 };
-use crate::types::{IdentifierToken, MethodDeclaration, MethodSelf, Token, SELF};
+use crate::types::{IdentifierToken, MethodDeclaration, MethodHeader, MethodSelf, Token, SELF};
 use std::convert::TryInto;
 use std::ops::Range;
 
@@ -375,17 +375,7 @@ impl<'a> Parser<'a> {
         Ok(body)
     }
 
-    fn parse_method_header(
-        &mut self,
-    ) -> Result<
-        (
-            IdentifierToken,
-            Option<MethodSelf>,
-            Vec<(IdentifierToken, IdentifierToken)>,
-            Option<IdentifierToken>,
-        ),
-        CompileError,
-    > {
+    fn parse_method_header(&mut self) -> Result<MethodHeader, CompileError> {
         let id = self.advance_identifier()?;
         self.consume(LeftParen, "Expected '(' after method name.")?;
 
@@ -396,19 +386,31 @@ impl<'a> Parser<'a> {
 
         let return_ty = self.parse_callable_return_token()?;
 
-        Ok((id, method_self, params, return_ty))
+        let header = MethodHeader {
+            name: id,
+            method_self,
+            parameters: params,
+            return_type: return_ty,
+        };
+
+        Ok(header)
     }
 
     fn method_declaration(&mut self) -> Result<MethodDeclaration, CompileError> {
-        let (id, method_self, params, return_ty) = self.parse_method_header()?;
+        let MethodHeader {
+            name,
+            method_self,
+            parameters,
+            return_type,
+        } = self.parse_method_header()?;
 
         let body = self.parse_callable_body()?;
 
         Ok(MethodDeclaration {
-            name: id,
+            name,
             self_: method_self,
-            params,
-            return_ty,
+            params: parameters,
+            return_ty: return_type,
             body,
         })
     }
@@ -435,7 +437,12 @@ impl<'a> Parser<'a> {
 
     // A trait method can either be just a method header or also contain a default implementation.
     fn trait_method_declaration(&mut self) -> Result<MethodDeclaration, CompileError> {
-        let (id, method_self, params, return_ty) = self.parse_method_header()?;
+        let MethodHeader {
+            name,
+            method_self,
+            parameters,
+            return_type,
+        } = self.parse_method_header()?;
 
         // An empty body signals no default implementation.
         let mut body = Statement::Block(vec![]);
@@ -461,10 +468,10 @@ impl<'a> Parser<'a> {
         }
 
         Ok(MethodDeclaration {
-            name: id,
+            name,
             self_: method_self,
-            params,
-            return_ty,
+            params: parameters,
+            return_ty: return_type,
             body,
         })
     }
@@ -944,7 +951,7 @@ impl<'a> Parser<'a> {
         } else {
             Err(CompileError {
                 token_range: token.range.into(),
-                message: format!("Expected token to be an identifier"),
+                message: "Expected token to be an identifier".to_string(),
             })
         }
     }
@@ -1018,7 +1025,7 @@ mod tests {
         match lex_and_parse_impl(input) {
             Ok(res) => res,
             Err(err) => {
-                util::print_error(&input, err.token_range, &err.message);
+                util::print_error(input, err.token_range, &err.message);
                 panic!("lex_and_parse failed");
             }
         }

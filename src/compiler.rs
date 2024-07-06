@@ -102,7 +102,6 @@ impl Compiler {
                 methods: _,
             } => {
                 // Traits do not need to be compiled.
-                ()
             }
             // TODO: This should be compiled in a first pass, otherwise a StructInit that comes before an impl block in the source
             // code, will be created without the methods from that later impl block!
@@ -123,7 +122,7 @@ impl Compiler {
                     let method_name = name;
 
                     // Puts the compiled Function Object on the stack
-                    self.compile_fn_decl(&method_name.as_str(), params, body, FunctionType::Method);
+                    self.compile_fn_decl(method_name.as_str(), params, body, FunctionType::Method);
 
                     // Associate the Function Object with the method name on the struct
                     self.emit_op_byte(Bytecode::OpStructMethod);
