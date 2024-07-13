@@ -1,224 +1,13 @@
 use crate::types::{
-    CompileError, Declaration, Expression, ExpressionKind, IdentifierToken, MethodDeclaration,
-    Program, Statement, Token, TokenKind, SELF,
+    CompileError, Declaration, Expression, ExpressionKind, Function, IdentifierToken,
+    MethodDeclaration, MoveContext, Program, RcTypeKind, Statement, Struct, Token, TokenKind,
+    TokenRange, Trait, Type, TypeKind, Variable, WeakTypeKind, SELF,
 };
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::convert::TryInto;
 use std::ops::{Deref, DerefMut, Range};
-use std::rc::{Rc, Weak};
-
-type RcTypeKind = Rc<RefCell<TypeKind>>;
-type WeakTypeKind = Weak<RefCell<TypeKind>>;
-
-#[derive(Debug, Clone)]
-struct Type {
-    pub token_range: Range<usize>,
-    pub kind: RcTypeKind,
-}
-
-impl Type {
-    fn new(token_range: Range<usize>, kind: RcTypeKind) -> Self {
-        Type { token_range, kind }
-    }
-
-    fn new_empty_range(kind: RcTypeKind) -> Self {
-        Type {
-            token_range: 0..0,
-            kind,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum TypeKind {
-    Integer,
-    Double,
-    Str,
-    Bool,
-    Void,
-    Func(Function),
-    Struct(Struct),
-    Trait(Trait),
-}
-
-impl PartialEq for Type {
-    fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind
-    }
-}
-
-impl std::fmt::Display for TypeKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TypeKind::Integer => write!(f, "i32"),
-            TypeKind::Double => write!(f, "f32"),
-            TypeKind::Str => write!(f, "str"),
-            TypeKind::Bool => write!(f, "bool"),
-            TypeKind::Void => write!(f, "void"),
-            TypeKind::Trait(trt) => {
-                write!(f, "trait {}", trt.name)?;
-                if !trt.methods.is_empty() {
-                    write!(f, " (")?;
-                    for method in trt.methods.iter() {
-                        write!(f, "{}", fmt_typekind_exit(method.1.clone()))?;
-                    }
-                    write!(f, ")")?;
-                }
-                Ok(())
-            }
-            TypeKind::Struct(strct) => {
-                write!(f, "struct {}", strct.name)?;
-                if !strct.fields.is_empty() {
-                    write!(f, " (")?;
-
-                    let stringified = strct
-                        .fields
-                        .iter()
-                        .map(|field| format!("{}: {}", field.0, fmt_typekind_exit(field.1.clone())))
-                        .collect::<Vec<String>>()
-                        .join(", ");
-
-                    write!(f, "{stringified})")?;
-                }
-                Ok(())
-            }
-            TypeKind::Func(function) => {
-                write!(f, "{}(", function.name)?;
-
-                let stringified = function
-                    .params
-                    .iter()
-                    .map(|param| fmt_typekind_exit(param.clone()).to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                write!(f, "{}", stringified)?;
-
-                write!(
-                    f,
-                    ") -> {}",
-                    if let Some(ret_ty) = &function.result {
-                        fmt_typekind_exit(ret_ty.clone())
-                    } else {
-                        "void".into()
-                    }
-                )
-            }
-        }
-    }
-}
-
-fn fmt_typekind_exit(ty: WeakTypeKind) -> String {
-    match &*ty.upgrade().unwrap().borrow() {
-        TypeKind::Func(func) => func.name.clone(),
-        TypeKind::Struct(struct_) => struct_.name.clone(),
-        other => format!("{}", other),
-    }
-}
-
-impl std::fmt::Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", *self.kind.borrow())
-    }
-}
-
-#[derive(Debug)]
-struct Variable {
-    identifier: String,
-    scope_depth: u8,
-    dtype: Type,
-    /// The identifier that moved the Variable, if any.
-    moved_into: Option<String>,
-}
-
-impl Variable {
-    fn new(identifier: String, scope_depth: u8, dtype: Type) -> Self {
-        Variable {
-            identifier,
-            scope_depth,
-            dtype,
-            moved_into: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Struct {
-    pub name: String,
-    fields: Vec<(String, WeakTypeKind)>,
-    number_of_fields: usize,
-    /// The traits that this struct implements.
-    traits: HashMap<String, WeakTypeKind>,
-}
-
-impl PartialEq for Struct {
-    fn eq(&self, other: &Self) -> bool {
-        let mut result = self.name == other.name && self.fields.len() == other.fields.len();
-
-        if !result {
-            return false;
-        };
-
-        for i in 0..self.fields.len() {
-            result = result && self.fields[i].0 == other.fields[i].0;
-            result = result && self.fields[i].1.ptr_eq(&other.fields[i].1);
-        }
-
-        result
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Trait {
-    pub name: String,
-    methods: Vec<(IdentifierToken, WeakTypeKind)>,
-}
-
-impl PartialEq for Trait {
-    fn eq(&self, other: &Self) -> bool {
-        let mut result = self.name == other.name && self.methods.len() == other.methods.len();
-
-        if !result {
-            return false;
-        };
-
-        for i in 0..self.methods.len() {
-            result = result && self.methods[i].0 == other.methods[i].0;
-        }
-
-        result
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Function {
-    name: String,
-    params: Vec<WeakTypeKind>,
-    result: Option<WeakTypeKind>,
-}
-
-impl PartialEq for Function {
-    fn eq(&self, other: &Self) -> bool {
-        let mut eq_result = self.name == other.name && self.params.len() == other.params.len();
-
-        if !eq_result {
-            return false;
-        };
-
-        for i in 0..self.params.len() {
-            eq_result = eq_result && self.params[i].ptr_eq(&other.params[i]);
-        }
-
-        eq_result = eq_result
-            && match (&self.result, &other.result) {
-                (Some(ty), Some(other_ty)) => ty.ptr_eq(other_ty),
-                (None, None) => true,
-                _ => false,
-            };
-
-        eq_result
-    }
-}
+use std::rc::Rc;
 
 pub struct TypeChecker {
     locals: Vec<Variable>,
@@ -522,7 +311,7 @@ impl TypeChecker {
                     });
                 }
 
-                self.move_variable(&expr.kind, id.to_owned());
+                self.move_variable(&expr.kind, id.to_owned(), expr.tokens.clone(), None);
 
                 self.add_local(id.clone(), expr_type);
                 // }
@@ -788,13 +577,28 @@ impl TypeChecker {
                 // Even if the variable that was assigned to was previously moved,
                 // assigning means it contains a new value and is thus considered unmoved.
                 self.clear_moved(&assignment_identifier);
-                self.move_variable(&value.kind, assignment_identifier);
+                self.move_variable(
+                    &value.kind,
+                    assignment_identifier,
+                    value.tokens.clone(),
+                    None,
+                );
 
                 Ok(target_type)
             }
             ExpressionKind::Identifier(id) => {
                 if let Some((variable, index)) = self.find_local_variable(id) {
-                    if let Some(moved_into) = variable.moved_into.as_ref() {
+                    if let Some(move_context) = variable.move_context.as_ref() {
+                        // TODO: Use move_context.token_range.into to point to the place where the variable was moved.
+                        let moved_into = match move_context {
+                            MoveContext::Basic(basic) => {
+                                basic.moved_into.clone()
+                            }
+                            MoveContext::Struct(struct_ctx) => {
+                              struct_ctx.find_move_reason(id).expect("if a struct was partially moved, then there must be at least one field that caused the partial move").moved_into
+                            }
+                        };
+
                         return Err(CompileError {
                             token_range: expr.tokens.clone(),
                             message: format!("{id} previously moved into {moved_into}"),
@@ -831,7 +635,12 @@ impl TypeChecker {
                             let expected_param_typekind = &*expected_param_typekind.borrow();
 
                             self.type_usage_as(&call_param_type, expected_param_typekind)?;
-                            self.move_variable(&call_param.kind, function.name.clone());
+                            self.move_variable(
+                                &call_param.kind,
+                                function.name.clone(),
+                                call_param.tokens.clone(),
+                                None,
+                            );
                         } else {
                             return Err(CompileError {
                                 token_range: callee_type.token_range.clone(),
@@ -908,7 +717,12 @@ impl TypeChecker {
                                 });
                             }
 
-                            self.move_variable(&given_expr.kind, declared_name.to_owned());
+                            self.move_variable(
+                                &given_expr.kind,
+                                declared_name.to_owned(),
+                                given_expr.tokens.clone(),
+                                None,
+                            );
                         }
                     }
                 } else {
@@ -1017,12 +831,72 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn move_variable(&mut self, variable: &ExpressionKind, moved_into: String) {
-        if let ExpressionKind::Identifier(expression_id) = variable {
-            let variable = self
-                .find_local_variable_mut(expression_id)
-                .expect("type checking of the expression must have suceeded before");
-            variable.moved_into = Some(moved_into.to_owned());
+    fn move_variable(
+        &mut self,
+        moved_variable: &ExpressionKind,
+        moved_into: String,
+        moved_at: impl Into<TokenRange>,
+        struct_move_path: Option<Vec<String>>,
+    ) {
+        match &moved_variable {
+            ExpressionKind::Access { expr, name } => {
+                let ExpressionKind::Identifier(id) = &name.kind else {
+                    unreachable!("field access must be of type identifier");
+                };
+
+                let struct_move_path = match struct_move_path {
+                    Some(mut path) => {
+                        path.push(id.to_owned());
+                        path
+                    }
+                    None => vec![id.to_owned()],
+                };
+
+                self.move_variable(&expr.kind, moved_into, moved_at, Some(struct_move_path));
+            }
+            ExpressionKind::Identifier(expression_id) => {
+                let variable = self
+                    .find_local_variable_mut(expression_id)
+                    .expect("type checking of the expression must have suceeded before");
+
+                // - Add the current identifier which is the first identifier in the chain of accesses.
+                // - Reverse the vec since it was created from the back.
+                let struct_move_path = struct_move_path.map(|mut path| {
+                    path.push(expression_id.to_owned());
+                    path.reverse();
+                    path
+                });
+
+                match &mut variable.move_context {
+                    Some(context) => {
+                        let MoveContext::Struct(struct_context) = context else {
+                            unreachable!("move context can only exist in case of structs since only structs can be partially moved");
+                        };
+                        let Some(moved_path) = struct_move_path else {
+                            unreachable!("struct move path must be set on this branch");
+                        };
+
+                        struct_context.mark_moved(
+                            moved_path.as_slice(),
+                            moved_into,
+                            moved_at.into(),
+                        );
+                    }
+                    None => {
+                        let context = match struct_move_path {
+                            Some(moved_path) => MoveContext::new_struct(
+                                moved_into,
+                                moved_at.into(),
+                                moved_path.as_slice(),
+                            ),
+                            None => MoveContext::new_basic(moved_into.to_owned(), moved_at.into()),
+                        };
+
+                        variable.move_context = Some(context);
+                    }
+                }
+            }
+            _ => (),
         }
     }
 
@@ -1030,7 +904,7 @@ impl TypeChecker {
         let variable = self
             .find_local_variable_mut(variable)
             .expect("type checking of the expression must have suceeded before");
-        variable.moved_into = None;
+        variable.move_context = None;
     }
 
     /// Checks whether `source_type` can be used as `target_type`.
