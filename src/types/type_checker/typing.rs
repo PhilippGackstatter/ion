@@ -32,10 +32,10 @@ impl LocatedType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Type {
     /// The traits that this struct implements.
-    pub traits: HashMap<String, RcType>,
+    pub traits: HashMap<String, WeakType>,
     pub kind: TypeKind,
 }
 
@@ -63,6 +63,13 @@ pub enum TypeKind {
 impl PartialEq for LocatedType {
     fn eq(&self, other: &Self) -> bool {
         self.typ == other.typ
+    }
+}
+
+impl PartialEq for Type {
+    fn eq(&self, other: &Self) -> bool {
+        // Traits are not considered in equality.
+        self.kind == other.kind
     }
 }
 

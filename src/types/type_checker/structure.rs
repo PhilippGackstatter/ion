@@ -7,22 +7,14 @@ pub struct Struct {
     pub name: String,
     pub fields: Vec<(String, WeakType)>,
     pub number_of_fields: usize,
-    /// The traits that this struct implements.
-    pub traits: HashMap<String, WeakType>,
 }
 
 impl Struct {
-    pub fn new(
-        name: String,
-        fields: Vec<(String, WeakType)>,
-        number_of_fields: usize,
-        traits: HashMap<String, WeakType>,
-    ) -> Self {
+    pub fn new(name: String, fields: Vec<(String, WeakType)>, number_of_fields: usize) -> Self {
         Self {
             name,
             fields,
             number_of_fields,
-            traits,
         }
     }
 

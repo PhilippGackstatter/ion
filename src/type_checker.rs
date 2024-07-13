@@ -99,7 +99,6 @@ impl TypeChecker {
                         name: identifier.name.clone(),
                         fields,
                         number_of_fields,
-                        traits: HashMap::new(),
                     })),
                 );
                 self.add_symbol(&identifier.name, st)?;
@@ -282,12 +281,14 @@ impl TypeChecker {
         // If the trait method check was successful, this struct is an implementor of the trait.
         let struct_ref = self.lookup_type_ref(struct_name)?;
         let mut struct_ref_mut = struct_ref.borrow_mut();
-        if let TypeKind::Struct(ref mut strct) = struct_ref_mut.deref_mut().kind {
+        if let TypeKind::Struct(_) = &struct_ref_mut.deref().kind {
             let trait_type = self
                 .lookup_type_ref(trait_name)
                 .expect("the trait name should be some in this branch");
             let weak_trait_type = Rc::downgrade(&trait_type);
-            strct.traits.insert(trait_name.to_string(), weak_trait_type);
+            struct_ref_mut
+                .traits
+                .insert(trait_name.to_string(), weak_trait_type);
         } else {
             todo!("compile error, expected typekind struct as trait implementor")
         }
@@ -930,13 +931,13 @@ impl TypeChecker {
 
         // Otherwise check if a struct can be passed as a trait.
         if let (
-            TypeKind::Struct(Struct { traits, .. }),
+            TypeKind::Struct(_),
             TypeKind::Trait(Trait {
                 name: trait_name, ..
             }),
         ) = (&source_type.kind, target_type_kind)
         {
-            if traits.get(trait_name).is_some() {
+            if source_type.traits.get(trait_name).is_some() {
                 return Ok(());
             } else {
                 return Err(CompileError::new_migration(
