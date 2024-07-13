@@ -6,6 +6,7 @@ use std::io::Read;
 use std::path::Path;
 
 use crate::types::{
+    CompileError,
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
@@ -439,16 +440,17 @@ pub fn run(program: String, options: &Options) {
                     vm.interpet(compiler.chunk());
                 }
                 Err(err) => {
-                    print_error(&program, err.token_range, &err.message);
+                    print_error(&program, err);
                 }
             }
         }
-        Err(parser_err) => print_error(&program, parser_err.token_range, &parser_err.message),
+        Err(parser_err) => print_error(&program, parser_err),
     }
 }
 
-pub(crate) fn print_error(prog: &str, range: std::ops::Range<usize>, msg: &str) {
-    println!("{}", display_error(prog, range, msg));
+pub(crate) fn print_error(prog: &str, err: CompileError) {
+    let err = err.unwrap_migration();
+    println!("{}", display_error(prog, err.token_range, &err.message));
 }
 
 pub(crate) fn display_error(prog: &str, range: std::ops::Range<usize>, msg: &str) -> String {

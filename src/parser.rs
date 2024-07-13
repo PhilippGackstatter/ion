@@ -686,10 +686,10 @@ impl<'a> Parser<'a> {
                         },
                     );
                 } else {
-                    return Err(CompileError {
-                        token_range: name.tokens.clone(),
-                        message: "Expected identifier for field access".into(),
-                    });
+                    return Err(CompileError::new_migration(
+                        name.tokens.clone(),
+                        "Expected identifier for field access".into(),
+                    ));
                 }
             } else {
                 break;
@@ -732,10 +732,10 @@ impl<'a> Parser<'a> {
                         self.consume(Comma, "Expected ',' after field initializer.")?;
                         fields.push((field_name, field_value))
                     } else {
-                        return Err(CompileError {
-                            token_range: field_name.tokens.clone(),
-                            message: "Expected identifier as field name".into(),
-                        });
+                        return Err(CompileError::new_migration(
+                            field_name.tokens.clone(),
+                            "Expected identifier as field name".into(),
+                        ));
                     }
                 }
                 // TODO: Fix case when struct has size 0.
@@ -949,18 +949,15 @@ impl<'a> Parser<'a> {
                 range: token.range,
             })
         } else {
-            Err(CompileError {
-                token_range: token.range.into(),
-                message: "Expected token to be an identifier".to_string(),
-            })
+            Err(CompileError::new_migration(
+                token.range.into(),
+                "Expected token to be an identifier".to_string(),
+            ))
         }
     }
 
     fn error(&self, token_range: Range<usize>, message: &str) -> CompileError {
-        CompileError {
-            token_range,
-            message: message.into(),
-        }
+        CompileError::new_migration(token_range, message.into())
     }
 
     // fn synchronize(&mut self) {
@@ -1025,7 +1022,7 @@ mod tests {
         match lex_and_parse_impl(input) {
             Ok(res) => res,
             Err(err) => {
-                util::print_error(input, err.token_range, &err.message);
+                util::print_error(input, err);
                 panic!("lex_and_parse failed");
             }
         }
@@ -1164,7 +1161,10 @@ struct MyStruct
 
         let parse_err = lex_and_parse_err(input);
 
-        assert_eq!(parse_err.message, "Expected fields to be indented");
+        assert_eq!(
+            parse_err.unwrap_migration().message,
+            "Expected fields to be indented"
+        );
     }
 
     #[test]
@@ -1244,7 +1244,10 @@ foo(arg: i32) -> i32
 
         let parse_err = lex_and_parse_err(input);
 
-        assert_eq!(parse_err.message, "Expected indentation of 4 but got 2");
+        assert_eq!(
+            parse_err.unwrap_migration().message,
+            "Expected indentation of 4 but got 2"
+        );
     }
 
     #[test]
@@ -1520,6 +1523,9 @@ impl MyStruct
 
         let parse_err = lex_and_parse_err(input);
 
-        assert_eq!(parse_err.message, "Expected method declaration");
+        assert_eq!(
+            parse_err.unwrap_migration().message,
+            "Expected method declaration"
+        );
     }
 }

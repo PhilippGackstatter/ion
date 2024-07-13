@@ -196,10 +196,10 @@ impl TryFrom<Token> for IdentifierToken {
                 name: identifier,
                 range: token.range,
             }),
-            _ => Err(CompileError {
-                token_range: token.range.into(),
-                message: "Expected token to be an identifier".to_owned(),
-            }),
+            _ => Err(CompileError::new_migration(
+                token.range.into(),
+                "Expected token to be an identifier".to_owned(),
+            )),
         }
     }
 }

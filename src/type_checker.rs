@@ -54,10 +54,10 @@ impl TypeChecker {
         if let entry @ Entry::Vacant(_) = self.symbol_table.entry(name.into()) {
             Ok(entry.or_insert(ty.kind))
         } else {
-            Err(CompileError {
-                token_range: ty.token_range.clone(),
-                message: format!("Type {} is already declared in this scope.", name),
-            })
+            Err(CompileError::new_migration(
+                ty.token_range.clone(),
+                format!("Type {} is already declared in this scope.", name),
+            ))
         }
     }
 
@@ -176,14 +176,14 @@ impl TypeChecker {
                                         let struct_range: Range<usize> = struct_name.range.into();
                                         let trait_range: Range<usize> = trt.range.into();
 
-                                        CompileError {
+                                        CompileError::new_migration(
                                             // Provide better error by pointing to a larger part of the impl trait range.
-                                            token_range: trait_range.start..struct_range.end,
-                                            message: format!(
+                                            trait_range.start..struct_range.end,
+                                            format!(
                                                 "Not all trait items implemented, missing {}",
                                                 method_name.as_str()
                                             ),
-                                        }
+                                        )
                                     })?;
 
                                 let rc_method_type = method_type.upgrade().unwrap();
@@ -191,14 +191,14 @@ impl TypeChecker {
                                 if struct_method.kind.borrow().deref()
                                     != rc_method_type.borrow().deref()
                                 {
-                                    return Err(CompileError {
-                                        token_range: name_token.range.into(),
-                                        message: format!(
+                                    return Err(CompileError::new_migration(
+                                        name_token.range.into(),
+                                        format!(
                                             "Type mismatch, expected {}, found {}",
                                             rc_method_type.borrow(),
                                             struct_method.kind.borrow(),
                                         ),
-                                    });
+                                    ));
                                 }
                             }
 
@@ -234,10 +234,10 @@ impl TypeChecker {
         if let Some(symbol) = self.symbol_table.get(type_name) {
             Ok(Rc::clone(symbol))
         } else {
-            Err(CompileError {
-                token_range: token.range.into(),
-                message: format!("Type {} not declared in this scope.", type_name),
-            })
+            Err(CompileError::new_migration(
+                token.range.into(),
+                format!("Type {} not declared in this scope.", type_name),
+            ))
         }
     }
 
@@ -253,19 +253,19 @@ impl TypeChecker {
                 strct.fields.push((method_name.to_owned(), method_ty));
                 Ok(())
             } else {
-                Err(CompileError {
-                    token_range: struct_name.range.into(),
-                    message: format!(
+                Err(CompileError::new_migration(
+                    struct_name.range.into(),
+                    format!(
                         "Can only add methods to type struct, found {} instead",
                         type_name
                     ),
-                })
+                ))
             }
         } else {
-            Err(CompileError {
-                token_range: struct_name.range.into(),
-                message: format!("Type {} not declared in this scope.", type_name),
-            })
+            Err(CompileError::new_migration(
+                struct_name.range.into(),
+                format!("Type {} not declared in this scope.", type_name),
+            ))
         }
     }
 
@@ -305,10 +305,10 @@ impl TypeChecker {
                     .iter()
                     .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
                 {
-                    return Err(CompileError {
-                        token_range: expr_type.token_range.clone(),
-                        message: "Variable is already declared in this scope.".into(),
-                    });
+                    return Err(CompileError::new_migration(
+                        expr_type.token_range.clone(),
+                        "Variable is already declared in this scope.".into(),
+                    ));
                 }
 
                 self.move_variable(&expr.kind, id.to_owned(), expr.tokens.clone(), None);
@@ -357,15 +357,15 @@ impl TypeChecker {
                                 Some(type_token) => {
                                     if type_token != struct_name {
                                         let specified_type = self.lookup_type(type_token)?;
-                                        return Err(CompileError {
-                                            token_range: type_token.range.into(),
-                                            message: format!(
+                                        return Err(CompileError::new_migration(
+                                            type_token.range.into(),
+                                            format!(
                                                 "'self' in method {} must have type {}, got {}",
                                                 name.as_str(),
                                                 struct_name,
                                                 specified_type,
                                             ),
-                                        });
+                                        ));
                                     }
                                 }
                                 None => {}
@@ -412,10 +412,10 @@ impl TypeChecker {
                 let cond_type = self.check_expr(condition)?;
 
                 if *cond_type.kind.borrow() != TypeKind::Bool {
-                    return Err(CompileError {
-                        token_range: condition.tokens.clone(),
-                        message: format!("Condition must be of type bool, got {}", cond_type),
-                    });
+                    return Err(CompileError::new_migration(
+                        condition.tokens.clone(),
+                        format!("Condition must be of type bool, got {}", cond_type),
+                    ));
                 }
 
                 let mut return_types = self.check_stmt(if_branch)?;
@@ -429,10 +429,10 @@ impl TypeChecker {
             Statement::While(condition, body) => {
                 let cond_type = self.check_expr(condition)?;
                 if *cond_type.kind.borrow() != TypeKind::Bool {
-                    return Err(CompileError {
-                        token_range: condition.tokens.clone(),
-                        message: format!("Condition must be of type bool, got {}", cond_type),
-                    });
+                    return Err(CompileError::new_migration(
+                        condition.tokens.clone(),
+                        format!("Condition must be of type bool, got {}", cond_type),
+                    ));
                 }
 
                 self.check_stmt(body)?;
@@ -469,13 +469,13 @@ impl TypeChecker {
                         Ok(Type::new(expr.tokens.clone(), rtype.kind))
                     }
                 } else {
-                    Err(CompileError {
-                        token_range: op_token.clone().into(),
-                        message: format!(
+                    Err(CompileError::new_migration(
+                        op_token.clone().into(),
+                        format!(
                             "Types {} and {} are not compatible in binary operation",
                             ltype, rtype
                         ),
-                    })
+                    ))
                 }
             }
             ExpressionKind::Unary(op, rexpr) => {
@@ -488,13 +488,10 @@ impl TypeChecker {
                                 wrap_typekind(TypeKind::Bool),
                             ))
                         } else {
-                            Err(CompileError {
-                                token_range: rexpr.tokens.clone(),
-                                message: format!(
-                                    "Type {} can not be used with a ! operator",
-                                    expr_type
-                                ),
-                            })
+                            Err(CompileError::new_migration(
+                                rexpr.tokens.clone(),
+                                format!("Type {} can not be used with a ! operator", expr_type),
+                            ))
                         }
                     }
                     TokenKind::Minus => {
@@ -504,13 +501,10 @@ impl TypeChecker {
                                 wrap_typekind(TypeKind::Integer),
                             ))
                         } else {
-                            Err(CompileError {
-                                token_range: expr_type.token_range.clone(),
-                                message: format!(
-                                    "Type {} can not be used with a - operator",
-                                    expr_type
-                                ),
-                            })
+                            Err(CompileError::new_migration(
+                                expr_type.token_range.clone(),
+                                format!("Type {} can not be used with a - operator", expr_type),
+                            ))
                         }
                     }
                     _ => unimplemented!(),
@@ -542,13 +536,13 @@ impl TypeChecker {
                         if let Some((_, index)) = self.find_local_variable(id) {
                             (id.to_owned(), self.locals[index as usize].dtype.clone())
                         } else {
-                            return Err(CompileError {
-                            token_range: expr.tokens.clone(),
-                            message: format!(
+                            return Err(CompileError::new_migration(
+                             expr.tokens.clone(),
+                             format!(
                                 "{} is not defined in the current scope. (Globals are unimplemented.)",
                                 id
                             ),
-                        });
+                            ));
                         }
                     }
                     ExpressionKind::Access { name, .. } => {
@@ -565,13 +559,13 @@ impl TypeChecker {
 
                 let value_type = self.check_expr(value)?;
                 if target_type != value_type {
-                    return Err(CompileError {
-                        token_range: value_type.token_range.clone(),
-                        message: format!(
+                    return Err(CompileError::new_migration(
+                        value_type.token_range.clone(),
+                        format!(
                             "Expression of type {} can not be assigned to variable of type {}",
                             value_type, target_type
                         ),
-                    });
+                    ));
                 }
 
                 // Even if the variable that was assigned to was previously moved,
@@ -599,28 +593,28 @@ impl TypeChecker {
                             }
                         };
 
-                        return Err(CompileError {
-                            token_range: expr.tokens.clone(),
-                            message: format!("{id} previously moved into {moved_into}"),
-                        });
+                        return Err(CompileError::new_migration(
+                            expr.tokens.clone(),
+                            format!("{id} previously moved into {moved_into}"),
+                        ));
                     }
 
                     Ok(self.locals[index as usize].dtype.clone())
                 } else if let Some(ty) = self.symbol_table.get(id) {
                     Ok(Type::new_empty_range(ty.clone()))
                 } else if id == SELF {
-                    Err(CompileError {
-                        token_range: expr.tokens.clone(),
-                        message: "method does not have 'self' as a receiver.".to_string(),
-                    })
+                    Err(CompileError::new_migration(
+                        expr.tokens.clone(),
+                        "method does not have 'self' as a receiver.".to_string(),
+                    ))
                 } else {
-                    Err(CompileError {
-                        token_range: expr.tokens.clone(),
-                        message: format!(
+                    Err(CompileError::new_migration(
+                        expr.tokens.clone(),
+                        format!(
                             "{} is not defined in the current scope. (Globals are unimplemented.)",
                             id
                         ),
-                    })
+                    ))
                 }
             }
             ExpressionKind::Call(callee, params) => {
@@ -642,15 +636,15 @@ impl TypeChecker {
                                 None,
                             );
                         } else {
-                            return Err(CompileError {
-                                token_range: callee_type.token_range.clone(),
-                                message: format!(
+                            return Err(CompileError::new_migration(
+                                callee_type.token_range.clone(),
+                                format!(
                                     "{} needs {} parameters, but only {} were supplied.",
                                     function.name,
                                     function.params.len(),
                                     params.len()
                                 ),
-                            });
+                            ));
                         }
                     }
 
@@ -660,10 +654,10 @@ impl TypeChecker {
                         Type::new_empty_range(wrap_typekind(TypeKind::Void))
                     })
                 } else {
-                    Err(CompileError {
-                        token_range: callee_type.token_range.clone(),
-                        message: format!("Type {} is not callable.", callee_type),
-                    })
+                    Err(CompileError::new_migration(
+                        callee_type.token_range.clone(),
+                        format!("Type {} is not callable.", callee_type),
+                    ))
                 }
             }
             ExpressionKind::StructInit { name, values } => {
@@ -677,13 +671,13 @@ impl TypeChecker {
                     let declared_field_number = declared_struct.number_of_fields;
                     let given_field_number = values.len();
                     if declared_field_number != given_field_number {
-                        return Err(CompileError {
-                            token_range: expr.tokens.clone(),
-                            message: format!(
+                        return Err(CompileError::new_migration(
+                            expr.tokens.clone(),
+                            format!(
                                 "Expected {} fields, but {} were given.",
                                 declared_field_number, given_field_number
                             ),
-                        });
+                        ));
                     } else {
                         #[allow(clippy::needless_range_loop)]
                         for i in 0..declared_field_number {
@@ -693,14 +687,14 @@ impl TypeChecker {
                             let given_expr = &values[i].1;
 
                             if *declared_name != given_name.unwrap_identifier() {
-                                return Err(CompileError {
-                                    token_range: given_name.tokens.clone(),
-                                    message: format!(
+                                return Err(CompileError::new_migration(
+                                    given_name.tokens.clone(),
+                                    format!(
                                         "{} has no field with name {}",
                                         declared_struct.name,
                                         given_name.unwrap_identifier()
                                     ),
-                                });
+                                ));
                             }
 
                             let given_type = self.check_expr(given_expr)?;
@@ -708,13 +702,13 @@ impl TypeChecker {
                             let declared_type = &*rc_declared_type.borrow();
 
                             if declared_type != &*given_type.kind.borrow() {
-                                return Err(CompileError {
-                                    token_range: given_type.token_range.clone(),
-                                    message: format!(
+                                return Err(CompileError::new_migration(
+                                    given_type.token_range.clone(),
+                                    format!(
                                         "Expected {} for field {} but type {} was found",
                                         declared_type, declared_name, given_type
                                     ),
-                                });
+                                ));
                             }
 
                             self.move_variable(
@@ -726,10 +720,10 @@ impl TypeChecker {
                         }
                     }
                 } else {
-                    return Err(CompileError {
-                        token_range: expr.tokens.clone(),
-                        message: "Cannot instantiate anything other than a struct".to_owned(),
-                    });
+                    return Err(CompileError::new_migration(
+                        expr.tokens.clone(),
+                        "Cannot instantiate anything other than a struct".to_owned(),
+                    ));
                 }
                 Ok(struct_type)
             }
@@ -743,13 +737,15 @@ impl TypeChecker {
                         .iter()
                         .find(|elem| elem.0 == name.unwrap_identifier());
 
-                    let field_type = field_type.ok_or_else(|| CompileError {
-                        token_range: name.tokens.clone(),
-                        message: format!(
-                            "Struct {} has no field named {}",
-                            strct.name,
-                            name.unwrap_identifier()
-                        ),
+                    let field_type = field_type.ok_or_else(|| {
+                        CompileError::new_migration(
+                            name.tokens.clone(),
+                            format!(
+                                "Struct {} has no field named {}",
+                                strct.name,
+                                name.unwrap_identifier()
+                            ),
+                        )
                     })?;
 
                     Ok(Type::new_empty_range(
@@ -761,23 +757,25 @@ impl TypeChecker {
                         .iter()
                         .find(|elem| elem.0.as_str() == name.unwrap_identifier());
 
-                    let method_type = method_type.ok_or_else(|| CompileError {
-                        token_range: name.tokens.clone(),
-                        message: format!(
-                            "Trait {} has no method named `{}`",
-                            trt.name,
-                            name.unwrap_identifier()
-                        ),
+                    let method_type = method_type.ok_or_else(|| {
+                        CompileError::new_migration(
+                            name.tokens.clone(),
+                            format!(
+                                "Trait {} has no method named `{}`",
+                                trt.name,
+                                name.unwrap_identifier()
+                            ),
+                        )
                     })?;
 
                     Ok(Type::new_empty_range(
                         method_type.1.upgrade().unwrap().clone(),
                     ))
                 } else {
-                    Err(CompileError {
-                        token_range: expr.tokens.clone(),
-                        message: "Cannot access anything other than a struct".to_owned(),
-                    })
+                    Err(CompileError::new_migration(
+                        expr.tokens.clone(),
+                        "Cannot access anything other than a struct".to_owned(),
+                    ))
                 }
             }
         }
@@ -811,21 +809,21 @@ impl TypeChecker {
         };
 
         if *declared_ret_type.kind.borrow() != TypeKind::Void && return_types.is_empty() {
-            return Err(CompileError {
-                token_range: declared_ret_type.token_range.clone(),
-                message: format!("This function has to return a type {}.", declared_ret_type),
-            });
+            return Err(CompileError::new_migration(
+                declared_ret_type.token_range.clone(),
+                format!("This function has to return a type {}.", declared_ret_type),
+            ));
         }
 
         for return_type in return_types {
             if return_type != declared_ret_type {
-                return Err(CompileError {
-                    token_range: return_type.token_range.clone(),
-                    message: format!(
+                return Err(CompileError::new_migration(
+                    return_type.token_range.clone(),
+                    format!(
                         "Returned type {} does not match declared return type {}.",
                         return_type, declared_ret_type
                     ),
-                });
+                ));
             }
         }
         Ok(())
@@ -931,23 +929,23 @@ impl TypeChecker {
             if traits.get(trait_name).is_some() {
                 return Ok(());
             } else {
-                return Err(CompileError {
-                    token_range: source_type.token_range.clone(),
-                    message: format!(
+                return Err(CompileError::new_migration(
+                    source_type.token_range.clone(),
+                    format!(
                         "Parameter does not implement trait `{}`.\nExpected: {}\nSupplied: {}.",
                         trait_name, target_type_kind, source_type_kind
                     ),
-                });
+                ));
             }
         }
 
-        Err(CompileError {
-            token_range: source_type.token_range.clone(),
-            message: format!(
+        Err(CompileError::new_migration(
+            source_type.token_range.clone(),
+            format!(
                 "Parameter has incompatible type.\nExpected: {}\nSupplied: {}.",
                 target_type_kind, source_type_kind
             ),
-        })
+        ))
     }
 
     // TODO: Add self in function type if exists.
@@ -1062,7 +1060,7 @@ mod tests {
         let check_result = checker.check(&tree, false);
 
         if let Err(err) = &check_result {
-            util::print_error(&input, err.token_range.clone(), &err.message);
+            util::print_error(&input, err.clone());
         }
 
         check_result
@@ -1074,6 +1072,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("does not match declared return type"));
     }
@@ -1084,6 +1083,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("does not match declared return type"));
     }
@@ -1094,6 +1094,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("does not match declared return type"));
     }
@@ -1104,6 +1105,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("does not match declared return type"));
     }
@@ -1114,6 +1116,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("Parameter has incompatible type"));
     }
@@ -1124,6 +1127,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("Condition must be of type bool"));
     }
@@ -1134,6 +1138,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("Condition must be of type bool"));
     }
@@ -1144,6 +1149,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("not compatible in binary operation"));
     }
@@ -1154,6 +1160,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("can not be used with a ! operator"));
     }
@@ -1164,6 +1171,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("already declared in this scope"));
     }
@@ -1174,6 +1182,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("Expected 2 fields, but 3 were given"));
     }
@@ -1182,14 +1191,22 @@ mod tests {
     fn test_struct_init_wrong_field_name() {
         let res = lex_parse_check("struct_init_wrong_field_name.io");
         assert!(res.is_err());
-        assert!(res.unwrap_err().message.contains("has no field with name"));
+        assert!(res
+            .unwrap_err()
+            .unwrap_migration()
+            .message
+            .contains("has no field with name"));
     }
 
     #[test]
     fn test_struct_init_wrong_type() {
         let res = lex_parse_check("struct_init_wrong_type.io");
         assert!(res.is_err());
-        assert!(res.unwrap_err().message.contains("but type i32 was found"));
+        assert!(res
+            .unwrap_err()
+            .unwrap_migration()
+            .message
+            .contains("but type i32 was found"));
     }
 
     #[test]
@@ -1198,6 +1215,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("Type i32 can not be used with a ! operator"));
     }
@@ -1208,6 +1226,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("Expression of type str can not be assigned to variable of type i32"));
     }
@@ -1218,6 +1237,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("Type NumWrap not declared in this scope."));
     }
@@ -1228,6 +1248,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("Not all trait items implemented, missing fmt"));
     }
@@ -1236,7 +1257,11 @@ mod tests {
     fn test_trait_impl_type_mismatch() {
         let res = lex_parse_check("trait_impl_type_mismatch.io");
         assert!(res.is_err());
-        assert!(res.unwrap_err().message.contains("Type mismatch, expected"));
+        assert!(res
+            .unwrap_err()
+            .unwrap_migration()
+            .message
+            .contains("Type mismatch, expected"));
     }
 
     #[test]
@@ -1251,6 +1276,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("does not implement trait"));
     }
@@ -1261,6 +1287,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("x previously moved into y"));
     }
@@ -1271,6 +1298,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("x previously moved into y"));
     }
@@ -1281,6 +1309,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("x previously moved into num"));
     }
@@ -1291,6 +1320,7 @@ mod tests {
         assert!(res.is_err());
         assert!(res
             .unwrap_err()
+            .unwrap_migration()
             .message
             .contains("x previously moved into addOne"));
     }
