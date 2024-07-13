@@ -36,6 +36,9 @@ impl LocatedType {
 pub struct Type {
     /// The traits that this struct implements.
     pub traits: HashMap<String, WeakType>,
+    /// The methods this type has.
+    /// For traits, these are the trait methods.
+    pub methods: Vec<(String, WeakType)>,
     pub kind: TypeKind,
 }
 
@@ -44,7 +47,13 @@ impl Type {
         Self {
             kind,
             traits: HashMap::new(),
+            methods: Vec::new(),
         }
+    }
+
+    pub fn with_methods(mut self, methods: Vec<(String, WeakType)>) -> Self {
+        self.methods = methods;
+        self
     }
 }
 
@@ -69,20 +78,23 @@ impl PartialEq for LocatedType {
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         // Traits are not considered in equality.
-        self.kind == other.kind
+        let mut result = self.kind == other.kind && self.methods.len() == other.methods.len();
+
+        if !result {
+            return false;
+        }
+
+        for i in 0..self.methods.len() {
+            result = result && self.methods[i].0 == other.methods[i].0;
+        }
+
+        result
     }
 }
 
 impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Ignore traits in display for now.
-        self.kind.fmt(f)
-    }
-}
-
-impl std::fmt::Display for TypeKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
+        match &self.kind {
             TypeKind::Integer => write!(f, "i32"),
             TypeKind::Double => write!(f, "f32"),
             TypeKind::Str => write!(f, "str"),
@@ -90,9 +102,9 @@ impl std::fmt::Display for TypeKind {
             TypeKind::Void => write!(f, "void"),
             TypeKind::Trait(trt) => {
                 write!(f, "trait {}", trt.name)?;
-                if !trt.methods.is_empty() {
+                if !self.methods.is_empty() {
                     write!(f, " (")?;
-                    for method in trt.methods.iter() {
+                    for method in self.methods.iter() {
                         write!(f, "{}", fmt_typekind_exit(method.1.clone()))?;
                     }
                     write!(f, ")")?;
@@ -146,7 +158,7 @@ fn fmt_typekind_exit(ty: WeakType) -> String {
     match &ty_ref.kind {
         TypeKind::Func(func) => func.name.clone(),
         TypeKind::Struct(struct_) => struct_.name.clone(),
-        other => format!("{}", other),
+        _ => format!("{}", ty_ref),
     }
 }
 

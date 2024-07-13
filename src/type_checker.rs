@@ -7,7 +7,7 @@ use crate::types::{
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
 use std::convert::TryInto;
-use std::ops::{Deref, DerefMut, Range};
+use std::ops::{Deref, Range};
 use std::rc::Rc;
 
 pub struct TypeChecker {
@@ -19,6 +19,10 @@ pub struct TypeChecker {
 
 fn wrap_typekind(kind: TypeKind) -> RcType {
     Rc::new(RefCell::new(Type::new(kind)))
+}
+
+fn wrap_type(typ: Type) -> RcType {
+    Rc::new(RefCell::new(typ))
 }
 
 impl TypeChecker {
@@ -124,15 +128,17 @@ impl TypeChecker {
                         format!("{}::{}", trait_identifier.as_str(), method_name.as_str());
                     let fn_type_ref =
                         Rc::downgrade(self.add_symbol(&trait_method_name, method_type)?);
-                    method_types.push((method_name.clone(), fn_type_ref));
+                    method_types.push((method_name.name.to_owned(), fn_type_ref));
                 }
 
                 let trait_type = LocatedType::new(
                     trait_identifier.range.into(),
-                    wrap_typekind(TypeKind::Trait(Trait {
-                        name: trait_identifier.to_string(),
-                        methods: method_types,
-                    })),
+                    wrap_type(
+                        Type::new(TypeKind::Trait(Trait {
+                            name: trait_identifier.to_string(),
+                        }))
+                        .with_methods(method_types),
+                    ),
                 );
                 self.add_symbol(trait_identifier.as_str(), trait_type)?;
             }
@@ -171,8 +177,8 @@ impl TypeChecker {
                         let trait_located_type = self.lookup_type(trt)?;
 
                         let typ = trait_located_type.typ.borrow();
-                        if let TypeKind::Trait(Trait { methods, .. }) = &typ.kind {
-                            for (method_name, method_type) in methods {
+                        if let TypeKind::Trait(_) = &typ.kind {
+                            for (method_name, method_type) in &typ.methods {
                                 // TODO: Allow methods with default_impl to be missing!
                                 let (name_token, struct_method) = struct_method_types
                                     .get(method_name.as_str())
@@ -219,7 +225,7 @@ impl TypeChecker {
                     let struct_method_name = format!("{}::{}", struct_name, name);
                     let fn_type_ref =
                         Rc::downgrade(self.add_symbol(&struct_method_name, method_type)?);
-                    self.add_struct_method(struct_name, &name, fn_type_ref)?;
+                    self.add_method_to_type(struct_name, &name, fn_type_ref)?;
                 }
             }
             _ => (),
@@ -245,26 +251,19 @@ impl TypeChecker {
         }
     }
 
-    fn add_struct_method(
+    fn add_method_to_type(
         &mut self,
         struct_name: &IdentifierToken,
         method_name: &str,
-        method_ty: WeakType,
+        method_type: WeakType,
     ) -> Result<(), CompileError> {
         let type_name = &struct_name.name;
         if let Some(symbol) = self.symbol_table.get_mut(type_name) {
-            if let TypeKind::Struct(strct) = &mut symbol.borrow_mut().kind {
-                strct.fields.push((method_name.to_owned(), method_ty));
-                Ok(())
-            } else {
-                Err(CompileError::new_migration(
-                    struct_name.range.into(),
-                    format!(
-                        "Can only add methods to type struct, found {} instead",
-                        type_name
-                    ),
-                ))
-            }
+            symbol
+                .borrow_mut()
+                .methods
+                .push((method_name.to_owned(), method_type));
+            Ok(())
         } else {
             Err(CompileError::new_migration(
                 struct_name.range.into(),
@@ -639,7 +638,7 @@ impl TypeChecker {
                             let expected_param_typekind = param.upgrade().unwrap();
                             let expected_param_type = &*expected_param_typekind.borrow();
 
-                            self.type_usage_as(&call_param_type, &expected_param_type.kind)?;
+                            self.type_usage_as(&call_param_type, expected_param_type)?;
                             self.move_variable(
                                 &call_param.kind,
                                 function.name.clone(),
@@ -746,6 +745,7 @@ impl TypeChecker {
                     let field_type = strct
                         .fields
                         .iter()
+                        .chain(expr_type.methods.iter())
                         .find(|elem| elem.0 == name.unwrap_identifier());
 
                     let field_type = field_type.ok_or_else(|| {
@@ -763,7 +763,7 @@ impl TypeChecker {
                         field_type.1.upgrade().unwrap().clone(),
                     ))
                 } else if let TypeKind::Trait(trt) = &expr_type.kind {
-                    let method_type = trt
+                    let method_type = expr_type
                         .methods
                         .iter()
                         .find(|elem| elem.0.as_str() == name.unwrap_identifier());
@@ -920,31 +920,32 @@ impl TypeChecker {
     fn type_usage_as(
         &self,
         source_located_type: &LocatedType,
-        target_type_kind: &TypeKind,
+        target_type: &Type,
     ) -> Result<(), CompileError> {
         let source_type = &*source_located_type.typ.borrow();
 
         // Check if types match trivially.
-        if &source_type.kind == target_type_kind {
+        if source_type.kind == target_type.kind {
             return Ok(());
         }
 
         // Otherwise check if a struct can be passed as a trait.
+        // TODO: Adapt for all types.
         if let (
             TypeKind::Struct(_),
             TypeKind::Trait(Trait {
                 name: trait_name, ..
             }),
-        ) = (&source_type.kind, target_type_kind)
+        ) = (&source_type.kind, &target_type.kind)
         {
-            if source_type.traits.get(trait_name).is_some() {
+            if source_type.traits.contains_key(trait_name) {
                 return Ok(());
             } else {
                 return Err(CompileError::new_migration(
                     source_located_type.token_range.clone(),
                     format!(
                         "Parameter does not implement trait `{}`.\nExpected: {}\nSupplied: {}.",
-                        trait_name, target_type_kind, source_type
+                        trait_name, target_type, source_type
                     ),
                 ));
             }
@@ -954,7 +955,7 @@ impl TypeChecker {
             source_located_type.token_range.clone(),
             format!(
                 "Parameter has incompatible type.\nExpected: {}\nSupplied: {}.",
-                target_type_kind, source_type
+                target_type, source_type
             ),
         ))
     }
@@ -1043,11 +1044,12 @@ impl TypeChecker {
         println!("\nSymbol Table");
         println!("============");
         for (name, symbol) in self.symbol_table.iter() {
-            match &symbol.borrow().kind {
-                func @ TypeKind::Func(_) => {
-                    println!("{name} ({})", func)
+            let symbol_ref = &*symbol.borrow();
+            match &symbol_ref.kind {
+                TypeKind::Func(_) => {
+                    println!("{name} ({})", symbol_ref)
                 }
-                other => println!("{}", other),
+                _ => println!("{}", symbol_ref),
             }
         }
         println!();
