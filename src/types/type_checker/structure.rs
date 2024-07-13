@@ -1,22 +1,22 @@
 use std::collections::HashMap;
 
-use crate::types::WeakTypeKind;
+use crate::types::WeakType;
 
 #[derive(Debug, Clone)]
 pub struct Struct {
     pub name: String,
-    pub fields: Vec<(String, WeakTypeKind)>,
+    pub fields: Vec<(String, WeakType)>,
     pub number_of_fields: usize,
     /// The traits that this struct implements.
-    pub traits: HashMap<String, WeakTypeKind>,
+    pub traits: HashMap<String, WeakType>,
 }
 
 impl Struct {
     pub fn new(
         name: String,
-        fields: Vec<(String, WeakTypeKind)>,
+        fields: Vec<(String, WeakType)>,
         number_of_fields: usize,
-        traits: HashMap<String, WeakTypeKind>,
+        traits: HashMap<String, WeakType>,
     ) -> Self {
         Self {
             name,

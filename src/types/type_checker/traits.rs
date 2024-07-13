@@ -1,9 +1,9 @@
-use crate::types::{IdentifierToken, WeakTypeKind};
+use crate::types::{IdentifierToken, WeakType};
 
 #[derive(Debug, Clone)]
 pub struct Trait {
     pub name: String,
-    pub methods: Vec<(IdentifierToken, WeakTypeKind)>,
+    pub methods: Vec<(IdentifierToken, WeakType)>,
 }
 
 impl PartialEq for Trait {

@@ -1,10 +1,10 @@
-use crate::types::WeakTypeKind;
+use crate::types::WeakType;
 
 #[derive(Debug, Clone)]
 pub struct Function {
     pub(crate) name: String,
-    pub(crate) params: Vec<WeakTypeKind>,
-    pub(crate) result: Option<WeakTypeKind>,
+    pub(crate) params: Vec<WeakType>,
+    pub(crate) result: Option<WeakType>,
 }
 
 impl PartialEq for Function {

@@ -1,29 +1,49 @@
 use std::{
     cell::RefCell,
+    collections::HashMap,
     ops::Range,
     rc::{Rc, Weak},
 };
 
 use crate::types::{Function, Struct, Trait};
 
-pub type RcTypeKind = Rc<RefCell<TypeKind>>;
-pub type WeakTypeKind = Weak<RefCell<TypeKind>>;
+pub type RcType = Rc<RefCell<Type>>;
+pub type WeakType = Weak<RefCell<Type>>;
 
 #[derive(Debug, Clone)]
 pub struct LocatedType {
     pub token_range: Range<usize>,
-    pub kind: RcTypeKind,
+    pub typ: RcType,
 }
 
 impl LocatedType {
-    pub fn new(token_range: Range<usize>, kind: RcTypeKind) -> Self {
-        LocatedType { token_range, kind }
+    pub fn new(token_range: Range<usize>, kind: RcType) -> Self {
+        LocatedType {
+            token_range,
+            typ: kind,
+        }
     }
 
-    pub(crate) fn new_empty_range(kind: RcTypeKind) -> Self {
+    pub(crate) fn new_empty_range(kind: RcType) -> Self {
         LocatedType {
             token_range: 0..0,
+            typ: kind,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Type {
+    /// The traits that this struct implements.
+    pub traits: HashMap<String, RcType>,
+    pub kind: TypeKind,
+}
+
+impl Type {
+    pub fn new(kind: TypeKind) -> Self {
+        Self {
             kind,
+            traits: HashMap::new(),
         }
     }
 }
@@ -42,7 +62,14 @@ pub enum TypeKind {
 
 impl PartialEq for LocatedType {
     fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind
+        self.typ == other.typ
+    }
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Ignore traits in display for now.
+        self.kind.fmt(f)
     }
 }
 
@@ -106,8 +133,10 @@ impl std::fmt::Display for TypeKind {
     }
 }
 
-fn fmt_typekind_exit(ty: WeakTypeKind) -> String {
-    match &*ty.upgrade().unwrap().borrow() {
+fn fmt_typekind_exit(ty: WeakType) -> String {
+    let ty = ty.upgrade().unwrap();
+    let ty_ref = ty.borrow();
+    match &ty_ref.kind {
         TypeKind::Func(func) => func.name.clone(),
         TypeKind::Struct(struct_) => struct_.name.clone(),
         other => format!("{}", other),
@@ -116,6 +145,6 @@ fn fmt_typekind_exit(ty: WeakTypeKind) -> String {
 
 impl std::fmt::Display for LocatedType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", *self.kind.borrow())
+        write!(f, "{}", *self.typ.borrow())
     }
 }
