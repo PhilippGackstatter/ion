@@ -1,7 +1,7 @@
 use crate::types::{
     CompilationErrorKind, CompileError, Declaration, Expression, ExpressionKind, Function,
-    IdentifierToken, MethodDeclaration, MoveContext, Moved, Program, RcTypeKind, Statement, Struct,
-    Token, TokenKind, TokenRange, Trait, Type, TypeKind, Variable, WeakTypeKind, SELF,
+    IdentifierToken, LocatedType, MethodDeclaration, MoveContext, Moved, Program, RcTypeKind,
+    Statement, Struct, Token, TokenKind, TokenRange, Trait, TypeKind, Variable, WeakTypeKind, SELF,
 };
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
@@ -50,7 +50,7 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn add_symbol(&mut self, name: &str, ty: Type) -> Result<&RcTypeKind, CompileError> {
+    fn add_symbol(&mut self, name: &str, ty: LocatedType) -> Result<&RcTypeKind, CompileError> {
         if let entry @ Entry::Vacant(_) = self.symbol_table.entry(name.into()) {
             Ok(entry.or_insert(ty.kind))
         } else {
@@ -88,7 +88,7 @@ impl TypeChecker {
                 }
 
                 let number_of_fields = fields.len();
-                let st = Type::new(
+                let st = LocatedType::new(
                     identifier.range.into(),
                     wrap_typekind(TypeKind::Struct(Struct {
                         name: identifier.name.clone(),
@@ -123,7 +123,7 @@ impl TypeChecker {
                     method_types.push((method_name.clone(), fn_type_ref));
                 }
 
-                let trait_type = Type::new(
+                let trait_type = LocatedType::new(
                     trait_identifier.range.into(),
                     wrap_typekind(TypeKind::Trait(Trait {
                         name: trait_identifier.to_string(),
@@ -224,9 +224,9 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn lookup_type(&self, token: &IdentifierToken) -> Result<Type, CompileError> {
+    fn lookup_type(&self, token: &IdentifierToken) -> Result<LocatedType, CompileError> {
         let type_ref = self.lookup_type_ref(token)?;
-        Ok(Type::new(token.range.into(), type_ref))
+        Ok(LocatedType::new(token.range.into(), type_ref))
     }
 
     fn lookup_type_ref(&self, token: &IdentifierToken) -> Result<RcTypeKind, CompileError> {
@@ -290,7 +290,7 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<Type>, CompileError> {
+    fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<LocatedType>, CompileError> {
         match decl {
             Declaration::StatementDecl(stmt) => {
                 return self.check_stmt(stmt);
@@ -385,7 +385,7 @@ impl TypeChecker {
         Ok(vec![])
     }
 
-    fn check_stmt(&mut self, stmt: &Statement) -> Result<Vec<Type>, CompileError> {
+    fn check_stmt(&mut self, stmt: &Statement) -> Result<Vec<LocatedType>, CompileError> {
         match stmt {
             Statement::ExpressionStmt(expr) => {
                 self.check_expr(expr)?;
@@ -405,7 +405,9 @@ impl TypeChecker {
                     let expr_type = self.check_expr(expr)?;
                     Ok(vec![expr_type])
                 } else {
-                    Ok(vec![Type::new_empty_range(wrap_typekind(TypeKind::Void))])
+                    Ok(vec![LocatedType::new_empty_range(wrap_typekind(
+                        TypeKind::Void,
+                    ))])
                 }
             }
             Statement::If(condition, if_branch, else_branch_opt) => {
@@ -446,7 +448,7 @@ impl TypeChecker {
         }
     }
 
-    fn check_expr(&mut self, expr: &Expression) -> Result<Type, CompileError> {
+    fn check_expr(&mut self, expr: &Expression) -> Result<LocatedType, CompileError> {
         match &expr.kind {
             ExpressionKind::Binary(lexpr, op_token, rexpr) => {
                 let ltype = self.check_expr(lexpr)?;
@@ -461,12 +463,12 @@ impl TypeChecker {
                     ]
                     .contains(&op_token.kind)
                     {
-                        Ok(Type::new(
+                        Ok(LocatedType::new(
                             expr.tokens.clone(),
                             wrap_typekind(TypeKind::Bool),
                         ))
                     } else {
-                        Ok(Type::new(expr.tokens.clone(), rtype.kind))
+                        Ok(LocatedType::new(expr.tokens.clone(), rtype.kind))
                     }
                 } else {
                     Err(CompileError::new_migration(
@@ -483,7 +485,7 @@ impl TypeChecker {
                 match op.kind {
                     TokenKind::Bang => {
                         if *expr_type.kind.borrow() == TypeKind::Bool {
-                            Ok(Type::new(
+                            Ok(LocatedType::new(
                                 expr_type.token_range.clone(),
                                 wrap_typekind(TypeKind::Bool),
                             ))
@@ -496,7 +498,7 @@ impl TypeChecker {
                     }
                     TokenKind::Minus => {
                         if *expr_type.kind.borrow() == TypeKind::Integer {
-                            Ok(Type::new(
+                            Ok(LocatedType::new(
                                 expr_type.token_range.clone(),
                                 wrap_typekind(TypeKind::Integer),
                             ))
@@ -510,28 +512,30 @@ impl TypeChecker {
                     _ => unimplemented!(),
                 }
             }
-            ExpressionKind::Integer { .. } => Ok(Type::new(
+            ExpressionKind::Integer { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
                 wrap_typekind(TypeKind::Integer),
             )),
-            ExpressionKind::Double { .. } => Ok(Type::new(
+            ExpressionKind::Double { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
                 wrap_typekind(TypeKind::Double),
             )),
-            ExpressionKind::Str { .. } => {
-                Ok(Type::new(expr.tokens.clone(), wrap_typekind(TypeKind::Str)))
-            }
-            ExpressionKind::True { .. } => Ok(Type::new(
+            ExpressionKind::Str { .. } => Ok(LocatedType::new(
+                expr.tokens.clone(),
+                wrap_typekind(TypeKind::Str),
+            )),
+            ExpressionKind::True { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
                 wrap_typekind(TypeKind::Bool),
             )),
-            ExpressionKind::False { .. } => Ok(Type::new(
+            ExpressionKind::False { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
                 wrap_typekind(TypeKind::Bool),
             )),
             ExpressionKind::Assign { target, value } => {
                 // Lookup type manually to avoid the move check in check_expr. A better solution would be welcome.
-                let (assignment_identifier, target_type): (String, Type) = match &target.kind {
+                let (assignment_identifier, target_type): (String, LocatedType) = match &target.kind
+                {
                     ExpressionKind::Identifier(id) => {
                         if let Some((_, index)) = self.find_local_variable(id) {
                             (id.to_owned(), self.locals[index as usize].dtype.clone())
@@ -602,7 +606,7 @@ impl TypeChecker {
 
                     Ok(self.locals[index as usize].dtype.clone())
                 } else if let Some(ty) = self.symbol_table.get(id) {
-                    Ok(Type::new_empty_range(ty.clone()))
+                    Ok(LocatedType::new_empty_range(ty.clone()))
                 } else if id == SELF {
                     Err(CompileError::new_migration(
                         expr.tokens.clone(),
@@ -650,9 +654,9 @@ impl TypeChecker {
                     }
 
                     Ok(if let Some(res) = &function.result {
-                        Type::new_empty_range(res.upgrade().unwrap().clone())
+                        LocatedType::new_empty_range(res.upgrade().unwrap().clone())
                     } else {
-                        Type::new_empty_range(wrap_typekind(TypeKind::Void))
+                        LocatedType::new_empty_range(wrap_typekind(TypeKind::Void))
                     })
                 } else {
                     Err(CompileError::new_migration(
@@ -749,7 +753,7 @@ impl TypeChecker {
                         )
                     })?;
 
-                    Ok(Type::new_empty_range(
+                    Ok(LocatedType::new_empty_range(
                         field_type.1.upgrade().unwrap().clone(),
                     ))
                 } else if let TypeKind::Trait(trt) = expr_type_kind {
@@ -769,7 +773,7 @@ impl TypeChecker {
                         )
                     })?;
 
-                    Ok(Type::new_empty_range(
+                    Ok(LocatedType::new_empty_range(
                         method_type.1.upgrade().unwrap().clone(),
                     ))
                 } else {
@@ -786,7 +790,7 @@ impl TypeChecker {
         &mut self,
         params: &Vec<(IdentifierToken, IdentifierToken)>,
         body: &Statement,
-    ) -> Result<Vec<Type>, CompileError> {
+    ) -> Result<Vec<LocatedType>, CompileError> {
         for (name_token, param_token) in params {
             let expr_type = self.lookup_type(param_token)?;
             // Make the parameters available as locals to the function body
@@ -800,13 +804,13 @@ impl TypeChecker {
 
     fn check_function_return_types(
         &self,
-        return_types: Vec<Type>,
+        return_types: Vec<LocatedType>,
         return_token: &Option<IdentifierToken>,
     ) -> Result<(), CompileError> {
         let declared_ret_type = if let Some(return_type) = return_token {
             self.lookup_type(return_type)?
         } else {
-            Type::new_empty_range(wrap_typekind(TypeKind::Void))
+            LocatedType::new_empty_range(wrap_typekind(TypeKind::Void))
         };
 
         if *declared_ret_type.kind.borrow() != TypeKind::Void && return_types.is_empty() {
@@ -909,7 +913,7 @@ impl TypeChecker {
     /// Checks whether `source_type` can be used as `target_type`.
     fn type_usage_as(
         &self,
-        source_type: &Type,
+        source_type: &LocatedType,
         target_type_kind: &TypeKind,
     ) -> Result<(), CompileError> {
         let source_type_kind = &*source_type.kind.borrow();
@@ -956,7 +960,7 @@ impl TypeChecker {
         params_tokens: &Vec<(IdentifierToken, IdentifierToken)>,
         return_token: &Option<IdentifierToken>,
         _stmt: &Statement,
-    ) -> Result<Type, CompileError> {
+    ) -> Result<LocatedType, CompileError> {
         let mut params = Vec::new();
         for (_, type_token) in params_tokens {
             let ty = Rc::downgrade(&self.lookup_type_ref(type_token)?);
@@ -968,7 +972,7 @@ impl TypeChecker {
             None
         };
 
-        Ok(Type::new_empty_range(wrap_typekind(TypeKind::Func(
+        Ok(LocatedType::new_empty_range(wrap_typekind(TypeKind::Func(
             Function {
                 name: name.to_owned(),
                 params,
@@ -999,12 +1003,12 @@ impl TypeChecker {
         self.scope_depth -= 1;
     }
 
-    fn add_local(&mut self, name: String, dtype: Type) {
+    fn add_local(&mut self, name: String, dtype: LocatedType) {
         self.locals
             .push(Variable::new(name, self.scope_depth, dtype));
     }
 
-    fn add_local_to_next_scope(&mut self, name: String, dtype: Type) {
+    fn add_local_to_next_scope(&mut self, name: String, dtype: LocatedType) {
         self.scope_depth += 1;
         self.add_local(name, dtype);
         self.scope_depth -= 1;

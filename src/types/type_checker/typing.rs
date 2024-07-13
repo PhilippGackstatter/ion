@@ -10,18 +10,18 @@ pub type RcTypeKind = Rc<RefCell<TypeKind>>;
 pub type WeakTypeKind = Weak<RefCell<TypeKind>>;
 
 #[derive(Debug, Clone)]
-pub struct Type {
+pub struct LocatedType {
     pub token_range: Range<usize>,
     pub kind: RcTypeKind,
 }
 
-impl Type {
+impl LocatedType {
     pub fn new(token_range: Range<usize>, kind: RcTypeKind) -> Self {
-        Type { token_range, kind }
+        LocatedType { token_range, kind }
     }
 
     pub(crate) fn new_empty_range(kind: RcTypeKind) -> Self {
-        Type {
+        LocatedType {
             token_range: 0..0,
             kind,
         }
@@ -40,7 +40,7 @@ pub enum TypeKind {
     Trait(Trait),
 }
 
-impl PartialEq for Type {
+impl PartialEq for LocatedType {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind
     }
@@ -114,7 +114,7 @@ fn fmt_typekind_exit(ty: WeakTypeKind) -> String {
     }
 }
 
-impl std::fmt::Display for Type {
+impl std::fmt::Display for LocatedType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", *self.kind.borrow())
     }
