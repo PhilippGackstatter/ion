@@ -290,7 +290,7 @@ fn pretty_write_decl(
             Ok(())
         }
         ImplDecl {
-            struct_name,
+            type_name: struct_name,
             trait_name,
             methods,
         } => {

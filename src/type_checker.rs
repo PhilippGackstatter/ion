@@ -1,8 +1,8 @@
 use crate::types::{
     CompilationErrorKind, CompileError, Declaration, Expression, ExpressionKind, Function,
     IdentifierToken, LocatedType, MethodDeclaration, MoveContext, Moved, Program, RcType,
-    Statement, Struct, Token, TokenKind, TokenRange, Trait, Type, TypeKind, Variable, WeakType,
-    SELF,
+    Statement, Struct, Token, TokenKind, TokenRange, Trait, Type, TypeKind, TypeName, Variable,
+    WeakType, SELF,
 };
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
@@ -10,36 +10,37 @@ use std::convert::TryInto;
 use std::ops::{Deref, Range};
 use std::rc::Rc;
 
-pub struct TypeChecker {
-    locals: Vec<Variable>,
-    scope_depth: u8,
-
-    symbol_table: HashMap<String, RcType>,
-}
-
-fn wrap_typekind(kind: TypeKind) -> RcType {
+fn wrap_typekind_impl(kind: TypeKind) -> RcType {
     Rc::new(RefCell::new(Type::new(kind)))
 }
 
-fn wrap_type(typ: Type) -> RcType {
+fn wrap_type_impl(typ: Type) -> RcType {
     Rc::new(RefCell::new(typ))
+}
+
+pub struct TypeChecker {
+    locals: Vec<Variable>,
+    scope_depth: u8,
+    symbol_table: HashMap<TypeName, RcType>,
 }
 
 impl TypeChecker {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        let mut hmap: HashMap<String, RcType> = HashMap::new();
-
-        hmap.insert("str".to_owned(), wrap_typekind(TypeKind::Str));
-        hmap.insert("bool".to_owned(), wrap_typekind(TypeKind::Bool));
-        hmap.insert("i32".to_owned(), wrap_typekind(TypeKind::Integer));
-        hmap.insert("f32".to_owned(), wrap_typekind(TypeKind::Double));
-
-        TypeChecker {
+        let mut type_checker = TypeChecker {
             locals: vec![],
             scope_depth: 0,
-            symbol_table: hmap,
-        }
+            symbol_table: HashMap::new(),
+        };
+
+        type_checker.add_predefined_symbol(TypeName::STR, wrap_typekind_impl(TypeKind::Str));
+        type_checker.add_predefined_symbol(TypeName::BOOL, wrap_typekind_impl(TypeKind::Bool));
+        type_checker
+            .add_predefined_symbol(TypeName::Integer, wrap_typekind_impl(TypeKind::Integer));
+        type_checker.add_predefined_symbol(TypeName::VOID, wrap_typekind_impl(TypeKind::Void));
+        type_checker.add_predefined_symbol(TypeName::Double, wrap_typekind_impl(TypeKind::Double));
+
+        type_checker
     }
 
     pub fn check(&mut self, prog: &Program, print_symbol_table: bool) -> Result<(), CompileError> {
@@ -55,19 +56,34 @@ impl TypeChecker {
         Ok(())
     }
 
+    fn add_predefined_symbol(&mut self, name: impl Into<TypeName>, typ: RcType) {
+        self.add_symbol(name, LocatedType::new_empty_range(typ))
+            .expect("predefined types should not exist");
+    }
+
     fn add_symbol(
         &mut self,
-        name: &str,
+        name: impl Into<TypeName>,
         located_type: LocatedType,
     ) -> Result<&RcType, CompileError> {
-        if let entry @ Entry::Vacant(_) = self.symbol_table.entry(name.into()) {
-            Ok(entry.or_insert(located_type.typ))
-        } else {
-            Err(CompileError::new_migration(
+        match self.symbol_table.entry(name.into()) {
+            Entry::Vacant(vacant) => Ok(vacant.insert(located_type.typ)),
+            Entry::Occupied(occupied) => Err(CompileError::new_migration(
                 located_type.token_range.clone(),
-                format!("Type {} is already declared in this scope.", name),
-            ))
+                format!("Type {} is already declared in this scope.", occupied.key()),
+            )),
         }
+    }
+
+    /// Returns the type for the given name and panics if it does not exist.
+    ///
+    /// Only intended to be called on builtin types.
+    fn find_symbol_unchecked(&self, name: TypeName) -> RcType {
+        Rc::clone(
+            self.symbol_table
+                .get(&name)
+                .unwrap_or_else(|| panic!("we should find symbol {}", name)),
+        )
     }
 
     fn build_symbol_table(&mut self, decl: &Declaration) -> Result<(), CompileError> {
@@ -80,7 +96,7 @@ impl TypeChecker {
             } => {
                 log::debug!("symbol fn {identifier}");
                 self.add_symbol(
-                    identifier.as_str(),
+                    TypeName::from(identifier.as_str().to_owned()),
                     self.generate_function_type(identifier.as_str(), params, return_ty, body)?,
                 )?;
             }
@@ -97,15 +113,16 @@ impl TypeChecker {
                 }
 
                 let number_of_fields = fields.len();
+
                 let st = LocatedType::new(
                     identifier.range.into(),
-                    wrap_typekind(TypeKind::Struct(Struct {
+                    wrap_typekind_impl(TypeKind::Struct(Struct {
                         name: identifier.name.clone(),
                         fields,
                         number_of_fields,
                     })),
                 );
-                self.add_symbol(&identifier.name, st)?;
+                self.add_symbol(TypeName::from(identifier.name.to_owned()), st)?;
             }
             Declaration::TraitDecl {
                 trait_identifier,
@@ -126,34 +143,38 @@ impl TypeChecker {
                         self.generate_function_type(method_name.as_str(), params, return_ty, body)?;
                     let trait_method_name =
                         format!("{}::{}", trait_identifier.as_str(), method_name.as_str());
-                    let fn_type_ref =
-                        Rc::downgrade(self.add_symbol(&trait_method_name, method_type)?);
+                    let fn_type_ref = Rc::downgrade(
+                        self.add_symbol(TypeName::from(trait_method_name), method_type)?,
+                    );
                     method_types.push((method_name.name.to_owned(), fn_type_ref));
                 }
 
                 let trait_type = LocatedType::new(
                     trait_identifier.range.into(),
-                    wrap_type(
+                    wrap_type_impl(
                         Type::new(TypeKind::Trait(Trait {
                             name: trait_identifier.to_string(),
                         }))
                         .with_methods(method_types),
                     ),
                 );
-                self.add_symbol(trait_identifier.as_str(), trait_type)?;
+                self.add_symbol(
+                    TypeName::from(trait_identifier.as_str().to_owned()),
+                    trait_type,
+                )?;
             }
             Declaration::ImplDecl {
-                struct_name,
+                type_name,
                 trait_name,
                 methods,
             } => {
                 log::debug!(
-                    "symbol impl block {:?}, {}",
-                    trait_name,
-                    struct_name.as_str()
+                    "build_symbol_table: impl {:?} for {}",
+                    trait_name.as_ref().map(|trt| &trt.name),
+                    type_name.as_str()
                 );
 
-                let mut struct_method_types = HashMap::with_capacity(methods.len());
+                let mut method_types = HashMap::with_capacity(methods.len());
 
                 for method in methods {
                     let MethodDeclaration {
@@ -166,7 +187,7 @@ impl TypeChecker {
 
                     let method_type =
                         self.generate_function_type(name.as_str(), params, return_ty, body)?;
-                    struct_method_types.insert(
+                    method_types.insert(
                         method.name.clone().to_string(),
                         (method.name.clone(), method_type),
                     );
@@ -178,12 +199,12 @@ impl TypeChecker {
 
                         let typ = trait_located_type.typ.borrow();
                         if let TypeKind::Trait(_) = &typ.kind {
-                            for (method_name, method_type) in &typ.methods {
+                            for (trait_method_name, trait_method_type) in &typ.methods {
                                 // TODO: Allow methods with default_impl to be missing!
-                                let (name_token, struct_method) = struct_method_types
-                                    .get(method_name.as_str())
+                                let (name_token, struct_method) = method_types
+                                    .get(trait_method_name.as_str())
                                     .ok_or_else(|| {
-                                        let struct_range: Range<usize> = struct_name.range.into();
+                                        let struct_range: Range<usize> = type_name.range.into();
                                         let trait_range: Range<usize> = trt.range.into();
 
                                         CompileError::new_migration(
@@ -191,12 +212,12 @@ impl TypeChecker {
                                             trait_range.start..struct_range.end,
                                             format!(
                                                 "Not all trait items implemented, missing {}",
-                                                method_name.as_str()
+                                                trait_method_name.as_str()
                                             ),
                                         )
                                     })?;
 
-                                let rc_method_type = method_type.upgrade().unwrap();
+                                let rc_method_type = trait_method_type.upgrade().unwrap();
 
                                 if struct_method.typ.borrow().deref()
                                     != rc_method_type.borrow().deref()
@@ -212,8 +233,8 @@ impl TypeChecker {
                                 }
                             }
 
-                            // If the trait method check was successful, this struct is an implementor of the trait.
-                            self.add_struct_trait_implementor(struct_name, trt)?;
+                            // If the trait method check was successful, then this type is an implementor of the trait.
+                            self.add_type_trait_implementor(type_name, trt)?;
                         } else {
                             todo!("compile error")
                         }
@@ -221,11 +242,12 @@ impl TypeChecker {
                     None => (),
                 }
 
-                for (name, (_, method_type)) in struct_method_types {
-                    let struct_method_name = format!("{}::{}", struct_name, name);
-                    let fn_type_ref =
-                        Rc::downgrade(self.add_symbol(&struct_method_name, method_type)?);
-                    self.add_method_to_type(struct_name, &name, fn_type_ref)?;
+                for (name, (_, method_type)) in method_types {
+                    let type_method_name = format!("{}::{}", type_name, name);
+                    let fn_type_ref = Rc::downgrade(
+                        self.add_symbol(TypeName::from(type_method_name), method_type)?,
+                    );
+                    self.add_method_to_type(type_name, &name, fn_type_ref)?;
                 }
             }
             _ => (),
@@ -240,8 +262,8 @@ impl TypeChecker {
     }
 
     fn lookup_type_ref(&self, token: &IdentifierToken) -> Result<RcType, CompileError> {
-        let type_name = token.as_str();
-        if let Some(symbol) = self.symbol_table.get(type_name) {
+        let type_name = TypeName::from(token.as_str().to_owned());
+        if let Some(symbol) = self.symbol_table.get(&type_name) {
             Ok(Rc::clone(symbol))
         } else {
             Err(CompileError::new_migration(
@@ -253,12 +275,12 @@ impl TypeChecker {
 
     fn add_method_to_type(
         &mut self,
-        struct_name: &IdentifierToken,
+        typ: &IdentifierToken,
         method_name: &str,
         method_type: WeakType,
     ) -> Result<(), CompileError> {
-        let type_name = &struct_name.name;
-        if let Some(symbol) = self.symbol_table.get_mut(type_name) {
+        let type_name = TypeName::from(typ.name.as_str().to_owned());
+        if let Some(symbol) = self.symbol_table.get_mut(&type_name) {
             symbol
                 .borrow_mut()
                 .methods
@@ -266,31 +288,28 @@ impl TypeChecker {
             Ok(())
         } else {
             Err(CompileError::new_migration(
-                struct_name.range.into(),
+                typ.range.into(),
                 format!("Type {} not declared in this scope.", type_name),
             ))
         }
     }
 
-    fn add_struct_trait_implementor(
+    /// Marks that the type is an implementor of the trait.
+    fn add_type_trait_implementor(
         &mut self,
-        struct_name: &IdentifierToken,
+        type_name: &IdentifierToken,
         trait_name: &IdentifierToken,
     ) -> Result<(), CompileError> {
         // If the trait method check was successful, this struct is an implementor of the trait.
-        let struct_ref = self.lookup_type_ref(struct_name)?;
-        let mut struct_ref_mut = struct_ref.borrow_mut();
-        if let TypeKind::Struct(_) = &struct_ref_mut.deref().kind {
-            let trait_type = self
-                .lookup_type_ref(trait_name)
-                .expect("the trait name should be some in this branch");
-            let weak_trait_type = Rc::downgrade(&trait_type);
-            struct_ref_mut
-                .traits
-                .insert(trait_name.to_string(), weak_trait_type);
-        } else {
-            todo!("compile error, expected typekind struct as trait implementor")
-        }
+        let type_ref = self.lookup_type_ref(type_name)?;
+        let mut type_ref_mut = type_ref.borrow_mut();
+        let trait_type = self
+            .lookup_type_ref(trait_name)
+            .expect("the trait name should be some in this branch");
+        let weak_trait_type = Rc::downgrade(&trait_type);
+        type_ref_mut
+            .traits
+            .insert(trait_name.to_string(), weak_trait_type);
 
         Ok(())
     }
@@ -343,7 +362,7 @@ impl TypeChecker {
                 }
             }
             Declaration::ImplDecl {
-                struct_name,
+                type_name: struct_name,
                 trait_name: _,
                 methods,
             } => {
@@ -410,9 +429,8 @@ impl TypeChecker {
                     let expr_type = self.check_expr(expr)?;
                     Ok(vec![expr_type])
                 } else {
-                    Ok(vec![LocatedType::new_empty_range(wrap_typekind(
-                        TypeKind::Void,
-                    ))])
+                    let void_type = self.find_symbol_unchecked(TypeName::VOID);
+                    Ok(vec![LocatedType::new_empty_range(void_type)])
                 }
             }
             Statement::If(condition, if_branch, else_branch_opt) => {
@@ -468,10 +486,8 @@ impl TypeChecker {
                     ]
                     .contains(&op_token.kind)
                     {
-                        Ok(LocatedType::new(
-                            expr.tokens.clone(),
-                            wrap_typekind(TypeKind::Bool),
-                        ))
+                        let bool_type = self.find_symbol_unchecked(TypeName::BOOL);
+                        Ok(LocatedType::new(expr.tokens.clone(), bool_type))
                     } else {
                         Ok(LocatedType::new(expr.tokens.clone(), rtype.typ))
                     }
@@ -492,7 +508,7 @@ impl TypeChecker {
                         if expr_type.typ.borrow().kind == TypeKind::Bool {
                             Ok(LocatedType::new(
                                 expr_type.token_range.clone(),
-                                wrap_typekind(TypeKind::Bool),
+                                self.find_symbol_unchecked(TypeName::BOOL),
                             ))
                         } else {
                             Err(CompileError::new_migration(
@@ -505,7 +521,7 @@ impl TypeChecker {
                         if expr_type.typ.borrow().kind == TypeKind::Integer {
                             Ok(LocatedType::new(
                                 expr_type.token_range.clone(),
-                                wrap_typekind(TypeKind::Integer),
+                                self.find_symbol_unchecked(TypeName::Integer),
                             ))
                         } else {
                             Err(CompileError::new_migration(
@@ -519,23 +535,23 @@ impl TypeChecker {
             }
             ExpressionKind::Integer { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
-                wrap_typekind(TypeKind::Integer),
+                self.find_symbol_unchecked(TypeName::Integer),
             )),
             ExpressionKind::Double { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
-                wrap_typekind(TypeKind::Double),
+                self.find_symbol_unchecked(TypeName::Double),
             )),
             ExpressionKind::Str { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
-                wrap_typekind(TypeKind::Str),
+                self.find_symbol_unchecked(TypeName::STR),
             )),
             ExpressionKind::True { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
-                wrap_typekind(TypeKind::Bool),
+                self.find_symbol_unchecked(TypeName::BOOL),
             )),
             ExpressionKind::False { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
-                wrap_typekind(TypeKind::Bool),
+                self.find_symbol_unchecked(TypeName::BOOL),
             )),
             ExpressionKind::Assign { target, value } => {
                 // Lookup type manually to avoid the move check in check_expr. A better solution would be welcome.
@@ -610,7 +626,10 @@ impl TypeChecker {
                     }
 
                     Ok(self.locals[index as usize].dtype.clone())
-                } else if let Some(ty) = self.symbol_table.get(id) {
+                } else if let Some(ty) = self
+                    .symbol_table
+                    .get(&TypeName::from(id.as_str().to_owned()))
+                {
                     Ok(LocatedType::new_empty_range(ty.clone()))
                 } else if id == SELF {
                     Err(CompileError::new_migration(
@@ -661,7 +680,7 @@ impl TypeChecker {
                     Ok(if let Some(res) = &function.result {
                         LocatedType::new_empty_range(res.upgrade().unwrap().clone())
                     } else {
-                        LocatedType::new_empty_range(wrap_typekind(TypeKind::Void))
+                        LocatedType::new_empty_range(self.find_symbol_unchecked(TypeName::VOID))
                     })
                 } else {
                     Err(CompileError::new_migration(
@@ -740,54 +759,31 @@ impl TypeChecker {
             ExpressionKind::Access { expr, name } => {
                 let expr_located_type = self.check_expr(expr)?;
                 let expr_type = &*expr_located_type.typ.borrow();
+                let access_name = name.unwrap_identifier();
 
-                if let TypeKind::Struct(strct) = &expr_type.kind {
-                    let field_type = strct
-                        .fields
-                        .iter()
-                        .chain(expr_type.methods.iter())
-                        .find(|elem| elem.0 == name.unwrap_identifier());
+                let maybe_fields_iter = match &expr_type.kind {
+                    TypeKind::Struct(strct) => strct.fields.iter(),
+                    _ => [].iter(),
+                };
 
-                    let field_type = field_type.ok_or_else(|| {
-                        CompileError::new_migration(
-                            name.tokens.clone(),
-                            format!(
-                                "Struct {} has no field named {}",
-                                strct.name,
-                                name.unwrap_identifier()
-                            ),
-                        )
-                    })?;
+                let field_type = maybe_fields_iter
+                    .chain(expr_type.methods.iter())
+                    .find(|elem| elem.0 == access_name);
 
-                    Ok(LocatedType::new_empty_range(
-                        field_type.1.upgrade().unwrap().clone(),
-                    ))
-                } else if let TypeKind::Trait(trt) = &expr_type.kind {
-                    let method_type = expr_type
-                        .methods
-                        .iter()
-                        .find(|elem| elem.0.as_str() == name.unwrap_identifier());
+                let field_type = field_type.ok_or_else(|| {
+                    // TODO: Differentiate in the error message between structs and other types.
+                    CompileError::new_migration(
+                        name.tokens.clone(),
+                        format!(
+                            "Type {} has no field or method named {}",
+                            expr_type, access_name
+                        ),
+                    )
+                })?;
 
-                    let method_type = method_type.ok_or_else(|| {
-                        CompileError::new_migration(
-                            name.tokens.clone(),
-                            format!(
-                                "Trait {} has no method named `{}`",
-                                trt.name,
-                                name.unwrap_identifier()
-                            ),
-                        )
-                    })?;
-
-                    Ok(LocatedType::new_empty_range(
-                        method_type.1.upgrade().unwrap().clone(),
-                    ))
-                } else {
-                    Err(CompileError::new_migration(
-                        expr.tokens.clone(),
-                        "Cannot access anything other than a struct".to_owned(),
-                    ))
-                }
+                Ok(LocatedType::new_empty_range(
+                    field_type.1.upgrade().unwrap().clone(),
+                ))
             }
         }
     }
@@ -816,7 +812,7 @@ impl TypeChecker {
         let declared_ret_type = if let Some(return_type) = return_token {
             self.lookup_type(return_type)?
         } else {
-            LocatedType::new_empty_range(wrap_typekind(TypeKind::Void))
+            LocatedType::new_empty_range(self.find_symbol_unchecked(TypeName::VOID))
         };
 
         if declared_ret_type.typ.borrow().kind != TypeKind::Void && return_types.is_empty() {
@@ -979,13 +975,13 @@ impl TypeChecker {
             None
         };
 
-        Ok(LocatedType::new_empty_range(wrap_typekind(TypeKind::Func(
-            Function {
+        Ok(LocatedType::new_empty_range(wrap_typekind_impl(
+            TypeKind::Func(Function {
                 name: name.to_owned(),
                 params,
                 result,
-            },
-        ))))
+            }),
+        )))
     }
 
     // Local Variables

@@ -39,7 +39,7 @@ pub enum Declaration {
         body: Statement,
     },
     ImplDecl {
-        struct_name: IdentifierToken,
+        type_name: IdentifierToken,
         trait_name: Option<IdentifierToken>,
         methods: Vec<MethodDeclaration>,
     },

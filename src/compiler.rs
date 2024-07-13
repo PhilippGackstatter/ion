@@ -106,7 +106,7 @@ impl Compiler {
             // TODO: This should be compiled in a first pass, otherwise a StructInit that comes before an impl block in the source
             // code, will be created without the methods from that later impl block!
             ImplDecl {
-                struct_name,
+                type_name: struct_name,
                 trait_name: _,
                 methods,
             } => {

@@ -199,7 +199,7 @@ impl<'a> Parser<'a> {
         }
 
         Ok(ImplDecl {
-            struct_name: name,
+            type_name: name,
             trait_name,
             methods,
         })
@@ -1486,7 +1486,7 @@ impl MyStruct
         let parse_result = lex_and_parse(input);
 
         let expected = Declaration::ImplDecl {
-            struct_name: IdentifierToken::new_debug("MyStruct"),
+            type_name: IdentifierToken::new_debug("MyStruct"),
             trait_name: None,
             methods: vec![
                 MethodDeclaration {
