@@ -1,7 +1,7 @@
 use crate::types::{
-    CompileError, Declaration, Expression, ExpressionKind, Function, IdentifierToken,
-    MethodDeclaration, MoveContext, Program, RcTypeKind, Statement, Struct, Token, TokenKind,
-    TokenRange, Trait, Type, TypeKind, Variable, WeakTypeKind, SELF,
+    CompilationErrorKind, CompileError, Declaration, Expression, ExpressionKind, Function,
+    IdentifierToken, MethodDeclaration, MoveContext, Moved, Program, RcTypeKind, Statement, Struct,
+    Token, TokenKind, TokenRange, Trait, Type, TypeKind, Variable, WeakTypeKind, SELF,
 };
 use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap};
@@ -584,19 +584,20 @@ impl TypeChecker {
                 if let Some((variable, index)) = self.find_local_variable(id) {
                     if let Some(move_context) = variable.move_context.as_ref() {
                         // TODO: Use move_context.token_range.into to point to the place where the variable was moved.
-                        let moved_into = match move_context {
-                            MoveContext::Basic(basic) => {
-                                basic.moved_into.clone()
-                            }
+                        let (moved_into, moved_at) = match move_context {
+                            MoveContext::Basic(basic) => (basic.moved_into.clone(), basic.moved_at),
                             MoveContext::Struct(struct_ctx) => {
-                              struct_ctx.find_move_reason(id).expect("if a struct was partially moved, then there must be at least one field that caused the partial move").moved_into
+                                let reason = struct_ctx.find_move_reason(id).expect("if a struct was partially moved, then there must be at least one field that caused the partial move");
+                                (reason.moved_into, reason.moved_at)
                             }
                         };
 
-                        return Err(CompileError::new_migration(
-                            expr.tokens.clone(),
-                            format!("{id} previously moved into {moved_into}"),
-                        ));
+                        return Err(CompileError::new(CompilationErrorKind::Moved(Moved {
+                            moved_identifier: id.to_owned(),
+                            moved_at,
+                            error_location: expr.tokens.clone().into(),
+                            moved_into,
+                        })));
                     }
 
                     Ok(self.locals[index as usize].dtype.clone())
@@ -1284,44 +1285,65 @@ mod tests {
     #[test]
     fn move_with_variable_declaration() {
         let res = lex_parse_check("move_with_variable_declaration.io");
-        assert!(res.is_err());
-        assert!(res
-            .unwrap_err()
-            .unwrap_migration()
-            .message
-            .contains("x previously moved into y"));
+        assert!(matches!(
+            res.unwrap_err().kind,
+            CompilationErrorKind::Moved(Moved {
+                moved_identifier,
+                moved_into,
+                ..
+            }) if moved_identifier == "x" && moved_into == "y"
+        ));
     }
 
     #[test]
     fn move_with_assignment() {
         let res = lex_parse_check("move_with_assignment.io");
-        assert!(res.is_err());
-        assert!(res
-            .unwrap_err()
-            .unwrap_migration()
-            .message
-            .contains("x previously moved into y"));
+        assert!(matches!(
+            res.unwrap_err().kind,
+            CompilationErrorKind::Moved(Moved {
+                moved_identifier,
+                moved_into,
+                ..
+            }) if moved_identifier == "x" && moved_into == "y"
+        ));
     }
 
     #[test]
     fn move_with_struct_init() {
         let res = lex_parse_check("move_with_struct_init.io");
-        assert!(res.is_err());
-        assert!(res
-            .unwrap_err()
-            .unwrap_migration()
-            .message
-            .contains("x previously moved into num"));
+        assert!(matches!(
+            res.unwrap_err().kind,
+            CompilationErrorKind::Moved(Moved {
+                moved_identifier,
+                moved_into,
+                ..
+            }) if moved_identifier == "x" && moved_into == "num"
+        ));
     }
 
     #[test]
     fn move_with_function_call() {
         let res = lex_parse_check("move_with_function_call.io");
-        assert!(res.is_err());
-        assert!(res
-            .unwrap_err()
-            .unwrap_migration()
-            .message
-            .contains("x previously moved into addOne"));
+        assert!(matches!(
+            res.unwrap_err().kind,
+            CompilationErrorKind::Moved(Moved {
+                moved_identifier,
+                moved_into,
+                ..
+            }) if moved_identifier == "x" && moved_into == "addOne"
+        ));
+    }
+
+    #[test]
+    fn move_struct_partially() {
+        let res = lex_parse_check("move_struct_partially.io");
+        assert!(matches!(
+            res.unwrap_err().kind,
+            CompilationErrorKind::Moved(Moved {
+                moved_identifier,
+                moved_into,
+                ..
+            }) if moved_identifier == "book" && moved_into == "y"
+        ));
     }
 }

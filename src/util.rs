@@ -6,7 +6,7 @@ use std::io::Read;
 use std::path::Path;
 
 use crate::types::{
-    CompileError,
+    CompilationErrorContext, CompileError,
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
@@ -448,9 +448,9 @@ pub fn run(program: String, options: &Options) {
     }
 }
 
-pub(crate) fn print_error(prog: &str, err: CompileError) {
-    let err = err.unwrap_migration();
-    println!("{}", display_error(prog, err.token_range, &err.message));
+pub(crate) fn print_error(program: &str, err: CompileError) {
+    let error = err.display(CompilationErrorContext::new(program));
+    println!("{error}");
 }
 
 pub(crate) fn display_error(prog: &str, range: std::ops::Range<usize>, msg: &str) -> String {
@@ -566,7 +566,7 @@ pub(crate) fn display_error(prog: &str, range: std::ops::Range<usize>, msg: &str
         }
     }
 
-    write!(&mut error, " {}", msg).expect("writing to String should succeed");
+    writeln!(&mut error, " {}", msg).expect("writing to String should succeed");
 
     error
 }
