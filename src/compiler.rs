@@ -112,27 +112,49 @@ impl Compiler {
             } => {
                 for method in methods {
                     let MethodDeclaration {
-                        name,
-                        self_: _,
+                        name: method_name,
+                        self_,
                         params,
-                        return_ty: _,
+                        return_ty,
                         body,
                     } = method;
 
-                    let method_name = name;
+                    if self_.is_some() {
+                        // Instance method.
+                        // TODO: Refactor to compile as functions eventually.
 
-                    // Puts the compiled Function Object on the stack
-                    self.compile_fn_decl(method_name.as_str(), params, body, FunctionType::Method);
+                        // Puts the compiled Function Object on the stack
+                        self.compile_fn_decl(
+                            method_name.as_str(),
+                            params,
+                            body,
+                            FunctionType::Method,
+                        );
 
-                    // Associate the Function Object with the method name on the struct
-                    self.emit_op_byte(Bytecode::OpStructMethod);
+                        // Associate the Function Object with the method name on the struct
+                        self.emit_op_byte(Bytecode::OpStructMethod);
 
-                    let struct_name_index =
-                        self.add_constant(make_string_value(struct_name.as_str()));
-                    self.emit_u16(struct_name_index);
+                        let struct_name_index =
+                            self.add_constant(make_string_value(struct_name.as_str()));
+                        self.emit_u16(struct_name_index);
 
-                    let method_name_index = self.add_constant(make_string_value(name.as_str()));
-                    self.emit_u16(method_name_index);
+                        let method_name_index =
+                            self.add_constant(make_string_value(method_name.as_str()));
+                        self.emit_u16(method_name_index);
+                    } else {
+                        // Associated methods are just functions with a special name.
+                        let associated_method_name = format!("{struct_name}::{method_name}");
+
+                        self.compile_decl(&FnDecl {
+                            identifier: IdentifierToken::new(
+                                method_name.range,
+                                associated_method_name,
+                            ),
+                            params: params.clone(),
+                            return_ty: return_ty.clone(),
+                            body: body.clone(),
+                        });
+                    }
                 }
             }
             StructDecl { .. } => (),

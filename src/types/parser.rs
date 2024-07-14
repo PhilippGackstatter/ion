@@ -6,12 +6,12 @@ use crate::types::{IdentifierToken, Token};
 
 pub const SELF: &str = "self";
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct MethodSelf {
     pub type_token: Option<IdentifierToken>,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct MethodDeclaration {
     pub name: IdentifierToken,
     pub self_: Option<MethodSelf>,
@@ -20,7 +20,7 @@ pub struct MethodDeclaration {
     pub body: Statement,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum Declaration {
     StatementDecl(Statement),
     VarDecl(String, Expression),
@@ -45,7 +45,7 @@ pub enum Declaration {
     },
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum Statement {
     Print(Expression),
     If(Expression, Box<Statement>, Option<Box<Statement>>),
@@ -55,7 +55,7 @@ pub enum Statement {
     ExpressionStmt(Expression),
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum ExpressionKind {
     Binary(Box<Expression>, Token, Box<Expression>),
     Assign {
@@ -86,6 +86,7 @@ pub enum ExpressionKind {
     True,
 }
 
+#[derive(Clone)]
 pub struct Expression {
     pub tokens: Range<usize>,
     pub kind: ExpressionKind,

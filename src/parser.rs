@@ -788,8 +788,25 @@ impl<'a> Parser<'a> {
                 Ok(string)
             }
             IdToken(str_) => {
-                let id = Expression::new(self.current_range(), Identifier(str_.clone()));
+                let range = self.current_range();
+                let mut identifier = str_.clone();
                 self.advance();
+                // For now we only support a single separator.
+                if self.match_(DoubleColon) {
+                    let next = self.advance();
+                    if let IdToken(next_id) = &next.kind {
+                        identifier.push_str("::");
+                        identifier.push_str(next_id);
+                    } else {
+                        let next_range = next.range.into();
+                        return Err(self.error(next_range, "Expected identifier after '::'"));
+                    }
+                }
+
+                let id = Expression::new(
+                    range.start..self.current_range().end,
+                    Identifier(identifier),
+                );
                 Ok(id)
             }
             SelfToken => {
