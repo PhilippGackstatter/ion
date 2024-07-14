@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::Range;
+use std::str::Split;
 
 use crate::types::CompileError;
 
@@ -173,6 +174,10 @@ impl IdentifierToken {
 
     pub fn as_str(&self) -> &str {
         &self.name
+    }
+
+    pub fn components(&self) -> Split<'_, &'static str> {
+        self.name.split("::")
     }
 }
 
