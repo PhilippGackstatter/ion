@@ -81,7 +81,13 @@ impl Lexer {
                 }
                 ',' => self.add_token(1, Comma),
                 '.' => self.add_token(1, Dot),
-                ':' => self.add_token(1, Colon),
+                ':' => {
+                    if self.match_(&mut chars, ':') {
+                        self.add_token(2, DoubleColon)
+                    } else {
+                        self.add_token(1, Colon)
+                    }
+                }
                 '-' => {
                     if self.match_(&mut chars, '>') {
                         self.add_token(2, Arrow);

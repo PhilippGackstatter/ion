@@ -101,6 +101,7 @@ pub enum TokenKind {
     WhiteSpace(u8),
     NewLine,
     Colon,
+    DoubleColon,
     Arrow,
     LeftParen,
     RightParen,
