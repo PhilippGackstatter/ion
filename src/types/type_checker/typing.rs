@@ -24,7 +24,7 @@ impl LocatedType {
         }
     }
 
-    pub(crate) fn new_empty_range(kind: RcType) -> Self {
+    pub fn new_empty_range(kind: RcType) -> Self {
         LocatedType {
             token_range: 0..0,
             typ: kind,

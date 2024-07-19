@@ -5,7 +5,7 @@ use std::str::Split;
 
 use crate::types::CompileError;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy,serde::Serialize, serde::Deserialize)]
 pub struct TokenRange {
     /// The offset in bytes in the source file where the lexeme begins
     pub offset: u32,

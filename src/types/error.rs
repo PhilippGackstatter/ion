@@ -5,7 +5,7 @@ use CompilationErrorKind::*;
 
 // Wrapper around the kind to allow for easier extension later.
 // Perhaps we want to add the file path here where the error occured or other fields.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CompileError {
     pub kind: CompilationErrorKind,
 }
@@ -46,7 +46,7 @@ impl CompileError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CompilationErrorKind {
     Moved(Moved),
     Other(CompileMigrationError),
@@ -62,7 +62,7 @@ impl CompilationErrorKind {
 }
 
 /// Error that is used temporarily while migrating away from string-based errors to enums.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CompileMigrationError {
     /// The indices in the source string that are erroneous
     pub token_range: Range<usize>,
@@ -76,7 +76,7 @@ impl CompileMigrationError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Moved {
     /// The name of the identifier that was moved.
     pub moved_identifier: String,
