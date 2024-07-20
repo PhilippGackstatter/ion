@@ -12,11 +12,13 @@ fn main() {
     println!("{stmt:?}");
 }
 
+#[allow(unused)]
 #[derive(Debug)]
 enum Statement<'arena> {
     Print(&'arena Expression<'arena>),
 }
 
+#[allow(unused)]
 #[derive(Debug)]
 enum Expression<'arena> {
     Binary(
