@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, BTreeMap, HashMap},
+    collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
     fmt::Write,
     rc::Rc,
 };
@@ -127,26 +127,46 @@ type Program = BTreeMap<SymbolId, Declaration>;
 struct ChangeSet {
     changed: Vec<SymbolId>,
     removed: Vec<SymbolId>,
+    added: Vec<SymbolId>,
+    unchanged: HashSet<SymbolId>,
 }
 
-/// Returns the declarations that are not in both `previous` and `current`.
+/// Returns the declarations that were added, removed or changed between `previous` and `current`.
+///
+/// Returns the program that contains the changed and added declarations.
 fn program_diff(mut previous: Program, current: &Program) -> ChangeSet {
     let mut changed = Vec::new();
+    let mut unchanged = HashSet::new();
     let mut removed = Vec::new();
+    let mut added = Vec::new();
 
-    for (symbol, declaration) in current.iter() {
-        if let Some(prev_decl) = previous.remove(symbol) {
+    for (&symbol, declaration) in current.iter() {
+        if let Some(prev_decl) = previous.remove(&symbol) {
             if &prev_decl != declaration {
-                changed.push(*symbol);
+                // If the symbol has changed, we need to recheck it, so we can leave it in the program.
+                changed.push(symbol);
+            } else {
+                // If the symbol is the same, we do not need to recheck it, unless it is invalidated through a dependency relationship.
+                // We store it here so during cache invalidation we can determine which actually need to be rechecked.
+                unchanged.insert(symbol);
             }
+        } else {
+            // If the symbol is not present in the previous program, it was added.
+            added.push(symbol);
         }
     }
 
-    for removed_symbol in previous.into_keys() {
+    // All the symbols left in previous are the ones that are not present in current and so are removed.
+    for (removed_symbol, _) in previous.into_iter() {
         removed.push(removed_symbol);
     }
 
-    ChangeSet { changed, removed }
+    ChangeSet {
+        changed,
+        removed,
+        added,
+        unchanged,
+    }
 }
 
 struct TypeChecker {
@@ -204,7 +224,19 @@ impl TypeChecker {
             .expect("predefined types should not exist");
     }
 
-    pub fn check(&mut self, program: &Program) -> Result<(), CompileError> {
+    pub fn check(
+        &mut self,
+        change_set: Option<ChangeSet>,
+        mut program: Program,
+    ) -> Result<(), CompileError> {
+        if let Some(change_set) = change_set {
+            let invalidated_symbols = self.invalidate_cache(change_set.removed, change_set.changed);
+
+            for unchanged_symbol in change_set.unchanged.difference(&invalidated_symbols) {
+                program.remove(unchanged_symbol);
+            }
+        }
+
         for declaration in program.values() {
             self.build_symbol_table(declaration)?;
         }
@@ -296,37 +328,42 @@ impl TypeChecker {
     ///
     /// 1. Collect all nodes that have changed, including those that need to be rechecked because one of their dependencies became invalid.
     /// 2. Iterate all changed nodes and remove them from the graph and from the type check cache.
-    fn invalidate_cache(&mut self, change_set: ChangeSet) {
-        println!("removed: {:?}", change_set.removed);
-        println!("changed: {:?}", change_set.changed);
+    fn invalidate_cache(
+        &mut self,
+        removed: Vec<SymbolId>,
+        changed: Vec<SymbolId>,
+    ) -> HashSet<SymbolId> {
+        println!("removed: {:?}", removed);
+        println!("changed: {:?}", changed);
 
-        let changed_nodes = change_set.changed.iter().chain(change_set.removed.iter());
+        let changed_nodes = changed.iter().chain(removed.iter());
 
-        let mut implied_changes_nodes = Vec::new();
+        let mut invalidated_symbols = HashSet::new();
 
         for changed_node in changed_nodes {
             let mut dfs = Dfs::new(&self.dependencies, *changed_node);
             while let Some(dependency) = dfs.next(&self.dependencies) {
                 println!("`{changed_node}` causes dependency `{dependency}` to become invalid");
-                implied_changes_nodes.push(dependency);
+                invalidated_symbols.insert(dependency);
             }
         }
 
-        let all_changed_nodes = change_set
-            .changed
-            .into_iter()
-            .chain(change_set.removed)
-            .chain(implied_changes_nodes);
+        let all_changed_nodes = changed
+            .iter()
+            .chain(removed.iter())
+            .chain(invalidated_symbols.iter());
 
         for invalidated_symbol in all_changed_nodes {
             // We may try to remove nodes twice, so we don't need to check whether it was successful or not.
-            if self.dependencies.remove_node(invalidated_symbol) {
+            if self.dependencies.remove_node(*invalidated_symbol) {
                 println!("{invalidated_symbol} removed from graph");
             }
 
             // Do not unwrap the inner result.
-            self.type_check_cache.remove(&invalidated_symbol);
+            self.type_check_cache.remove(invalidated_symbol);
         }
+
+        invalidated_symbols
     }
 }
 
@@ -369,17 +406,20 @@ impl Compiler {
         let current_program = declarations_to_tree(current_program);
 
         let previous_program = restore_previous_program();
-        if let Some(previous_program) = previous_program {
+        let diff = if let Some(previous_program) = previous_program {
             let mut lexer = ion::lexer::Lexer::new();
             lexer.lex(&previous_program);
             let previous_program = ion::parser::Parser::new(&lexer).parse().unwrap();
 
-            let diff = program_diff(declarations_to_tree(previous_program), &current_program);
+            Some(program_diff(
+                declarations_to_tree(previous_program),
+                &current_program,
+            ))
+        } else {
+            None
+        };
 
-            checker.invalidate_cache(diff);
-        }
-
-        checker.check(&current_program).unwrap();
+        checker.check(diff, current_program).unwrap();
 
         checker.store();
         store_previous_program(&program);
@@ -425,6 +465,9 @@ struct Player
 
 struct Sword
   strength: i32
+
+struct Gold
+  amount: i32
 "#;
         let mut lexer = ion::lexer::Lexer::new();
         lexer.lex(program1);
@@ -446,6 +489,11 @@ struct Sword
         assert_eq!(
             diff.removed.as_slice(),
             &[SymbolId::from(&IdentifierToken::new_debug("Shield"))]
+        );
+
+        assert_eq!(
+            diff.added.as_slice(),
+            &[SymbolId::from(&IdentifierToken::new_debug("Gold"))]
         );
     }
 }
