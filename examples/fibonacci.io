@@ -2,10 +2,10 @@
 // and returns the last one that was calculated
 fibonacci(up_to: i32) -> i32
 
-    var fib1 = 0
-    var fib2 = 1
+    let fib1 = 0
+    let fib2 = 1
 
-    var next = 0
+    let next = 0
 
     while next <= up_to
 

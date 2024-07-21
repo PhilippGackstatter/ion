@@ -3,7 +3,8 @@ struct HTTPStatus
     code: i32
     msg: str
 
-var x = HTTPStatus {
-    code: 404,
-    msg: 404,
-}
+main()
+  let x = HTTPStatus {
+      code: 404,
+      msg: 404,
+  }

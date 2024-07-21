@@ -3,5 +3,5 @@
 bar(first: str, second: i32, third: bool, fourth: bool)
     print first
 
-
-bar("str", 12, true, 25)
+main()
+  bar("str", 12, true, 25)

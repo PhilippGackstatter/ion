@@ -13,7 +13,7 @@ impl Rectangle
       return "rect"
 
 
-var rect = Rectangle {
+let rect = Rectangle {
     width: 4,
     height: 3,
 }

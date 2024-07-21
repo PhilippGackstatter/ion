@@ -34,7 +34,7 @@ impl Lexer {
         keywords.insert("super".to_owned(), Super);
         keywords.insert("this".to_owned(), This);
         keywords.insert("true".to_owned(), TrueToken);
-        keywords.insert("var".to_owned(), VarToken);
+        keywords.insert("let".to_owned(), LetToken);
         keywords.insert("while".to_owned(), WhileToken);
         keywords.insert("trait".to_owned(), TraitToken);
         keywords.insert("struct".to_owned(), StructToken);
@@ -305,9 +305,9 @@ mod tests {
     }
 
     #[test]
-    fn test_var_while_loop() {
+    fn test_let_while_loop() {
         let input = "
-var i = 0
+let i = 0
 while i < 5
     i = i + 1
 print i
@@ -316,7 +316,7 @@ print i
         lexer.lex(input);
 
         let expected = vec![
-            VarToken,
+            LetToken,
             IdToken("i".to_owned()),
             Equal,
             Num(0),
@@ -404,7 +404,7 @@ else
     #[test]
     fn test_ignore_whitespace_in_nested_parens() {
         let input = "
-var x = Outer {
+let x = Outer {
     field: 1,
     inner: Inner {
         field: 3,
@@ -416,7 +416,7 @@ var x = Outer {
         lexer.lex(input);
 
         let expected = vec![
-            VarToken,
+            LetToken,
             IdToken("x".into()),
             Equal,
             IdToken("Outer".into()),

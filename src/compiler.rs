@@ -65,25 +65,6 @@ impl Compiler {
 
     fn compile_decl(&mut self, decl: &Declaration) {
         match decl {
-            StatementDecl(stmt) => self.compile_stmt(stmt),
-            VarDecl(id, expr) => {
-                self.compile_expr(expr);
-
-                if self.scope_depth == 0 {
-                    let index = self.add_constant(make_string_value(id));
-                    self.emit_op_byte(Bytecode::OpDefineGlobal);
-                    self.emit_u16(index);
-                } else {
-                    if self
-                        .locals
-                        .iter()
-                        .any(|elem| elem.1 == self.scope_depth && elem.0 == *id)
-                    {
-                        panic!("This variable is already declared in this scope.");
-                    }
-                    self.add_local(id.clone());
-                }
-            }
             FnDecl {
                 identifier: name,
                 params,
@@ -203,13 +184,31 @@ impl Compiler {
                     self.emit_byte(0);
                 }
             }
-            Block(decls) => {
+            Block(statements) => {
                 self.begin_scope();
-                for decl in decls.iter() {
-                    self.compile_decl(decl);
+                for statement in statements.iter() {
+                    self.compile_stmt(statement);
                 }
                 if self.fn_type != FunctionType::Function {
                     self.end_scope();
+                }
+            }
+            LetBinding(id, expr) => {
+                self.compile_expr(expr);
+
+                if self.scope_depth == 0 {
+                    let index = self.add_constant(make_string_value(id));
+                    self.emit_op_byte(Bytecode::OpDefineGlobal);
+                    self.emit_u16(index);
+                } else {
+                    if self
+                        .locals
+                        .iter()
+                        .any(|elem| elem.1 == self.scope_depth && elem.0 == *id)
+                    {
+                        panic!("This variable is already declared in this scope.");
+                    }
+                    self.add_local(id.clone());
                 }
             }
         }

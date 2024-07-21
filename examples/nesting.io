@@ -24,7 +24,7 @@ impl Human
         return self.pet.get_name()
 
 
-var human = Human {
+let human = Human {
     name: "Johnny",
     pet: Dog {
         name: "Jonas",

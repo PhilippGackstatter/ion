@@ -11,5 +11,5 @@ takesTrait(arg: Display)
   arg.fmt()
 
 testFunc()
-  var point = Point { x: 0, y: 1,}
+  let point = Point { x: 0, y: 1,}
   takesTrait(point)

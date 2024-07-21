@@ -4,8 +4,6 @@ addOne(num: i32) -> i32
   return num + 1
 
 move()
-  var x = 3
+  let x = 3
   addOne(x)
   print x
-
-move()

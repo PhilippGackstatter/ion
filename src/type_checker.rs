@@ -250,7 +250,6 @@ impl TypeChecker {
                     self.add_method_to_type(type_name, &name, fn_type_ref)?;
                 }
             }
-            _ => (),
         }
 
         Ok(())
@@ -316,30 +315,6 @@ impl TypeChecker {
 
     fn check_decl(&mut self, decl: &Declaration) -> Result<Vec<LocatedType>, CompileError> {
         match decl {
-            Declaration::StatementDecl(stmt) => {
-                return self.check_stmt(stmt);
-            }
-            Declaration::VarDecl(id, expr) => {
-                let expr_type = self.check_expr(expr)?;
-                // if self.scope_depth == 0 {
-                //     // Global
-                // } else {
-                if self
-                    .locals
-                    .iter()
-                    .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
-                {
-                    return Err(CompileError::new_migration(
-                        expr_type.token_range.clone(),
-                        "Variable is already declared in this scope.".into(),
-                    ));
-                }
-
-                self.move_variable(&expr.kind, id.to_owned(), expr.tokens.clone(), None);
-
-                self.add_local(id.clone(), expr_type);
-                // }
-            }
             Declaration::FnDecl {
                 identifier: _,
                 params,
@@ -415,11 +390,33 @@ impl TypeChecker {
                 self.check_expr(expr)?;
                 Ok(vec![])
             }
-            Statement::Block(decls) => {
+            Statement::LetBinding(id, expr) => {
+                let expr_type = self.check_expr(expr)?;
+                // if self.scope_depth == 0 {
+                //     // Global
+                // } else {
+                if self
+                    .locals
+                    .iter()
+                    .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
+                {
+                    return Err(CompileError::new_migration(
+                        expr_type.token_range.clone(),
+                        "Variable is already declared in this scope.".into(),
+                    ));
+                }
+
+                self.move_variable(&expr.kind, id.to_owned(), expr.tokens.clone(), None);
+
+                self.add_local(id.clone(), expr_type);
+                // }
+                Ok(vec![])
+            }
+            Statement::Block(statements) => {
                 self.begin_scope();
                 let mut return_types = Vec::new();
-                for decl in decls.iter() {
-                    return_types.extend(self.check_decl(decl)?);
+                for statement in statements.iter() {
+                    return_types.extend(self.check_stmt(statement)?);
                 }
                 self.end_scope();
                 Ok(return_types)

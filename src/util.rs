@@ -240,13 +240,6 @@ fn pretty_write_decl(
     decl: &Declaration,
 ) -> fmt::Result {
     match decl {
-        StatementDecl(stmt) => pretty_write_stmt(f, level, is_child, stmt),
-        VarDecl(id, expr) => {
-            write(f, level, is_child, "var")?;
-            level += 2;
-            write(f, level, true, id)?;
-            pretty_write_expr(f, level, true, expr)
-        }
         FnDecl {
             identifier: name,
             params,
@@ -373,13 +366,19 @@ fn pretty_write_stmt(
                 None => write(f, level, true, "None"),
             }
         }
-        Block(decls) => {
+        Block(statements) => {
             write(f, level, is_child, "Block")?;
             level += 2;
-            for decl in decls.iter() {
-                pretty_write_decl(f, level, true, decl)?;
+            for statement in statements.iter() {
+                pretty_write_stmt(f, level, true, statement)?;
             }
             Ok(())
+        }
+        LetBinding(id, expr) => {
+            write(f, level, is_child, "let")?;
+            level += 2;
+            write(f, level, true, id)?;
+            pretty_write_expr(f, level, true, expr)
         }
     }
 }

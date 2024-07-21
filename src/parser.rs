@@ -45,24 +45,28 @@ impl<'a> Parser<'a> {
 
     fn declaration(&mut self) -> DeclarationResult {
         match &self.peek().kind {
-            VarToken => self.variable_declaration(),
             IdToken(_) => {
                 if self.is_callable_declaration() {
-                    self.function_declaration()
-                } else {
-                    Ok(StatementDecl(self.statement()?))
+                    return self.function_declaration();
                 }
             }
-            TraitToken => self.trait_declaration(),
-            StructToken => self.struct_declaration(),
-            ImplToken => self.impl_declaration(),
-            WhiteSpace(_) => Err(self.error(self.peek().clone().into(), "Unexpected whitespace")),
+            TraitToken => return self.trait_declaration(),
+            StructToken => return self.struct_declaration(),
+            ImplToken => return self.impl_declaration(),
+            WhiteSpace(_) => {
+                return Err(self.error(self.peek().clone().into(), "Unexpected whitespace"))
+            }
             NewLine => {
                 self.advance();
-                self.declaration()
+                return self.declaration();
             }
-            _ => Ok(StatementDecl(self.statement()?)),
+            _ => (),
         }
+
+        Err(self.error(
+            self.peek().clone().into(),
+            "Unexpected token at top-level, only declarations are allowed.",
+        ))
     }
 
     fn trait_declaration(&mut self) -> DeclarationResult {
@@ -203,24 +207,6 @@ impl<'a> Parser<'a> {
             trait_name,
             methods,
         })
-    }
-
-    fn variable_declaration(&mut self) -> DeclarationResult {
-        // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
-        self.advance();
-        let id = if let IdToken(id_) = &self.advance().kind {
-            Ok(id_.clone())
-        } else {
-            Err(self.error(
-                self.peek().clone().into(),
-                "Expected an identifier after variable declaration.",
-            ))
-        }?;
-
-        self.consume(Equal, "Expected '=' after variable declaration.")?;
-        let expr = self.expression()?;
-        self.expect_newline()?;
-        Ok(VarDecl(id.clone(), expr))
     }
 
     // Callables
@@ -365,10 +351,10 @@ impl<'a> Parser<'a> {
         let mut body = self.block()?;
 
         // Add a return statement if it does not exist
-        if let Block(decls) = &mut body {
-            if let Some(StatementDecl(Ret(_))) = &decls.last() {
+        if let Block(statements) = &mut body {
+            if let Some(Ret(_)) = &statements.last() {
             } else {
-                decls.push(StatementDecl(Ret(None)));
+                statements.push(Ret(None));
             }
         }
 
@@ -481,6 +467,7 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> StatementResult {
         match self.peek().kind {
             PrintToken => self.print_statement(),
+            LetToken => self.let_binding(),
             IfToken => self.if_statement(),
             WhileToken => self.while_statement(),
             LeftBrace => self.block(),
@@ -489,19 +476,37 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn let_binding(&mut self) -> StatementResult {
+        // letBinding → "let" IDENTIFIER ( "=" expression )? ";" ;
+        self.advance();
+        let id = if let IdToken(id_) = &self.advance().kind {
+            Ok(id_.clone())
+        } else {
+            Err(self.error(
+                self.peek().clone().into(),
+                "Expected an identifier after let binding.",
+            ))
+        }?;
+
+        self.consume(Equal, "Expected '=' after let binding.")?;
+        let expr = self.expression()?;
+        self.expect_newline()?;
+        Ok(LetBinding(id.clone(), expr))
+    }
+
     fn block(&mut self) -> StatementResult {
         self.expect_newline()?;
-        let mut decls = Vec::new();
+        let mut statements = Vec::new();
 
         if self.set_next_indentation()? {
             while self.has_same_indentation()? {
-                decls.push(self.declaration()?);
+                statements.push(self.statement()?);
             }
 
             self.pop_indentation();
         }
 
-        Ok(Block(decls))
+        Ok(Block(statements))
     }
 
     fn expression_statement(&mut self) -> StatementResult {
@@ -977,23 +982,6 @@ impl<'a> Parser<'a> {
         CompileError::new_migration(token_range, message.into())
     }
 
-    // fn synchronize(&mut self) {
-    //     self.advance();
-
-    //     while !self.is_at_end() {
-    //         if self.previous().kind == Semicolon { return; }
-
-    //         match self.peek().kind {
-    //             // Class | Fun | Var | For | If | While | Print | Return => {
-    //             //     return;
-    //             // },
-    //             _ => (),
-    //         }
-
-    //         self.advance();
-    //     }
-    // }
-
     // Misc
 
     pub fn new(lexer: &'a Lexer) -> Self {
@@ -1002,6 +990,13 @@ impl<'a> Parser<'a> {
             current: 0,
             whitespace_stack: vec![0],
         }
+    }
+}
+
+#[cfg(test)]
+impl<'a> Parser<'a> {
+    pub fn parse_statement(&mut self) -> StatementResult {
+        self.statement()
     }
 }
 
@@ -1056,43 +1051,38 @@ mod tests {
         parser.parse()
     }
 
+    fn lex_and_parse_block(input: &str) -> StatementResult {
+        let mut lexer = Lexer::new();
+        lexer.lex(input);
+        let mut parser = Parser::new(&lexer);
+        parser.parse_statement()
+    }
+
     #[test]
     fn test_multiplication() {
-        // Test 9 + 1 / 4
-        let lexer = Lexer::new_from_tokenkind(vec![Num(9), Plus, Num(1), Slash, Num(4), EndOfFile]);
-        let mut parser = Parser::new(&lexer);
-        if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
-            let expected = expr![Binary(
-                expr![Integer { int: 9 }],
-                token![Plus],
-                expr![Binary(
-                    expr![Integer { int: 1 }],
-                    token![Slash],
-                    expr![Integer { int: 4 }]
-                )],
-            )];
-            assert_eq!(*expr, *expected);
-        } else {
-            panic!();
-        }
+        let input = "9 + 1 / 4";
+        let statement = lex_and_parse_block(input).unwrap();
+        let expected = ExpressionStmt(dexpr![Binary(
+            expr![Integer { int: 9 }],
+            token![Plus],
+            expr![Binary(
+                expr![Integer { int: 1 }],
+                token![Slash],
+                expr![Integer { int: 4 }]
+            )],
+        )]);
+        assert_eq!(statement, expected);
     }
 
     #[test]
     fn test_unary() {
-        // Test "!!false"
-        let lexer = Lexer::new_from_tokenkind(vec![Bang, Bang, FalseToken, EndOfFile]);
-        let mut parser = Parser::new(&lexer);
-        if let StatementDecl(ExpressionStmt(expr)) = &parser.parse().unwrap()[0] {
-            assert_eq!(
-                *expr,
-                *expr![Unary(
-                    token![Bang],
-                    expr![Unary(token![Bang], expr![False])]
-                )]
-            );
-        } else {
-            panic!();
-        }
+        let input = "!!false";
+        let statement = lex_and_parse_block(input).unwrap();
+        let expected = ExpressionStmt(dexpr![Unary(
+            token![Bang],
+            expr![Unary(token![Bang], expr![False])]
+        )]);
+        assert_eq!(expected, statement);
     }
 
     #[test]
@@ -1205,17 +1195,17 @@ foo(arg: i32) -> i32
             )],
             return_ty: Some(IdentifierToken::new_debug("i32")),
             body: Block(vec![
-                StatementDecl(ExpressionStmt(dexpr!(bar_call))),
-                StatementDecl(ExpressionStmt(Expression::new_debug(Assign {
+                ExpressionStmt(dexpr!(bar_call)),
+                ExpressionStmt(Expression::new_debug(Assign {
                     target: expr!(Identifier("x".into())),
                     value: expr!(Binary(
                         expr!(Integer { int: 10 }),
                         token!(Slash),
                         expr!(Integer { int: 2 }),
                     )),
-                }))),
-                StatementDecl(Print(Expression::new_debug(Integer { int: 3 }))),
-                StatementDecl(Ret(Some(dexpr!(Integer { int: 5 })))),
+                })),
+                Print(Expression::new_debug(Integer { int: 3 })),
+                Ret(Some(dexpr!(Integer { int: 5 }))),
             ]),
         };
         assert_eq!(*parse_result.first().unwrap(), expected)
@@ -1245,7 +1235,7 @@ long_function_name(
                 ),
             ],
             return_ty: Some(IdentifierToken::new_debug("i32")),
-            body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 5 }))))]),
+            body: Block(vec![Ret(Some(dexpr!(Integer { int: 5 })))]),
         };
         assert_eq!(*parse_result.first().unwrap(), expected)
     }
@@ -1273,27 +1263,25 @@ foo(arg: i32) -> i32
 while i < 3
     i = i + 1
 ";
-        let parse_result = lex_and_parse(input);
+        let parse_result = lex_and_parse_block(input).unwrap();
 
-        let expected = StatementDecl(While(
+        let expected = While(
             Expression::new_debug(Binary(
                 expr!(Identifier("i".into())),
                 token!(Less),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(Block(vec![StatementDecl(ExpressionStmt(
-                Expression::new_debug(Assign {
-                    target: expr!(Identifier("i".into())),
-                    value: expr!(Binary(
-                        expr!(Identifier("i".into())),
-                        token!(Plus),
-                        expr!(Integer { int: 1 })
-                    )),
-                }),
-            ))])),
-        ));
+            Box::new(Block(vec![ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("i".into())),
+                value: expr!(Binary(
+                    expr!(Identifier("i".into())),
+                    token!(Plus),
+                    expr!(Integer { int: 1 })
+                )),
+            }))])),
+        );
 
-        assert_eq!(*parse_result.first().unwrap(), expected)
+        assert_eq!(parse_result, expected)
     }
 
     #[test]
@@ -1325,9 +1313,7 @@ trait TestTrait
                         IdentifierToken::new_debug("i32"),
                     )],
                     return_ty: Some(IdentifierToken::new_debug("i32")),
-                    body: Block(vec![StatementDecl(Ret(Some(dexpr!(Identifier(
-                        "arg".into()
-                    )))))]),
+                    body: Block(vec![Ret(Some(dexpr!(Identifier("arg".into()))))]),
                 },
                 MethodDeclaration {
                     name: IdentifierToken::new_debug("to_int"),
@@ -1347,28 +1333,26 @@ trait TestTrait
         let input = "
 if x != 3
     x = 10 / 2";
-        let parse_result = lex_and_parse(input);
+        let parse_result = lex_and_parse_block(input).unwrap();
 
-        let expected = StatementDecl(If(
+        let expected = If(
             Expression::new_debug(Binary(
                 expr!(Identifier("x".into())),
                 token!(BangEqual),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(Block(vec![StatementDecl(ExpressionStmt(
-                Expression::new_debug(Assign {
-                    target: expr!(Identifier("x".into())),
-                    value: expr!(Binary(
-                        expr!(Integer { int: 10 }),
-                        token!(Slash),
-                        expr!(Integer { int: 2 }),
-                    )),
-                }),
-            ))])),
+            Box::new(Block(vec![ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("x".into())),
+                value: expr!(Binary(
+                    expr!(Integer { int: 10 }),
+                    token!(Slash),
+                    expr!(Integer { int: 2 }),
+                )),
+            }))])),
             None,
-        ));
+        );
 
-        assert_eq!(*parse_result.first().unwrap(), expected)
+        assert_eq!(parse_result, expected)
     }
 
     #[test]
@@ -1380,25 +1364,23 @@ if (x
 else
     x = 15 * 3
     ";
-        let parse_result = lex_and_parse(input);
+        let parse_result = lex_and_parse_block(input).unwrap();
 
-        let expected = StatementDecl(If(
+        let expected = If(
             Expression::new_debug(Binary(
                 expr!(Identifier("x".into())),
                 token!(BangEqual),
                 expr!(Integer { int: 3 }),
             )),
-            Box::new(Block(vec![StatementDecl(ExpressionStmt(
-                Expression::new_debug(Assign {
-                    target: expr!(Identifier("x".into())),
-                    value: expr!(Binary(
-                        expr!(Integer { int: 10 }),
-                        token!(Slash),
-                        expr!(Integer { int: 2 }),
-                    )),
-                }),
-            ))])),
-            Some(Box::new(Block(vec![StatementDecl(ExpressionStmt(
+            Box::new(Block(vec![ExpressionStmt(Expression::new_debug(Assign {
+                target: expr!(Identifier("x".into())),
+                value: expr!(Binary(
+                    expr!(Integer { int: 10 }),
+                    token!(Slash),
+                    expr!(Integer { int: 2 }),
+                )),
+            }))])),
+            Some(Box::new(Block(vec![ExpressionStmt(
                 Expression::new_debug(Assign {
                     target: expr!(Identifier("x".into())),
                     value: expr!(Binary(
@@ -1407,37 +1389,37 @@ else
                         expr!(Integer { int: 3 }),
                     )),
                 }),
-            ))]))),
-        ));
+            )]))),
+        );
 
-        assert_eq!(*parse_result.first().unwrap(), expected)
+        assert_eq!(parse_result, expected)
     }
 
     #[test]
-    fn test_var_decl() {
-        let input = r#"var magic_number = "37""#;
-        let parse_result = lex_and_parse(input);
+    fn test_let_binding() {
+        let input = r#"let magic_number = "37""#;
+        let parse_result = lex_and_parse_block(input).unwrap();
 
-        let expected = VarDecl(
+        let expected = LetBinding(
             "magic_number".into(),
             Expression::new_debug(Str {
                 string: "37".into(),
             }),
         );
 
-        assert_eq!(*parse_result.first().unwrap(), expected)
+        assert_eq!(parse_result, expected)
     }
 
     #[test]
     fn test_struct_instantiation() {
         let input = r#"
-var my_struct = MyStruct {
+let my_struct = MyStruct {
     field1: 1 + 3,
     field2: "strings", // trailing comma required atm
 }
         "#;
 
-        let parse_result = lex_and_parse(input);
+        let parse_result = lex_and_parse_block(input).unwrap();
 
         let expected_struct = StructInit {
             name: expr!(Identifier("MyStruct".into())),
@@ -1459,16 +1441,16 @@ var my_struct = MyStruct {
             ],
         };
 
-        let expected = VarDecl("my_struct".into(), dexpr!(expected_struct));
+        let expected = LetBinding("my_struct".into(), dexpr!(expected_struct));
 
-        assert_eq!(*parse_result.first().unwrap(), expected)
+        assert_eq!(parse_result, expected)
     }
 
     #[test]
     fn test_access() {
-        let input = "var chain_result = my_struct.method().chain()";
+        let input = "let chain_result = my_struct.method().chain()";
 
-        let parse_result = lex_and_parse(input);
+        let parse_result = lex_and_parse_block(input).unwrap();
 
         let first_access = Access {
             expr: expr!(Identifier("my_struct".into())),
@@ -1484,9 +1466,9 @@ var my_struct = MyStruct {
 
         let second_call = Call(expr!(second_access), vec![]);
 
-        let expected = VarDecl("chain_result".into(), dexpr!(second_call));
+        let expected = LetBinding("chain_result".into(), dexpr!(second_call));
 
-        assert_eq!(*parse_result.first().unwrap(), expected)
+        assert_eq!(parse_result, expected)
     }
 
     #[test]
@@ -1511,7 +1493,7 @@ impl MyStruct
                     self_: None,
                     params: vec![],
                     return_ty: None,
-                    body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
+                    body: Block(vec![Ret(Some(dexpr!(Integer { int: 0 })))]),
                 },
                 MethodDeclaration {
                     name: IdentifierToken::new_debug("is_positive"),
@@ -1521,7 +1503,7 @@ impl MyStruct
                         IdentifierToken::new_debug("int"),
                     )],
                     return_ty: Some(IdentifierToken::new_debug("i32")),
-                    body: Block(vec![StatementDecl(Ret(Some(dexpr!(Integer { int: 0 }))))]),
+                    body: Block(vec![Ret(Some(dexpr!(Integer { int: 0 })))]),
                 },
             ],
         };

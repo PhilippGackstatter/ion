@@ -8,13 +8,11 @@ struct Book
   page: Page
 
 move()
-  var book = Book {
+  let book = Book {
     length: 1,
     page: Page {
       text: "text",
     },
   }
-  var y = book.length
+  let y = book.length
   print book
-
-move()

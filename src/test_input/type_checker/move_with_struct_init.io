@@ -4,8 +4,6 @@ struct Test
   num: i32
 
 move()
-  var x = 3
-  var test = Test { num: x, }
+  let x = 3
+  let test = Test { num: x, }
   print x
-
-move()

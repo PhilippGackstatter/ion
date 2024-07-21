@@ -10,13 +10,13 @@ impl Vector
         return self.x * other.x + self.y * other.y + self.z * other.z
 
 
-var z_unit_vector = Vector {
+let z_unit_vector = Vector {
     x: 0,
     y: 0,
     z: 1,
 }
 
-var y_unit_vector = Vector {
+let y_unit_vector = Vector {
     x: 0,
     y: 1,
     z: 0,

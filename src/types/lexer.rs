@@ -128,7 +128,7 @@ pub enum TokenKind {
     TrueToken,
     FalseToken,
     For,
-    VarToken,
+    LetToken,
     WhileToken,
     TraitToken,
     StructToken,

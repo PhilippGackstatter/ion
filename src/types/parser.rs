@@ -22,8 +22,6 @@ pub struct MethodDeclaration {
 
 #[derive(PartialEq, Clone)]
 pub enum Declaration {
-    StatementDecl(Statement),
-    VarDecl(String, Expression),
     TraitDecl {
         trait_identifier: IdentifierToken,
         methods: Vec<MethodDeclaration>,
@@ -48,10 +46,11 @@ pub enum Declaration {
 #[derive(PartialEq, Clone)]
 pub enum Statement {
     Print(Expression),
+    LetBinding(String, Expression),
     If(Expression, Box<Statement>, Option<Box<Statement>>),
     While(Expression, Box<Statement>),
     Ret(Option<Expression>),
-    Block(Vec<Declaration>),
+    Block(Vec<Statement>),
     ExpressionStmt(Expression),
 }
 
