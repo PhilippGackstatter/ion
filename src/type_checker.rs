@@ -552,32 +552,36 @@ impl TypeChecker {
             )),
             ExpressionKind::Assign { target, value } => {
                 // Lookup type manually to avoid the move check in check_expr. A better solution would be welcome.
-                let (assignment_identifier, target_type): (String, LocatedType) = match &target.kind
-                {
-                    ExpressionKind::Identifier(id) => {
-                        if let Some((_, index)) = self.find_local_variable(id) {
-                            (id.to_owned(), self.locals[index as usize].dtype.clone())
-                        } else {
-                            return Err(CompileError::new_migration(
+                let (assignment_identifier, target_type, is_access): (String, LocatedType, bool) =
+                    match &target.kind {
+                        ExpressionKind::Identifier(id) => {
+                            if let Some((_, index)) = self.find_local_variable(id) {
+                                (
+                                    id.to_owned(),
+                                    self.locals[index as usize].dtype.clone(),
+                                    false,
+                                )
+                            } else {
+                                return Err(CompileError::new_migration(
                              expr.tokens.clone(),
                              format!(
                                 "{} is not defined in the current scope. (Globals are unimplemented.)",
                                 id
                             ),
                             ));
+                            }
                         }
-                    }
-                    ExpressionKind::Access { name, .. } => {
-                        let target_type = self.check_expr(target)?;
-                        (name.unwrap_identifier(), target_type)
-                    }
-                    other => {
-                        panic!(
+                        ExpressionKind::Access { name, .. } => {
+                            let target_type = self.check_expr(target)?;
+                            (name.unwrap_identifier(), target_type, true)
+                        }
+                        other => {
+                            panic!(
                             "parser should only allow identifier or struct access as assignment target, received {:?}",
                             other
                         )
-                    }
-                };
+                        }
+                    };
 
                 let value_type = self.check_expr(value)?;
                 if target_type != value_type {
@@ -590,9 +594,17 @@ impl TypeChecker {
                     ));
                 }
 
-                // Even if the variable that was assigned to was previously moved,
-                // assigning means it contains a new value and is thus considered unmoved.
-                self.clear_moved(&assignment_identifier);
+                // Only clear the move if it is not a struct access.
+                // This is not because it would be bad, just because it is easier to implement right now.
+                // We need to pass the entire assign to the clear_moved so it can check for access, otherwise
+                // the assignment identifier is just the field name that is being accessed, but not a variable itself.
+                // We could consider the case where `world.players` is moved out of and then assigned again,
+                // to be considered a whole struct again after said assignment.
+                if !is_access {
+                    // Even if the variable that was assigned to was previously moved,
+                    // assigning means it contains a new value and is thus considered unmoved.
+                    self.clear_moved(&assignment_identifier);
+                }
                 self.move_variable(
                     &value.kind,
                     assignment_identifier,
