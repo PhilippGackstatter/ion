@@ -41,11 +41,6 @@ pub enum Declaration {
         trait_name: Option<IdentifierToken>,
         method: MethodDeclaration,
     },
-    ImplDecl {
-        type_name: IdentifierToken,
-        trait_name: Option<IdentifierToken>,
-        methods: Vec<MethodDeclaration>,
-    },
 }
 
 #[derive(PartialEq, Clone)]

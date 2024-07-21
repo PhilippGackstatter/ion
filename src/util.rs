@@ -282,42 +282,6 @@ fn pretty_write_decl(
             }
             Ok(())
         }
-        ImplDecl {
-            type_name: struct_name,
-            trait_name,
-            methods,
-        } => {
-            let stringified = match trait_name {
-                Some(trait_name) => {
-                    format!("impl {} for {}", trait_name.as_str(), struct_name.as_str())
-                }
-                None => format!("impl {}", struct_name),
-            };
-
-            write(f, level, is_child, &stringified)?;
-            level += 2;
-            for method in methods {
-                let MethodDeclaration {
-                    name,
-                    self_,
-                    params,
-                    return_ty,
-                    body,
-                } = method;
-
-                pretty_write_callable(
-                    f,
-                    level,
-                    true,
-                    name.as_str(),
-                    self_.as_ref(),
-                    params,
-                    return_ty.clone(),
-                    body,
-                )?;
-            }
-            Ok(())
-        }
         StructDecl { identifier, fields } => {
             write(f, level, is_child, &format!("struct {}", identifier))?;
             level += 2;

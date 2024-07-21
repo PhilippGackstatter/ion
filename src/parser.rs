@@ -1493,31 +1493,38 @@ impl MyStruct
 
         let parse_result = lex_and_parse(input);
 
-        let expected = Declaration::ImplDecl {
-            type_name: IdentifierToken::new_debug("MyStruct"),
-            trait_name: None,
-            methods: vec![
-                MethodDeclaration {
-                    name: IdentifierToken::new_debug("print_something"),
-                    self_: None,
-                    params: vec![],
-                    return_ty: None,
-                    body: Block(vec![Ret(Some(dexpr!(Integer { int: 0 })))]),
-                },
-                MethodDeclaration {
-                    name: IdentifierToken::new_debug("is_positive"),
-                    self_: None,
-                    params: vec![(
-                        IdentifierToken::new_debug("arg1"),
-                        IdentifierToken::new_debug("int"),
-                    )],
-                    return_ty: Some(IdentifierToken::new_debug("i32")),
-                    body: Block(vec![Ret(Some(dexpr!(Integer { int: 0 })))]),
-                },
-            ],
+        let method1 = MethodDeclaration {
+            name: IdentifierToken::new_debug("print_something"),
+            self_: None,
+            params: vec![],
+            return_ty: None,
+            body: Block(vec![Ret(Some(dexpr!(Integer { int: 0 })))]),
+        };
+        let method2 = MethodDeclaration {
+            name: IdentifierToken::new_debug("is_positive"),
+            self_: None,
+            params: vec![(
+                IdentifierToken::new_debug("arg1"),
+                IdentifierToken::new_debug("int"),
+            )],
+            return_ty: Some(IdentifierToken::new_debug("i32")),
+            body: Block(vec![Ret(Some(dexpr!(Integer { int: 0 })))]),
         };
 
-        assert_eq!(*parse_result.first().unwrap(), expected)
+        let expected1 = Declaration::ImplMethodDecl {
+            type_name: IdentifierToken::new_debug("MyStruct"),
+            trait_name: None,
+            method: method1,
+        };
+
+        let expected2 = Declaration::ImplMethodDecl {
+            type_name: IdentifierToken::new_debug("MyStruct"),
+            trait_name: None,
+            method: method2,
+        };
+
+        assert_eq!(*parse_result.iter().nth(0).unwrap(), expected1);
+        assert_eq!(*parse_result.iter().nth(1).unwrap(), expected2);
     }
 
     #[test]

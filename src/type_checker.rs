@@ -163,93 +163,93 @@ impl TypeChecker {
                     trait_type,
                 )?;
             }
-            Declaration::ImplDecl {
-                type_name,
-                trait_name,
-                methods,
-            } => {
-                log::debug!(
-                    "build_symbol_table: impl {:?} for {}",
-                    trait_name.as_ref().map(|trt| &trt.name),
-                    type_name.as_str()
-                );
+            // Declaration::ImplDecl {
+            //     type_name,
+            //     trait_name,
+            //     methods,
+            // } => {
+            //     log::debug!(
+            //         "build_symbol_table: impl {:?} for {}",
+            //         trait_name.as_ref().map(|trt| &trt.name),
+            //         type_name.as_str()
+            //     );
 
-                let mut method_types = HashMap::with_capacity(methods.len());
+            //     let mut method_types = HashMap::with_capacity(methods.len());
 
-                for method in methods {
-                    let MethodDeclaration {
-                        name,
-                        self_: _,
-                        params,
-                        return_ty,
-                        body,
-                    } = method;
+            //     for method in methods {
+            //         let MethodDeclaration {
+            //             name,
+            //             self_: _,
+            //             params,
+            //             return_ty,
+            //             body,
+            //         } = method;
 
-                    let method_type =
-                        self.generate_function_type(name.as_str(), params, return_ty, body)?;
-                    method_types.insert(
-                        method.name.clone().to_string(),
-                        (method.name.clone(), method_type),
-                    );
-                }
+            //         let method_type =
+            //             self.generate_function_type(name.as_str(), params, return_ty, body)?;
+            //         method_types.insert(
+            //             method.name.clone().to_string(),
+            //             (method.name.clone(), method_type),
+            //         );
+            //     }
 
-                match trait_name {
-                    Some(trt) => {
-                        let trait_located_type = self.lookup_type(trt)?;
+            //     match trait_name {
+            //         Some(trt) => {
+            //             let trait_located_type = self.lookup_type(trt)?;
 
-                        let typ = trait_located_type.typ.borrow();
-                        if let TypeKind::Trait(_) = &typ.kind {
-                            for (trait_method_name, trait_method_type) in &typ.methods {
-                                // TODO: Allow methods with default_impl to be missing!
-                                let (name_token, struct_method) = method_types
-                                    .get(trait_method_name.as_str())
-                                    .ok_or_else(|| {
-                                        let struct_range: Range<usize> = type_name.range.into();
-                                        let trait_range: Range<usize> = trt.range.into();
+            //             let typ = trait_located_type.typ.borrow();
+            //             if let TypeKind::Trait(_) = &typ.kind {
+            //                 for (trait_method_name, trait_method_type) in &typ.methods {
+            //                     // TODO: Allow methods with default_impl to be missing!
+            //                     let (name_token, struct_method) = method_types
+            //                         .get(trait_method_name.as_str())
+            //                         .ok_or_else(|| {
+            //                             let struct_range: Range<usize> = type_name.range.into();
+            //                             let trait_range: Range<usize> = trt.range.into();
 
-                                        CompileError::new_migration(
-                                            // Provide better error by pointing to a larger part of the impl trait range.
-                                            trait_range.start..struct_range.end,
-                                            format!(
-                                                "Not all trait items implemented, missing {}",
-                                                trait_method_name.as_str()
-                                            ),
-                                        )
-                                    })?;
+            //                             CompileError::new_migration(
+            //                                 // Provide better error by pointing to a larger part of the impl trait range.
+            //                                 trait_range.start..struct_range.end,
+            //                                 format!(
+            //                                     "Not all trait items implemented, missing {}",
+            //                                     trait_method_name.as_str()
+            //                                 ),
+            //                             )
+            //                         })?;
 
-                                let rc_method_type = trait_method_type.upgrade().unwrap();
+            //                     let rc_method_type = trait_method_type.upgrade().unwrap();
 
-                                if struct_method.typ.borrow().deref()
-                                    != rc_method_type.borrow().deref()
-                                {
-                                    return Err(CompileError::new_migration(
-                                        name_token.range.into(),
-                                        format!(
-                                            "Type mismatch, expected {}, found {}",
-                                            rc_method_type.borrow(),
-                                            struct_method.typ.borrow(),
-                                        ),
-                                    ));
-                                }
-                            }
+            //                     if struct_method.typ.borrow().deref()
+            //                         != rc_method_type.borrow().deref()
+            //                     {
+            //                         return Err(CompileError::new_migration(
+            //                             name_token.range.into(),
+            //                             format!(
+            //                                 "Type mismatch, expected {}, found {}",
+            //                                 rc_method_type.borrow(),
+            //                                 struct_method.typ.borrow(),
+            //                             ),
+            //                         ));
+            //                     }
+            //                 }
 
-                            // If the trait method check was successful, then this type is an implementor of the trait.
-                            self.add_type_trait_implementor(type_name, trt)?;
-                        } else {
-                            todo!("compile error")
-                        }
-                    }
-                    None => (),
-                }
+            //                 // If the trait method check was successful, then this type is an implementor of the trait.
+            //                 self.add_type_trait_implementor(type_name, trt)?;
+            //             } else {
+            //                 todo!("compile error")
+            //             }
+            //         }
+            //         None => (),
+            //     }
 
-                for (name, (_, method_type)) in method_types {
-                    let type_method_name = format!("{}::{}", type_name, name);
-                    let fn_type_ref = Rc::downgrade(
-                        self.add_symbol(TypeName::from(type_method_name), method_type)?,
-                    );
-                    self.add_method_to_type(type_name, &name, fn_type_ref)?;
-                }
-            }
+            //     for (name, (_, method_type)) in method_types {
+            //         let type_method_name = format!("{}::{}", type_name, name);
+            //         let fn_type_ref = Rc::downgrade(
+            //             self.add_symbol(TypeName::from(type_method_name), method_type)?,
+            //         );
+            //         self.add_method_to_type(type_name, &name, fn_type_ref)?;
+            //     }
+            // }
             _ => todo!(),
         }
 
@@ -337,50 +337,50 @@ impl TypeChecker {
                     self.lookup_type(&field.1)?;
                 }
             }
-            Declaration::ImplDecl {
-                type_name: struct_name,
-                trait_name: _,
-                methods,
-            } => {
-                for method in methods {
-                    let MethodDeclaration {
-                        name,
-                        self_,
-                        params,
-                        return_ty,
-                        body,
-                    } = method;
+            // Declaration::ImplDecl {
+            //     type_name: struct_name,
+            //     trait_name: _,
+            //     methods,
+            // } => {
+            //     for method in methods {
+            //         let MethodDeclaration {
+            //             name,
+            //             self_,
+            //             params,
+            //             return_ty,
+            //             body,
+            //         } = method;
 
-                    match self_ {
-                        Some(method_self) => {
-                            match &method_self.type_token {
-                                Some(type_token) => {
-                                    if type_token != struct_name {
-                                        let specified_type = self.lookup_type(type_token)?;
-                                        return Err(CompileError::new_migration(
-                                            type_token.range.into(),
-                                            format!(
-                                                "'self' in method {} must have type {}, got {}",
-                                                name.as_str(),
-                                                struct_name,
-                                                specified_type,
-                                            ),
-                                        ));
-                                    }
-                                }
-                                None => {}
-                            }
+            //         match self_ {
+            //             Some(method_self) => {
+            //                 match &method_self.type_token {
+            //                     Some(type_token) => {
+            //                         if type_token != struct_name {
+            //                             let specified_type = self.lookup_type(type_token)?;
+            //                             return Err(CompileError::new_migration(
+            //                                 type_token.range.into(),
+            //                                 format!(
+            //                                     "'self' in method {} must have type {}, got {}",
+            //                                     name.as_str(),
+            //                                     struct_name,
+            //                                     specified_type,
+            //                                 ),
+            //                             ));
+            //                         }
+            //                     }
+            //                     None => {}
+            //                 }
 
-                            let receiver_type = self.lookup_type(struct_name)?;
-                            self.add_local_to_next_scope(SELF.to_owned(), receiver_type);
-                        }
-                        None => (),
-                    }
+            //                 let receiver_type = self.lookup_type(struct_name)?;
+            //                 self.add_local_to_next_scope(SELF.to_owned(), receiver_type);
+            //             }
+            //             None => (),
+            //         }
 
-                    let return_types = self.check_function_body(params, body)?;
-                    self.check_function_return_types(return_types, return_ty)?;
-                }
-            }
+            //         let return_types = self.check_function_body(params, body)?;
+            //         self.check_function_return_types(return_types, return_ty)?;
+            //     }
+            // }
             _ => todo!(),
         }
         Ok(vec![])
