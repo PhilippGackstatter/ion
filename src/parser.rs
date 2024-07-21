@@ -36,29 +36,36 @@ impl<'a> Parser<'a> {
     fn program(&mut self) -> Result<Program, CompileError> {
         let mut prog = Vec::new();
         while !self.is_at_end() {
-            prog.push(self.declaration()?);
+            self.declaration(&mut prog)?;
         }
         Ok(prog)
     }
 
     // Declarations
 
-    fn declaration(&mut self) -> DeclarationResult {
+    fn declaration(&mut self, declarations: &mut Vec<Declaration>) -> Result<(), CompileError> {
         match &self.peek().kind {
             IdToken(_) => {
                 if self.is_callable_declaration() {
-                    return self.function_declaration();
+                    declarations.push(self.function_declaration()?);
+                    return Ok(());
                 }
             }
-            TraitToken => return self.trait_declaration(),
-            StructToken => return self.struct_declaration(),
-            ImplToken => return self.impl_declaration(),
+            TraitToken => {
+                declarations.push(self.trait_declaration()?);
+                return Ok(());
+            }
+            StructToken => {
+                declarations.push(self.struct_declaration()?);
+                return Ok(());
+            }
+            ImplToken => return self.impl_declaration(declarations),
             WhiteSpace(_) => {
                 return Err(self.error(self.peek().clone().into(), "Unexpected whitespace"))
             }
             NewLine => {
                 self.advance();
-                return self.declaration();
+                return self.declaration(declarations);
             }
             _ => (),
         }
@@ -161,7 +168,10 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn impl_declaration(&mut self) -> DeclarationResult {
+    fn impl_declaration(
+        &mut self,
+        declarations: &mut Vec<Declaration>,
+    ) -> Result<(), CompileError> {
         self.advance();
 
         if !self.peek().is_id_token() {
@@ -186,12 +196,15 @@ impl<'a> Parser<'a> {
 
         self.expect_newline()?;
 
-        let mut methods = Vec::new();
-
         if self.set_next_indentation()? {
             while self.has_same_indentation()? {
                 if self.is_callable_declaration() {
-                    methods.push(self.method_declaration()?);
+                    let method_declaration = self.method_declaration()?;
+                    declarations.push(ImplMethodDecl {
+                        type_name: name.clone(),
+                        trait_name: trait_name.clone(),
+                        method: method_declaration,
+                    });
                 } else {
                     return Err(
                         self.error(self.peek().clone().into(), "Expected method declaration")
@@ -202,11 +215,7 @@ impl<'a> Parser<'a> {
             self.pop_indentation();
         }
 
-        Ok(ImplDecl {
-            type_name: name,
-            trait_name,
-            methods,
-        })
+        Ok(())
     }
 
     // Callables

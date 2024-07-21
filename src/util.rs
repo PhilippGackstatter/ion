@@ -326,6 +326,41 @@ fn pretty_write_decl(
             }
             Ok(())
         }
+        ImplMethodDecl {
+            type_name,
+            trait_name,
+            method,
+        } => {
+            let stringified = match trait_name {
+                Some(trait_name) => {
+                    format!("impl {} for {}", trait_name.as_str(), type_name.as_str())
+                }
+                None => format!("impl {}", type_name),
+            };
+
+            write(f, level, is_child, &stringified)?;
+
+            let MethodDeclaration {
+                name,
+                self_,
+                params,
+                return_ty,
+                body,
+            } = method;
+
+            pretty_write_callable(
+                f,
+                level,
+                true,
+                name.as_str(),
+                self_.as_ref(),
+                params,
+                return_ty.clone(),
+                body,
+            )?;
+
+            Ok(())
+        }
     }
 }
 

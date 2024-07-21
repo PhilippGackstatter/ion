@@ -250,6 +250,7 @@ impl TypeChecker {
                     self.add_method_to_type(type_name, &name, fn_type_ref)?;
                 }
             }
+            _ => todo!(),
         }
 
         Ok(())
@@ -380,6 +381,7 @@ impl TypeChecker {
                     self.check_function_return_types(return_types, return_ty)?;
                 }
             }
+            _ => todo!(),
         }
         Ok(vec![])
     }

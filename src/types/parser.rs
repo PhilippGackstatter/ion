@@ -36,6 +36,11 @@ pub enum Declaration {
         return_ty: Option<IdentifierToken>,
         body: Statement,
     },
+    ImplMethodDecl {
+        type_name: IdentifierToken,
+        trait_name: Option<IdentifierToken>,
+        method: MethodDeclaration,
+    },
     ImplDecl {
         type_name: IdentifierToken,
         trait_name: Option<IdentifierToken>,

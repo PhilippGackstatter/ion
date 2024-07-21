@@ -159,6 +159,7 @@ impl Compiler {
                 }
             }
             StructDecl { .. } => (),
+            _ => todo!(),
         }
     }
 
