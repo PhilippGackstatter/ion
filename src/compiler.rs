@@ -58,6 +58,26 @@ impl Compiler {
         for decl in prog.iter() {
             self.compile_decl(decl);
         }
+
+        // Small hack so we call the main function of the compiled program if it exists.
+        if self.chunk.constants.iter().any(|fun| {
+            if let Value::Obj(obj) = fun {
+                if let Object::FnObj { name, .. } = &*obj.borrow() {
+                    return name == "main";
+                }
+            }
+            false
+        }) {
+            // Compile the call to "main".
+            self.compile_expr(&Expression::new(
+                0..0,
+                Call(
+                    Box::new(Expression::new(0..0, Identifier("main".to_owned()))),
+                    vec![],
+                ),
+            ));
+        }
+
         self.emit_op_byte(Bytecode::OpReturn);
         self.emit_byte(0);
         self.emit_byte(0);
