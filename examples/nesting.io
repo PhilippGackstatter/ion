@@ -2,7 +2,6 @@ struct Dog
     name: str
     age: i32
 
-
 impl Dog
 
     set_name(self, name: str)
@@ -11,7 +10,6 @@ impl Dog
     // It is legal to specify the type of self.
     get_name(self: Dog) -> str
         return self.name
-
 
 struct Human
     name: str
@@ -23,15 +21,15 @@ impl Human
     pet_name(self) -> str
         return self.pet.get_name()
 
+main()
+  let human = Human {
+      name: "Johnny",
+      pet: Dog {
+          name: "Jonas",
+          age: 23,
+      },
+  }
 
-let human = Human {
-    name: "Johnny",
-    pet: Dog {
-        name: "Jonas",
-        age: 23,
-    },
-}
+  human.pet.name = "Puppy"
 
-human.pet.name = "Puppy"
-
-print human.pet_name()
+  print human.pet_name()

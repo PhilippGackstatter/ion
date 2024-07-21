@@ -12,11 +12,11 @@ impl Rectangle
     name() -> str
       return "rect"
 
+main()
+  let rect = Rectangle {
+      width: 4,
+      height: 3,
+  }
 
-let rect = Rectangle {
-    width: 4,
-    height: 3,
-}
-
-print rect.name()
-print rect.area()
+  print Rectangle::name()
+  print rect.area()

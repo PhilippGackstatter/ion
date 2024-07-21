@@ -17,4 +17,5 @@ fibonacci(up_to: i32) -> i32
 
     return next
 
-print fibonacci(100)
+main()
+  print fibonacci(100)
