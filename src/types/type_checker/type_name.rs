@@ -15,7 +15,7 @@ pub enum TypeName {
 }
 
 impl TypeName {
-    fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         match self {
             TypeName::STR => STR,
             TypeName::BOOL => BOOL,

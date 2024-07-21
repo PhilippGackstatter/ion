@@ -1,13 +1,13 @@
-struct AVector
+struct Player
+  position: Vector
+  health: i32
+
+struct Vector
   x: str
   y: i32
 
-struct BPlayer
-  position: AVector
-  health: i32
-
-struct CSword
+struct Sword
   strength: i32
 
-struct EWorld
-  player1: BPlayer
+struct World
+  player1: Player

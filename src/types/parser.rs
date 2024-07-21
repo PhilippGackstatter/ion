@@ -122,3 +122,18 @@ pub struct MethodHeader {
     pub parameters: Vec<(IdentifierToken, IdentifierToken)>,
     pub return_type: Option<IdentifierToken>,
 }
+
+impl Declaration {
+    pub fn identifier(&self) -> &IdentifierToken {
+        match self {
+            Declaration::StatementDecl(_) => panic!("unsupported"),
+            Declaration::TraitDecl {
+                trait_identifier, ..
+            } => trait_identifier,
+            Declaration::StructDecl { identifier, .. } => identifier,
+            Declaration::FnDecl { identifier, .. } => identifier,
+            Declaration::ImplDecl { .. } => todo!(),
+            Declaration::VarDecl(_, _) => todo!(),
+        }
+    }
+}
