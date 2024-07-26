@@ -6,7 +6,7 @@ use crate::types::{IdentifierToken, Token};
 
 pub const SELF: &str = "self";
 
-#[derive(PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct MethodSelf {
     pub type_token: Option<IdentifierToken>,
 }
@@ -115,9 +115,49 @@ impl PartialEq for Expression {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct MethodHeader {
     pub name: IdentifierToken,
     pub method_self: Option<MethodSelf>,
     pub parameters: Vec<(IdentifierToken, IdentifierToken)>,
     pub return_type: Option<IdentifierToken>,
+}
+
+impl From<&MethodDeclaration> for MethodHeader {
+    fn from(declaration: &MethodDeclaration) -> Self {
+        MethodHeader {
+            name: declaration.name.clone(),
+            method_self: declaration.self_.clone(),
+            parameters: declaration.params.clone(),
+            return_type: declaration.return_ty.clone(),
+        }
+    }
+}
+
+impl Declaration {
+    pub fn identifier(&self) -> IdentifierToken {
+        match self {
+            Declaration::TraitDecl {
+                trait_identifier, ..
+            } => trait_identifier.clone(),
+            Declaration::StructDecl { identifier, .. } => identifier.clone(),
+            Declaration::FnDecl { identifier, .. } => identifier.clone(),
+            Declaration::ImplMethodDecl {
+                type_name,
+                trait_name,
+                method,
+            } => {
+                let qualified_method_name = match trait_name {
+                    Some(trait_name) => {
+                        format!("<{}${}>::{}", type_name, trait_name, method.name.name)
+                    }
+                    None => {
+                        format!("{}::{}", type_name, method.name.name)
+                    }
+                };
+
+                IdentifierToken::new(method.name.range, qualified_method_name)
+            }
+        }
+    }
 }

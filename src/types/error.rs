@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use crate::{types::TokenRange, util::display_error};
 use CompilationErrorKind::*;
 
@@ -21,7 +19,7 @@ impl<'program> CompilationErrorContext<'program> {
 }
 
 impl CompileError {
-    pub fn new_migration(token_range: Range<usize>, message: String) -> Self {
+    pub fn new_migration(token_range: TokenRange, message: String) -> Self {
         Self {
             kind: CompilationErrorKind::Other(CompileMigrationError {
                 token_range,
@@ -65,14 +63,14 @@ impl CompilationErrorKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompileMigrationError {
     /// The indices in the source string that are erroneous
-    pub token_range: Range<usize>,
+    pub token_range: TokenRange,
     /// The error message
     pub message: String,
 }
 
 impl CompileMigrationError {
     pub fn display(&self, context: CompilationErrorContext<'_>) -> String {
-        display_error(context.program, self.token_range.clone(), &self.message)
+        display_error(context.program, self.token_range.into(), &self.message)
     }
 }
 

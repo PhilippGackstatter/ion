@@ -1,10 +1,12 @@
+use crate::types::IdentifierToken;
+
 const STR: &str = "str";
 const BOOL: &str = "bool";
 const VOID: &str = "VOID";
 const I32: &str = "i32";
 const F32: &str = "f32";
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TypeName {
     STR,
     Integer,
@@ -15,7 +17,7 @@ pub enum TypeName {
 }
 
 impl TypeName {
-    fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         match self {
             TypeName::STR => STR,
             TypeName::BOOL => BOOL,
@@ -37,6 +39,12 @@ impl From<String> for TypeName {
             F32 => Self::Double,
             _ => Self::Custom(name),
         }
+    }
+}
+
+impl From<IdentifierToken> for TypeName {
+    fn from(name: IdentifierToken) -> Self {
+        Self::from(name.name)
     }
 }
 

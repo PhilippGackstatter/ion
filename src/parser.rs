@@ -701,7 +701,7 @@ impl<'a> Parser<'a> {
                     );
                 } else {
                     return Err(CompileError::new_migration(
-                        name.tokens.clone(),
+                        name.tokens.into(),
                         "Expected identifier for field access".into(),
                     ));
                 }
@@ -747,7 +747,7 @@ impl<'a> Parser<'a> {
                         fields.push((field_name, field_value))
                     } else {
                         return Err(CompileError::new_migration(
-                            field_name.tokens.clone(),
+                            field_name.tokens.into(),
                             "Expected identifier as field name".into(),
                         ));
                     }
@@ -988,7 +988,7 @@ impl<'a> Parser<'a> {
     }
 
     fn error(&self, token_range: Range<usize>, message: &str) -> CompileError {
-        CompileError::new_migration(token_range, message.into())
+        CompileError::new_migration(token_range.into(), message.into())
     }
 
     // Misc

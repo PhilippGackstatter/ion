@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 use std::fmt;
+use std::hash::Hash;
 use std::ops::Range;
 use std::str::Split;
 
@@ -214,5 +215,13 @@ impl PartialEq for IdentifierToken {
     fn eq(&self, other: &Self) -> bool {
         // Do not include range in comparison.
         self.name == other.name
+    }
+}
+
+impl Eq for IdentifierToken {}
+
+impl Hash for IdentifierToken {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
     }
 }

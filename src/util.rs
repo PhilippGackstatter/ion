@@ -413,7 +413,7 @@ pub fn run(program: String, options: &Options) {
                 return;
             }
             let mut checker = crate::type_checker::TypeChecker::new();
-            match checker.check(&prog, options.symbols) {
+            match checker.check(prog.clone(), options.symbols) {
                 Ok(()) => {
                     if options.until == 3 {
                         return;
