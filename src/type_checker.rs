@@ -25,11 +25,11 @@ impl TypeChecker {
             prototypes: ProtoArena::new(),
         };
 
-        type_checker.add_predefined_symbol(TypeName::BOOL, PrototypeKind::Bool);
+        type_checker.add_predefined_symbol(TypeName::Bool, PrototypeKind::Bool);
         type_checker.add_predefined_symbol(TypeName::Integer, PrototypeKind::Integer);
-        type_checker.add_predefined_symbol(TypeName::VOID, PrototypeKind::Void);
+        type_checker.add_predefined_symbol(TypeName::Void, PrototypeKind::Void);
         type_checker.add_predefined_symbol(TypeName::Double, PrototypeKind::Double);
-        type_checker.add_predefined_symbol(TypeName::STR, PrototypeKind::Str);
+        type_checker.add_predefined_symbol(TypeName::Str, PrototypeKind::Str);
 
         type_checker
     }
@@ -547,7 +547,7 @@ impl TypeChecker {
                     let expr_type = self.check_expr(dependent, expr)?;
                     Ok(vec![expr_type])
                 } else {
-                    let void_type = self.lookup_predefined_type_unchecked(TypeName::VOID);
+                    let void_type = self.lookup_predefined_type_unchecked(TypeName::Void);
                     Ok(vec![LocatedType::new_empty_range(void_type)])
                 }
             }
@@ -628,7 +628,7 @@ impl TypeChecker {
                     ]
                     .contains(&op_token.kind)
                     {
-                        let bool_type = self.lookup_predefined_type_unchecked(TypeName::BOOL);
+                        let bool_type = self.lookup_predefined_type_unchecked(TypeName::Bool);
                         Ok(LocatedType::new(expr.tokens.clone(), bool_type))
                     } else {
                         Ok(LocatedType::new(expr.tokens.clone(), rtype.typ))
@@ -656,7 +656,7 @@ impl TypeChecker {
                         {
                             Ok(LocatedType::new(
                                 expr_type.token_range.clone(),
-                                self.lookup_predefined_type_unchecked(TypeName::BOOL),
+                                self.lookup_predefined_type_unchecked(TypeName::Bool),
                             ))
                         } else {
                             Err(CompileError::new_migration(
@@ -703,15 +703,15 @@ impl TypeChecker {
             )),
             ExpressionKind::Str { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
-                self.lookup_predefined_type_unchecked(TypeName::STR),
+                self.lookup_predefined_type_unchecked(TypeName::Str),
             )),
             ExpressionKind::True { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
-                self.lookup_predefined_type_unchecked(TypeName::BOOL),
+                self.lookup_predefined_type_unchecked(TypeName::Bool),
             )),
             ExpressionKind::False { .. } => Ok(LocatedType::new(
                 expr.tokens.clone(),
-                self.lookup_predefined_type_unchecked(TypeName::BOOL),
+                self.lookup_predefined_type_unchecked(TypeName::Bool),
             )),
             ExpressionKind::Assign { target, value } => {
                 // Lookup type manually to avoid the move check in check_expr. A better solution would be welcome.
@@ -986,7 +986,7 @@ impl TypeChecker {
         let declared_ret_type = if let Some(return_type) = return_token {
             self.check_symbol(Some(dependent), return_type)?
         } else {
-            LocatedType::new_empty_range(self.lookup_predefined_type_unchecked(TypeName::VOID))
+            LocatedType::new_empty_range(self.lookup_predefined_type_unchecked(TypeName::Void))
         };
         let resolved_declared_ret_type = declared_ret_type.typ.resolve(&self.prototypes);
 
@@ -1052,7 +1052,7 @@ impl TypeChecker {
         Ok(if let Some(res) = &result {
             self.check_symbol(Some(dependent), res)?
         } else {
-            LocatedType::new_empty_range(self.lookup_predefined_type_unchecked(TypeName::VOID))
+            LocatedType::new_empty_range(self.lookup_predefined_type_unchecked(TypeName::Void))
         })
     }
 

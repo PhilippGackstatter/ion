@@ -8,20 +8,20 @@ const F32: &str = "f32";
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TypeName {
-    STR,
+    Str,
     Integer,
     Double,
-    BOOL,
-    VOID,
+    Bool,
+    Void,
     Custom(String),
 }
 
 impl TypeName {
     pub fn name(&self) -> &str {
         match self {
-            TypeName::STR => STR,
-            TypeName::BOOL => BOOL,
-            TypeName::VOID => VOID,
+            TypeName::Str => STR,
+            TypeName::Bool => BOOL,
+            TypeName::Void => VOID,
             TypeName::Integer => I32,
             TypeName::Double => F32,
             TypeName::Custom(name) => name,
@@ -32,9 +32,9 @@ impl TypeName {
 impl From<String> for TypeName {
     fn from(name: String) -> Self {
         match name.as_ref() {
-            STR => Self::STR,
-            BOOL => Self::BOOL,
-            VOID => Self::VOID,
+            STR => Self::Str,
+            BOOL => Self::Bool,
+            VOID => Self::Void,
             I32 => Self::Integer,
             F32 => Self::Double,
             _ => Self::Custom(name),
