@@ -4,7 +4,8 @@ use crate::types::{
     AdhocTypeKind, CompilationErrorKind, CompileError, Declaration, Expression, ExpressionKind,
     IdentifierToken, LocatedType, MethodDeclaration, MethodHeader, MoveContext, Moved, Program,
     ProtoArena, ProtoFunction, ProtoStruct, ProtoTrait, Prototype, PrototypeId, PrototypeKind,
-    Statement, Token, TokenKind, TokenRange, Type, TypeName, Variable, SELF,
+    Statement, Token, TokenKind, TokenRange, TraitImplCheck, TraitMethodImplIncorrect,
+    TraitMethodImplMissing, Type, TypeName, Variable, SELF,
 };
 use std::{collections::HashMap, convert::TryInto};
 
@@ -192,8 +193,11 @@ impl TypeChecker {
                     .methods
                     .insert(method_header.name.as_str().to_owned(), method_header);
                 if let Some(trait_name) = trait_name {
-                    // We might insert the trait multiple times, but since it's a set, that's fine.
-                    prototype.traits.insert(trait_name);
+                    // We might insert the trait multiple times, but since the impl check
+                    // only happens after all prototypes are built, the potential overwrite is ok.
+                    prototype
+                        .traits
+                        .insert(trait_name, TraitImplCheck::Unchecked);
                 }
                 Ok(None)
             }
@@ -358,7 +362,18 @@ impl TypeChecker {
 
         self.check_function_type(&qualified_type_name, params, return_ty, body)?;
 
-        let receiver_type = self.check_symbol(Some(&qualified_type_name), type_name)?;
+        let implementor_type = self.check_symbol(Some(&qualified_type_name), type_name)?;
+
+        // If we're implementing a trait, we need to check that the implemented method matches the trait interface.
+        if let Some(trait_name) = trait_name {
+            self.check_trait_impl(
+                &qualified_type_name,
+                type_name,
+                implementor_type.clone(),
+                trait_name,
+                method,
+            )?;
+        }
 
         match self_ {
             Some(method_self) => {
@@ -381,13 +396,105 @@ impl TypeChecker {
                     None => {}
                 }
 
-                self.add_local_to_next_scope(SELF.to_owned(), receiver_type.clone());
+                self.add_local_to_next_scope(SELF.to_owned(), implementor_type.clone());
             }
             None => (),
         }
 
         let return_types = self.check_function_body(&qualified_type_name, params, body)?;
         self.check_function_return_types(&qualified_type_name, return_types, return_ty)?;
+
+        Ok(())
+    }
+
+    fn check_trait_impl(
+        &mut self,
+        qualified_type_name: &TypeName,
+        type_name: &IdentifierToken,
+        implementor_type: LocatedType,
+        trait_name: &IdentifierToken,
+        method: &MethodDeclaration,
+    ) -> Result<(), CompileError> {
+        let trait_type = self.check_symbol(Some(&qualified_type_name), trait_name)?;
+
+        let Type::Prototype(prototype_id) = &implementor_type.typ else {
+            panic!("impl Trait can only ever be called on a Prototype not an adhoc type");
+        };
+        let prototype_id = *prototype_id;
+        let resolved_implementor_type = self.prototypes.get(prototype_id);
+
+        let trait_impl_check = resolved_implementor_type.traits.get(trait_name).expect(
+            "the trait should have been added to this type during the build prototype pass",
+        );
+
+        if let TraitImplCheck::Checked = trait_impl_check {
+            return Ok(());
+        }
+
+        let resolved_trait_type = trait_type.typ.resolve(&self.prototypes);
+        let PrototypeKind::Trait(_) = &resolved_trait_type.kind else {
+            return Err(CompileError::new_migration(
+                trait_type.token_range,
+                format!(
+                    "Type {} is a {}, expected a trait",
+                    trait_name, resolved_trait_type
+                ),
+            ));
+        };
+
+        // TODO: For incremental compilation, add the dependency from each method to the trait itself here,
+        // such that when the trait changes, the implementations have to be rechecked.
+
+        let mut missing_methods = Vec::new();
+        let mut incorrect_methods = Vec::new();
+
+        for (expected_method_name, expected_method_header) in resolved_trait_type.methods {
+            let Some(given_method_header) =
+                resolved_implementor_type.methods.get(&expected_method_name)
+            else {
+                missing_methods.push(expected_method_name);
+                continue;
+            };
+
+            if &expected_method_header != given_method_header {
+                // TODO: Provide detailed error of how the given header must be modified to match the expected header.
+                // For now we just point out the incorrect one and print the correct one.
+                incorrect_methods.push((given_method_header.name.clone(), expected_method_header));
+            }
+        }
+
+        // Mark trait as checked, as we return the result next.
+        let resolved_implementor_type_mut = self.prototypes.get_mut(prototype_id);
+        let trait_impl_check = resolved_implementor_type_mut
+            .traits
+            .get_mut(trait_name)
+            .expect(
+                "the trait should have been added to this type during the build prototype pass",
+            );
+        *trait_impl_check = TraitImplCheck::Checked;
+
+        if !missing_methods.is_empty() {
+            return Err(CompileError::new(
+                CompilationErrorKind::TraitMethodImplMissing(TraitMethodImplMissing {
+                    // TODO: Point to a larger part of the impl block range for clearer error reporting (see old type checker).
+                    impl_block_location: trait_name.range,
+                    missing_methods,
+                }),
+            ));
+        }
+
+        // TODO: If some methods are missing and some are incorrect, only the missing ones will be displayed.
+        // This will be fixed when we implement diagnostics-based error reporting which will allow for
+        // multiple errors to be diagnosed simultaneously.
+        if !incorrect_methods.is_empty() {
+            let first_incorrect_method = incorrect_methods.into_iter().next().unwrap();
+            return Err(CompileError::new(
+                CompilationErrorKind::TraitMethodImplIncorrect(TraitMethodImplIncorrect {
+                    incorrect_method: first_incorrect_method.0,
+                    expected_method_header: first_incorrect_method.1,
+                }),
+            ));
+        }
 
         Ok(())
     }
@@ -1062,7 +1169,8 @@ impl TypeChecker {
             }),
         ) = (&resolved_source_type.kind, &resolved_target_type.kind)
         {
-            if resolved_source_type.traits.contains(trait_name) {
+            // We don't care here whether the trait impl was checked or not, this happens elsewhere.
+            if resolved_source_type.traits.contains_key(trait_name) {
                 return Ok(());
             } else {
                 return Err(CompileError::new_migration(

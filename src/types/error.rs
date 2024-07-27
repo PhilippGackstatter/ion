@@ -1,4 +1,7 @@
-use crate::{types::TokenRange, util::display_error};
+use crate::{
+    types::{IdentifierToken, MethodHeader, Prototype, PrototypeKind, TokenRange},
+    util::display_error,
+};
 use CompilationErrorKind::*;
 
 // Wrapper around the kind to allow for easier extension later.
@@ -46,6 +49,8 @@ impl CompileError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CompilationErrorKind {
+    TraitMethodImplMissing(TraitMethodImplMissing),
+    TraitMethodImplIncorrect(TraitMethodImplIncorrect),
     Moved(Moved),
     Other(CompileMigrationError),
 }
@@ -54,7 +59,9 @@ impl CompilationErrorKind {
     pub fn display(&self, context: CompilationErrorContext<'_>) -> String {
         match self {
             Other(migration) => migration.display(context),
-            Moved(moved) => moved.display(context),
+            Moved(err) => err.display(context),
+            TraitMethodImplMissing(err) => err.display(context),
+            TraitMethodImplIncorrect(err) => err.display(context),
         }
     }
 }
@@ -102,5 +109,59 @@ impl Moved {
         ));
 
         error
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitMethodImplMissing {
+    /// The location of the impl Trait block where the method is missing.
+    pub impl_block_location: TokenRange,
+    /// The set of methods that are missing to make the impl Trait complete.
+    pub missing_methods: Vec<String>,
+}
+
+impl TraitMethodImplMissing {
+    pub fn display(&self, context: CompilationErrorContext<'_>) -> String {
+        let missing_methods = self.missing_methods.join(", ");
+        let article = if self.missing_methods.len() == 1 {
+            "is"
+        } else {
+            "are"
+        };
+        let missing_methods_err = format!(
+            "This impl block is missing methods that the trait requires: {missing_methods} {article} missing",
+        );
+
+        display_error(
+            context.program,
+            self.impl_block_location.into(),
+            &missing_methods_err,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitMethodImplIncorrect {
+    /// The token of the method that is incorrect.
+    pub incorrect_method: IdentifierToken,
+    /// The expected header of the method (i.e. the correct one).
+    pub expected_method_header: MethodHeader,
+}
+
+impl TraitMethodImplIncorrect {
+    pub fn display(&self, context: CompilationErrorContext<'_>) -> String {
+        // Construct a prototype so we can reuse its Display implementation.
+        let expected_method_prototype =
+            Prototype::new(PrototypeKind::Method(self.expected_method_header.clone()));
+        let incorrect_methods_err = format!(
+            "Method {} is incorrectly implemented. Expected: {}",
+            self.incorrect_method.name, expected_method_prototype,
+        );
+
+        display_error(
+            context.program,
+            self.incorrect_method.range.into(),
+            &incorrect_methods_err,
+        )
     }
 }

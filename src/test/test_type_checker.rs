@@ -3,7 +3,10 @@ mod tests {
     use crate::{
         lexer::Lexer,
         parser::Parser,
-        types::{CompilationErrorKind, CompileError, Moved},
+        types::{
+            CompilationErrorKind, CompileError, Moved, TraitMethodImplIncorrect,
+            TraitMethodImplMissing,
+        },
         util,
     };
     use std::path::Path;
@@ -204,23 +207,27 @@ mod tests {
     #[test]
     fn test_trait_impl_method_missing() {
         let res = lex_parse_check("trait_impl_method_missing.io");
-        assert!(res.is_err());
-        assert!(res
-            .unwrap_err()
-            .unwrap_migration()
-            .message
-            .contains("Not all trait items implemented, missing fmt"));
+        let err = res.unwrap_err();
+        assert!(matches!(
+            err.kind,
+            CompilationErrorKind::TraitMethodImplMissing(TraitMethodImplMissing {
+                missing_methods,
+                ..
+            }) if missing_methods.as_slice() == &["fmt"]
+        ));
     }
 
     #[test]
     fn test_trait_impl_type_mismatch() {
         let res = lex_parse_check("trait_impl_type_mismatch.io");
-        assert!(res.is_err());
-        assert!(res
-            .unwrap_err()
-            .unwrap_migration()
-            .message
-            .contains("Type mismatch, expected"));
+        let err = res.unwrap_err();
+        assert!(matches!(
+            err.kind,
+            CompilationErrorKind::TraitMethodImplIncorrect(TraitMethodImplIncorrect {
+                incorrect_method,
+                ..
+            }) if incorrect_method.as_str() == "fmt"
+        ));
     }
 
     #[test]

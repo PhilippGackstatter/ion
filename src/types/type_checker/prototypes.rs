@@ -1,15 +1,17 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use arenas::EntryId;
 
-use crate::types::{IdentifierToken, MethodHeader, Statement};
+use crate::types::{IdentifierToken, MethodHeader, MethodSelf, Statement};
 
 pub type PrototypeId = EntryId;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Prototype {
     /// The traits that this struct implements.
-    pub traits: HashSet<IdentifierToken>,
+    /// The value signals whether the trait implementation for this type has been checked,
+    /// which is to avoid checking multiple times.
+    pub traits: HashMap<IdentifierToken, TraitImplCheck>,
     /// The methods this type has.
     /// For traits, these are the trait methods.
     pub methods: HashMap<String, MethodHeader>,
@@ -19,7 +21,7 @@ pub struct Prototype {
 impl Prototype {
     pub fn new(kind: PrototypeKind) -> Self {
         Self {
-            traits: HashSet::new(),
+            traits: HashMap::new(),
             methods: HashMap::new(),
             kind,
         }
@@ -65,6 +67,12 @@ pub struct ProtoTrait {
 
 pub type ProtoMethod = MethodHeader;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum TraitImplCheck {
+    Checked,
+    Unchecked,
+}
+
 impl std::fmt::Display for Prototype {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
@@ -80,30 +88,53 @@ impl std::fmt::Display for Prototype {
                 write!(f, "struct {}", strct.name)
             }
             PrototypeKind::Function(function) => {
-                write!(f, "{}(", function.name)?;
-
-                let stringified = function
-                    .params
-                    .iter()
-                    .map(|param| param.as_str().to_owned())
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                write!(f, "{}", stringified)?;
-
-                write!(
-                    f,
-                    ") -> {}",
-                    if let Some(ret_ty) = &function.result {
-                        ret_ty.name.to_owned()
-                    } else {
-                        "void".into()
-                    }
-                )
+                fmt_function(f, &function.name, &None, &function.params, &function.result)
             }
             PrototypeKind::Method(method) => {
-                // TODO: Align with function.
-                write!(f, "{}", method.name)
+                let params = method
+                    .parameters
+                    .iter()
+                    .map(|(_, param_type)| param_type)
+                    .cloned()
+                    .collect();
+                fmt_function(
+                    f,
+                    &method.name,
+                    &method.method_self,
+                    &params,
+                    &method.return_type,
+                )
             }
         }
     }
+}
+
+fn fmt_function(
+    f: &mut std::fmt::Formatter<'_>,
+    name: &IdentifierToken,
+    method_self: &Option<MethodSelf>,
+    params: &Vec<IdentifierToken>,
+    result: &Option<IdentifierToken>,
+) -> std::fmt::Result {
+    write!(f, "{}(", name)?;
+
+    let mut parameters = if let Some(_) = method_self {
+        vec!["self".to_owned()]
+    } else {
+        Vec::new()
+    };
+
+    parameters.extend(params.iter().map(|param| param.as_str().to_owned()));
+    let stringified = parameters.join(", ");
+    write!(f, "{}", stringified)?;
+
+    write!(
+        f,
+        ") -> {}",
+        if let Some(ret_ty) = &result {
+            ret_ty.name.to_owned()
+        } else {
+            "void".into()
+        }
+    )
 }
