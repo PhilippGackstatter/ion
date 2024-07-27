@@ -203,7 +203,7 @@ mod tests {
             .unwrap_err()
             .unwrap_migration()
             .message
-            .contains("Type NumWrap not declared in this scope."));
+            .contains("Type NumWrap does not exist."));
     }
 
     #[test]
