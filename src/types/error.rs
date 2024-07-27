@@ -49,6 +49,7 @@ impl CompileError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CompilationErrorKind {
+    TypeAlreadyExists(TypeAlreadyExists),
     TraitMethodImplMissing(TraitMethodImplMissing),
     TraitMethodImplIncorrect(TraitMethodImplIncorrect),
     Moved(Moved),
@@ -59,6 +60,7 @@ impl CompilationErrorKind {
     pub fn display(&self, context: CompilationErrorContext<'_>) -> String {
         match self {
             Other(migration) => migration.display(context),
+            TypeAlreadyExists(err) => err.display(context),
             Moved(err) => err.display(context),
             TraitMethodImplMissing(err) => err.display(context),
             TraitMethodImplIncorrect(err) => err.display(context),
@@ -162,6 +164,24 @@ impl TraitMethodImplIncorrect {
             context.program,
             self.incorrect_method.range.into(),
             &incorrect_methods_err,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypeAlreadyExists {
+    /// The location of the duplicate type.
+    pub duplicate_location: TokenRange,
+    /// The name of the type that already exists.
+    pub duplicate_name: String,
+}
+
+impl TypeAlreadyExists {
+    pub fn display(&self, context: CompilationErrorContext<'_>) -> String {
+        display_error(
+            context.program,
+            self.duplicate_location.into(),
+            &format!("Type {} already exists", self.duplicate_name),
         )
     }
 }

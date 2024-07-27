@@ -1,11 +1,11 @@
-use indexmap::IndexMap;
+use indexmap::{map::Entry, IndexMap};
 
 use crate::types::{
     AdhocTypeKind, CompilationErrorKind, CompileError, Declaration, Expression, ExpressionKind,
     IdentifierToken, LocatedType, MethodDeclaration, MethodHeader, MoveContext, Moved, Program,
     ProtoArena, ProtoFunction, ProtoStruct, ProtoTrait, Prototype, PrototypeId, PrototypeKind,
     Statement, Token, TokenKind, TokenRange, TraitImplCheck, TraitMethodImplIncorrect,
-    TraitMethodImplMissing, Type, TypeName, Variable, SELF,
+    TraitMethodImplMissing, Type, TypeAlreadyExists, TypeName, Variable, SELF,
 };
 use std::{collections::HashMap, convert::TryInto};
 
@@ -51,11 +51,24 @@ impl TypeChecker {
             return Ok(());
         }
 
-        // TODO: Check for uniqueness while filling the hashmap.
-        self.symbols_to_check = program
-            .into_iter()
-            .map(|decl| (TypeName::from(decl.identifier()), decl))
-            .collect();
+        for (symbol_id, symbol_decl) in program.into_iter().map(|decl| (decl.identifier(), decl)) {
+            let symbol_range = symbol_id.range;
+            let symbol_type = TypeName::from(symbol_id);
+
+            match self.symbols_to_check.entry(symbol_type) {
+                Entry::Occupied(occupied) => {
+                    return Err(CompileError::new(CompilationErrorKind::TypeAlreadyExists(
+                        TypeAlreadyExists {
+                            duplicate_location: symbol_range,
+                            duplicate_name: occupied.key().name().to_owned(),
+                        },
+                    )));
+                }
+                Entry::Vacant(vacant) => {
+                    vacant.insert(symbol_decl);
+                }
+            }
+        }
 
         // Not an optimal iteration strategy: We will iterate over symbols that have already been checked,
         // but they will immediately return a "cache hit" from the prototypes.
@@ -366,13 +379,7 @@ impl TypeChecker {
 
         // If we're implementing a trait, we need to check that the implemented method matches the trait interface.
         if let Some(trait_name) = trait_name {
-            self.check_trait_impl(
-                &qualified_type_name,
-                type_name,
-                implementor_type.clone(),
-                trait_name,
-                method,
-            )?;
+            self.check_trait_impl(&qualified_type_name, implementor_type.clone(), trait_name)?;
         }
 
         match self_ {
@@ -410,10 +417,8 @@ impl TypeChecker {
     fn check_trait_impl(
         &mut self,
         qualified_type_name: &TypeName,
-        type_name: &IdentifierToken,
         implementor_type: LocatedType,
         trait_name: &IdentifierToken,
-        method: &MethodDeclaration,
     ) -> Result<(), CompileError> {
         let trait_type = self.check_symbol(Some(&qualified_type_name), trait_name)?;
 

@@ -5,7 +5,7 @@ mod tests {
         parser::Parser,
         types::{
             CompilationErrorKind, CompileError, Moved, TraitMethodImplIncorrect,
-            TraitMethodImplMissing,
+            TraitMethodImplMissing, TypeAlreadyExists,
         },
         util,
     };
@@ -130,12 +130,14 @@ mod tests {
     #[test]
     fn test_redeclare_struct() {
         let res = lex_parse_check("redeclare_struct.io");
-        assert!(res.is_err());
-        assert!(res
-            .unwrap_err()
-            .unwrap_migration()
-            .message
-            .contains("already declared in this scope"));
+        let err = res.unwrap_err();
+        assert!(matches!(
+            err.kind,
+            CompilationErrorKind::TypeAlreadyExists(TypeAlreadyExists {
+                duplicate_name,
+                ..
+            }) if duplicate_name.as_str() == "Flag"
+        ));
     }
 
     #[test]

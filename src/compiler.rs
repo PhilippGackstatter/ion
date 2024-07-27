@@ -7,7 +7,7 @@ use crate::types::{
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
-    IdentifierToken, MethodDeclaration, Object, Program,
+    IdentifierToken, Object, Program,
     Statement::{self, *},
     Token,
     TokenKind::*,
