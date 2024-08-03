@@ -7,7 +7,7 @@ use crate::types::{
     Declaration::{self, *},
     Expression,
     ExpressionKind::*,
-    IdentifierToken, Object, Program,
+    IdentifierToken, MethodDeclaration, Object, Program,
     Statement::{self, *},
     Token,
     TokenKind::*,
@@ -106,60 +106,49 @@ impl Compiler {
             }
             // TODO: This should be compiled in a first pass, otherwise a StructInit that comes before an impl block in the source
             // code, will be created without the methods from that later impl block!
-            // ImplDecl {
-            //     type_name: struct_name,
-            //     trait_name: _,
-            //     methods,
-            // } => {
-            //     for method in methods {
-            //         let MethodDeclaration {
-            //             name: method_name,
-            //             self_,
-            //             params,
-            //             return_ty,
-            //             body,
-            //         } = method;
+            ImplMethodDecl {
+                type_name: struct_name,
+                trait_name: _,
+                method,
+            } => {
+                let MethodDeclaration {
+                    name: method_name,
+                    self_,
+                    params,
+                    return_ty,
+                    body,
+                } = method;
 
-            //         if self_.is_some() {
-            //             // Instance method.
-            //             // TODO: Refactor to compile as functions eventually.
+                if self_.is_some() {
+                    // Instance method.
+                    // TODO: Refactor to compile as functions eventually.
 
-            //             // Puts the compiled Function Object on the stack
-            //             self.compile_fn_decl(
-            //                 method_name.as_str(),
-            //                 params,
-            //                 body,
-            //                 FunctionType::Method,
-            //             );
+                    // Puts the compiled Function Object on the stack
+                    self.compile_fn_decl(method_name.as_str(), params, body, FunctionType::Method);
 
-            //             // Associate the Function Object with the method name on the struct
-            //             self.emit_op_byte(Bytecode::OpStructMethod);
+                    // Associate the Function Object with the method name on the struct
+                    self.emit_op_byte(Bytecode::OpStructMethod);
 
-            //             let struct_name_index =
-            //                 self.add_constant(make_string_value(struct_name.as_str()));
-            //             self.emit_u16(struct_name_index);
+                    let struct_name_index =
+                        self.add_constant(make_string_value(struct_name.as_str()));
+                    self.emit_u16(struct_name_index);
 
-            //             let method_name_index =
-            //                 self.add_constant(make_string_value(method_name.as_str()));
-            //             self.emit_u16(method_name_index);
-            //         } else {
-            //             // Associated methods are just functions with a special name.
-            //             let associated_method_name = format!("{struct_name}::{method_name}");
+                    let method_name_index =
+                        self.add_constant(make_string_value(method_name.as_str()));
+                    self.emit_u16(method_name_index);
+                } else {
+                    // Associated methods are just functions with a special name.
+                    let associated_method_name = format!("{struct_name}::{method_name}");
 
-            //             self.compile_decl(&FnDecl {
-            //                 identifier: IdentifierToken::new(
-            //                     method_name.range,
-            //                     associated_method_name,
-            //                 ),
-            //                 params: params.clone(),
-            //                 return_ty: return_ty.clone(),
-            //                 body: body.clone(),
-            //             });
-            //         }
-            //     }
-            // }
+                    self.compile_decl(&FnDecl {
+                        identifier: IdentifierToken::new(method_name.range, associated_method_name),
+                        params: params.clone(),
+                        return_ty: return_ty.clone(),
+                        body: body.clone(),
+                    });
+                }
+            }
             StructDecl { .. } => (),
-            _ => todo!(),
         }
     }
 
