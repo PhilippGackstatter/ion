@@ -118,7 +118,7 @@ fn fmt_function(
 ) -> std::fmt::Result {
     write!(f, "{}(", name)?;
 
-    let mut parameters = if let Some(_) = method_self {
+    let mut parameters = if method_self.is_some() {
         vec!["self".to_owned()]
     } else {
         Vec::new()

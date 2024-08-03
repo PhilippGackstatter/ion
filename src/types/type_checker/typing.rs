@@ -68,7 +68,7 @@ impl AsRef<Type> for LocatedType {
 
 impl AsRef<Type> for Type {
     fn as_ref(&self) -> &Type {
-        &self
+        self
     }
 }
 

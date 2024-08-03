@@ -132,7 +132,7 @@ mod tests {
         let res = lex_parse_check("redeclare_struct.io");
         let err = res.unwrap_err();
         assert!(matches!(
-            err.kind,
+            *err.kind,
             CompilationErrorKind::TypeAlreadyExists(TypeAlreadyExists {
                 duplicate_name,
                 ..
@@ -211,11 +211,11 @@ mod tests {
         let res = lex_parse_check("trait_impl_method_missing.io");
         let err = res.unwrap_err();
         assert!(matches!(
-            err.kind,
+            *err.kind,
             CompilationErrorKind::TraitMethodImplMissing(TraitMethodImplMissing {
                 missing_methods,
                 ..
-            }) if missing_methods.as_slice() == &["fmt"]
+            }) if missing_methods.as_slice() == ["fmt"]
         ));
     }
 
@@ -224,7 +224,7 @@ mod tests {
         let res = lex_parse_check("trait_impl_type_mismatch.io");
         let err = res.unwrap_err();
         assert!(matches!(
-            err.kind,
+            *err.kind,
             CompilationErrorKind::TraitMethodImplIncorrect(TraitMethodImplIncorrect {
                 incorrect_method,
                 ..
@@ -253,7 +253,7 @@ mod tests {
     fn move_with_variable_declaration() {
         let res = lex_parse_check("move_with_variable_declaration.io");
         assert!(matches!(
-            res.unwrap_err().kind,
+            *res.unwrap_err().kind,
             CompilationErrorKind::Moved(Moved {
                 moved_identifier,
                 moved_into,
@@ -266,7 +266,7 @@ mod tests {
     fn move_with_assignment() {
         let res = lex_parse_check("move_with_assignment.io");
         assert!(matches!(
-            res.unwrap_err().kind,
+            *res.unwrap_err().kind,
             CompilationErrorKind::Moved(Moved {
                 moved_identifier,
                 moved_into,
@@ -279,7 +279,7 @@ mod tests {
     fn move_with_struct_init() {
         let res = lex_parse_check("move_with_struct_init.io");
         assert!(matches!(
-            res.unwrap_err().kind,
+            *res.unwrap_err().kind,
             CompilationErrorKind::Moved(Moved {
                 moved_identifier,
                 moved_into,
@@ -292,7 +292,7 @@ mod tests {
     fn move_with_function_call() {
         let res = lex_parse_check("move_with_function_call.io");
         assert!(matches!(
-            res.unwrap_err().kind,
+            *res.unwrap_err().kind,
             CompilationErrorKind::Moved(Moved {
                 moved_identifier,
                 moved_into,
@@ -305,7 +305,7 @@ mod tests {
     fn move_struct_partially() {
         let res = lex_parse_check("move_struct_partially.io");
         assert!(matches!(
-            res.unwrap_err().kind,
+            *res.unwrap_err().kind,
             CompilationErrorKind::Moved(Moved {
                 moved_identifier,
                 moved_into,

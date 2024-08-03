@@ -204,7 +204,7 @@ impl TryFrom<Token> for IdentifierToken {
                 range: token.range,
             }),
             _ => Err(CompileError::new_migration(
-                token.range.into(),
+                token.range,
                 "Expected token to be an identifier".to_owned(),
             )),
         }

@@ -8,7 +8,7 @@ use CompilationErrorKind::*;
 // Perhaps we want to add the file path here where the error occured or other fields.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompileError {
-    pub kind: CompilationErrorKind,
+    pub kind: Box<CompilationErrorKind>,
 }
 
 pub struct CompilationErrorContext<'program> {
@@ -24,19 +24,21 @@ impl<'program> CompilationErrorContext<'program> {
 impl CompileError {
     pub fn new_migration(token_range: TokenRange, message: String) -> Self {
         Self {
-            kind: CompilationErrorKind::Other(CompileMigrationError {
+            kind: Box::new(CompilationErrorKind::Other(CompileMigrationError {
                 token_range,
                 message,
-            }),
+            })),
         }
     }
 
     pub fn new(kind: CompilationErrorKind) -> Self {
-        Self { kind }
+        Self {
+            kind: Box::new(kind),
+        }
     }
 
     pub fn unwrap_migration(self) -> CompileMigrationError {
-        match self.kind {
+        match *self.kind {
             Other(migration) => migration,
             _ => panic!("called unwrap on a non-migration error"),
         }

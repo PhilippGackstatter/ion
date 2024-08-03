@@ -308,13 +308,13 @@ impl TypeChecker {
         body: &Statement,
     ) -> Result<Vec<LocatedType>, CompileError> {
         for (name_token, param_token) in params {
-            let param_type = self.check_symbol(Some(&function_name), param_token)?;
+            let param_type = self.check_symbol(Some(function_name), param_token)?;
             // Make the parameters available as locals to the function body
             // so that they can be found & type checked
             self.add_local_to_next_scope(name_token.name.clone(), param_type);
         }
 
-        let return_types = self.check_stmt(&function_name, body)?;
+        let return_types = self.check_stmt(function_name, body)?;
         Ok(return_types)
     }
 
@@ -353,7 +353,7 @@ impl TypeChecker {
             self.check_function_type(&trait_method_name, params, return_ty, body)?;
         }
 
-        self.lookup_located_type(&trait_identifier)
+        self.lookup_located_type(trait_identifier)
     }
 
     fn check_impl_method_decl(
@@ -389,7 +389,7 @@ impl TypeChecker {
                             // TODO: Unclear if we should call check_symbol here or do a lookup.
                             let specified_type = self.lookup_located_type(type_token)?;
                             return Err(CompileError::new_migration(
-                                type_token.range.into(),
+                                type_token.range,
                                 format!(
                                     "'self' in method {} must have type {}, found {}",
                                     name.as_str(),
@@ -419,7 +419,7 @@ impl TypeChecker {
         implementor_type: LocatedType,
         trait_name: &IdentifierToken,
     ) -> Result<(), CompileError> {
-        let trait_type = self.check_symbol(Some(&qualified_type_name), trait_name)?;
+        let trait_type = self.check_symbol(Some(qualified_type_name), trait_name)?;
 
         let Type::Prototype(prototype_id) = &implementor_type.typ else {
             panic!("impl Trait can only ever be called on a Prototype not an adhoc type");
@@ -521,7 +521,7 @@ impl TypeChecker {
                     .any(|elem| elem.scope_depth == self.scope_depth && elem.identifier == *id)
                 {
                     return Err(CompileError::new_migration(
-                        expr_type.token_range.clone(),
+                        expr_type.token_range,
                         "Variable is already declared in this scope.".into(),
                     ));
                 }
@@ -634,7 +634,7 @@ impl TypeChecker {
                     }
                 } else {
                     Err(CompileError::new_migration(
-                        op_token.range.into(),
+                        op_token.range,
                         format!(
                             "Types {} and {} are not compatible in binary operation",
                             resolved_ltype, resolved_rtype
@@ -654,7 +654,7 @@ impl TypeChecker {
                             .unwrap_or(false)
                         {
                             Ok(LocatedType::new(
-                                expr_type.token_range.clone(),
+                                expr_type.token_range,
                                 self.lookup_predefined_type_unchecked(TypeName::Bool),
                             ))
                         } else {
@@ -676,12 +676,12 @@ impl TypeChecker {
                             .unwrap_or(false)
                         {
                             Ok(LocatedType::new(
-                                expr_type.token_range.clone(),
+                                expr_type.token_range,
                                 self.lookup_predefined_type_unchecked(TypeName::Integer),
                             ))
                         } else {
                             Err(CompileError::new_migration(
-                                expr_type.token_range.clone(),
+                                expr_type.token_range,
                                 format!(
                                     "Type {} can not be used with a - operator",
                                     self.display_type(expr_type)
@@ -751,7 +751,7 @@ impl TypeChecker {
 
                 if resolved_target_type != resolved_value_type {
                     return Err(CompileError::new_migration(
-                        value_type.token_range.clone(),
+                        value_type.token_range,
                         format!(
                             "Expression of type {} can not be assigned to variable of type {}",
                             resolved_value_type, resolved_target_type
@@ -810,7 +810,6 @@ impl TypeChecker {
                         Some(dependent),
                         &IdentifierToken::new(expr.tokens.clone(), id.to_owned()),
                     )
-                    .map(|typ| typ)
                 }
             }
             ExpressionKind::Call(callee, params) => {
@@ -841,7 +840,7 @@ impl TypeChecker {
                         &function.result,
                     ),
                     _ => Err(CompileError::new_migration(
-                        callee_located_type.token_range.clone(),
+                        callee_located_type.token_range,
                         format!(
                             "Type {} is not callable.",
                             self.display_type(callee_located_type)
@@ -898,7 +897,7 @@ impl TypeChecker {
 
                             if resolved_declared_type != resolved_given_type {
                                 return Err(CompileError::new_migration(
-                                    given_type.token_range.clone(),
+                                    given_type.token_range,
                                     format!(
                                         "Expected {} for field {} but type {} was found",
                                         resolved_declared_type,
@@ -933,7 +932,7 @@ impl TypeChecker {
                     .ok_or_else(|| {
                         CompileError::new_migration(
                             expr.tokens.clone().into(),
-                            format!("should be a prototype?!"),
+                            "should never be an adhoc type, always a prototype".to_owned(),
                         )
                     })?;
                 let access_name = name.unwrap_identifier();
@@ -991,7 +990,7 @@ impl TypeChecker {
 
         if resolved_declared_ret_type.kind != PrototypeKind::Void && return_types.is_empty() {
             return Err(CompileError::new_migration(
-                declared_ret_type.token_range.clone(),
+                declared_ret_type.token_range,
                 format!(
                     "This function has to return a type {}.",
                     resolved_declared_ret_type
@@ -1003,7 +1002,7 @@ impl TypeChecker {
             let resolved_return_type = return_type.typ.resolve(&self.prototypes);
             if resolved_return_type != resolved_declared_ret_type {
                 return Err(CompileError::new_migration(
-                    return_type.token_range.clone(),
+                    return_type.token_range,
                     format!(
                         "Returned type {} does not match declared return type {}.",
                         resolved_return_type, resolved_declared_ret_type
@@ -1178,7 +1177,7 @@ impl TypeChecker {
                 return Ok(());
             } else {
                 return Err(CompileError::new_migration(
-                    source_located_type.token_range.clone(),
+                    source_located_type.token_range,
                     format!(
                         "Parameter does not implement trait `{}`.\nExpected: {}\nSupplied: {}.",
                         trait_name, resolved_target_type, resolved_source_type
@@ -1188,7 +1187,7 @@ impl TypeChecker {
         }
 
         Err(CompileError::new_migration(
-            source_located_type.token_range.clone(),
+            source_located_type.token_range,
             format!(
                 "Parameter has incompatible type.\nExpected: {}\nSupplied: {}.",
                 resolved_target_type, resolved_source_type
@@ -1221,7 +1220,7 @@ impl TypeChecker {
         let identifier = IdentifierToken::new_debug(type_name.name());
         self.prototypes
             .lookup(&identifier)
-            .map(|id| Type::new_prototype(id))
+            .map(Type::new_prototype)
             .expect("predefined types should exist")
     }
 
@@ -1284,5 +1283,11 @@ impl TypeChecker {
             println!("{symbol}");
         }
         println!();
+    }
+}
+
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new()
     }
 }

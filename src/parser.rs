@@ -981,7 +981,7 @@ impl<'a> Parser<'a> {
             })
         } else {
             Err(CompileError::new_migration(
-                token.range.into(),
+                token.range,
                 "Expected token to be an identifier".to_string(),
             ))
         }
@@ -1523,8 +1523,8 @@ impl MyStruct
             method: method2,
         };
 
-        assert_eq!(*parse_result.iter().nth(0).unwrap(), expected1);
-        assert_eq!(*parse_result.iter().nth(1).unwrap(), expected2);
+        assert_eq!(*parse_result.first().unwrap(), expected1);
+        assert_eq!(*parse_result.get(1).unwrap(), expected2);
     }
 
     #[test]

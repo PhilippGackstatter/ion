@@ -77,3 +77,9 @@ impl ProtoArena {
             .expect("if we index by id directly the type should always exist")
     }
 }
+
+impl Default for ProtoArena {
+    fn default() -> Self {
+        Self::new()
+    }
+}
