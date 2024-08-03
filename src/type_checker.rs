@@ -89,20 +89,19 @@ impl TypeChecker {
 
         let mut result = None;
         loop {
-            if let Some(symbol) = self.symbols_to_check.keys().next().map(|sym| sym.clone()) {
-                // Hack to be able to call check_symbol. Fix somehow.
-                let id_token = self
-                    .symbols_to_check
-                    .get(&symbol)
-                    .expect("it should be present")
-                    .identifier()
-                    .clone();
-                let inner_result = self.check_symbol(None, &id_token);
-                if inner_result.is_err() {
-                    let _ = result.insert(inner_result);
-                    break;
-                }
-            } else {
+            if self.symbols_to_check.is_empty() {
+                break;
+            }
+
+            // We could take any element, but taking the last one means that the `swap_remove` in `check_symbol`
+            // is a cheap pop operation.
+            let (_, next_symbol_decl) = self
+                .symbols_to_check
+                .last()
+                .expect("we break the loop if the map is empty");
+            let inner_result = self.check_symbol(None, &next_symbol_decl.identifier());
+            if inner_result.is_err() {
+                let _ = result.insert(inner_result);
                 break;
             }
         }
@@ -230,7 +229,7 @@ impl TypeChecker {
 
         if let Some(declaration) = self
             .symbols_to_check
-            .shift_remove(&TypeName::from(identifier.clone()))
+            .swap_remove(&TypeName::from(identifier.clone()))
         {
             return self.check_decl(&declaration);
         }
