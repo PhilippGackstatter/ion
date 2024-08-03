@@ -8,7 +8,7 @@ impl Rectangle
     area(self) -> i32
         return self.width * self.height
 
-    // Static method without self receiver.
+    // Associated method without self receiver.
     name() -> str
       return "rect"
 

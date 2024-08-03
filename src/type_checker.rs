@@ -197,19 +197,45 @@ impl TypeChecker {
                     .expect("types should return a prototype id");
                 self.prototypes.lookup(&type_name)?;
                 let method_header = MethodHeader::from(&method);
-                let prototype = self.prototypes.get_mut(prototype_id);
-                // TODO: This doesn't differentiate between inherent and trait methods for now.
-                prototype
-                    .methods
-                    .insert(method_header.name.as_str().to_owned(), method_header);
-                if let Some(trait_name) = trait_name {
-                    // We might insert the trait multiple times, but since the impl check
-                    // only happens after all prototypes are built, the potential overwrite is ok.
+
+                let is_instance_method = method_header.method_self.is_some();
+                if is_instance_method {
+                    let prototype = self.prototypes.get_mut(prototype_id);
+                    // TODO: This doesn't differentiate between inherent and trait methods for now.
                     prototype
-                        .traits
-                        .insert(trait_name, TraitImplCheck::Unchecked);
+                        .methods
+                        .insert(method_header.name.as_str().to_owned(), method_header);
+
+                    if let Some(trait_name) = trait_name {
+                        // We might insert the trait multiple times, but since the impl check
+                        // only happens after all prototypes are built, the potential overwrite is ok.
+                        prototype
+                            .traits
+                            .insert(trait_name, TraitImplCheck::Unchecked);
+                    }
+
+                    Ok(None)
+                } else {
+                    // Associated methods are just functions with a special name.
+                    let associated_method_name = IdentifierToken::new(
+                        method_header.name.range,
+                        format!("{}::{}", type_name, method_header.name),
+                    );
+
+                    // Associated methods are just functions with a special name.
+                    Ok(Some(Prototype::new(PrototypeKind::Function(
+                        ProtoFunction {
+                            name: associated_method_name,
+                            params: method_header
+                                .parameters
+                                .iter()
+                                .map(|(_, param_type)| param_type)
+                                .cloned()
+                                .collect(),
+                            result: method_header.return_type.as_ref().cloned(),
+                        },
+                    ))))
                 }
-                Ok(None)
             }
         }
     }
@@ -220,9 +246,9 @@ impl TypeChecker {
         identifier: &IdentifierToken,
     ) -> Result<LocatedType, CompileError> {
         if let Some(dependent) = dependent {
-            println!("{dependent} depends on {identifier}");
+            log::trace!("{dependent} depends on {identifier}");
         } else {
-            println!("checking symbol {identifier}");
+            log::trace!("checking symbol {identifier}");
         }
 
         if let Some(declaration) = self

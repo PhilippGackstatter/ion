@@ -23,7 +23,7 @@ impl ProtoArena {
         prototype: Prototype,
     ) -> Result<PrototypeId, CompileError> {
         let type_name = TypeName::from(name.as_str().to_owned());
-        println!("insert {type_name} as type {prototype}");
+        log::trace!("insert {type_name} as type {prototype}");
         if self.index.contains_key(&type_name) {
             return Err(CompileError::new_migration(
                 name.range,
