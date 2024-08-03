@@ -1,5 +1,3 @@
-use indexmap::{map::Entry, IndexMap};
-
 use crate::types::{
     AdhocTypeKind, CompilationErrorKind, CompileError, Declaration, Expression, ExpressionKind,
     IdentifierToken, LocatedType, MethodDeclaration, MethodHeader, MoveContext, Moved, Program,
@@ -7,12 +5,15 @@ use crate::types::{
     Statement, Token, TokenKind, TokenRange, TraitImplCheck, TraitMethodImplIncorrect,
     TraitMethodImplMissing, Type, TypeAlreadyExists, TypeName, Variable, SELF,
 };
-use std::{collections::HashMap, convert::TryInto};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    convert::TryInto,
+};
 
 pub struct TypeChecker {
     locals: Vec<Variable>,
     scope_depth: u8,
-    symbols_to_check: IndexMap<TypeName, Declaration>,
+    symbols_to_check: HashMap<TypeName, Declaration>,
     prototypes: ProtoArena,
 }
 
@@ -21,7 +22,7 @@ impl TypeChecker {
         let mut type_checker = TypeChecker {
             locals: vec![],
             scope_depth: 0,
-            symbols_to_check: IndexMap::new(),
+            symbols_to_check: HashMap::new(),
             prototypes: ProtoArena::new(),
         };
 
@@ -72,15 +73,13 @@ impl TypeChecker {
 
         // Not an optimal iteration strategy: We will iterate over symbols that have already been checked,
         // but they will immediately return a "cache hit" from the prototypes.
-        for i in 0..self.symbols_to_check.len() {
-            self.build_prototype(
-                &self
-                    .symbols_to_check
-                    .get_index(i)
-                    .expect("the index is guaranteed to exist")
-                    .1
-                    .identifier(),
-            )?;
+        let keys: Vec<_> = self
+            .symbols_to_check
+            .values()
+            .map(|decl| decl.identifier())
+            .collect();
+        for id in keys {
+            self.build_prototype(&id)?;
         }
 
         if print_symbol_table {
@@ -93,11 +92,10 @@ impl TypeChecker {
                 break;
             }
 
-            // We could take any element, but taking the last one means that the `swap_remove` in `check_symbol`
-            // is a cheap pop operation.
-            let (_, next_symbol_decl) = self
+            let next_symbol_decl = self
                 .symbols_to_check
-                .last()
+                .values()
+                .next()
                 .expect("we break the loop if the map is empty");
             let inner_result = self.check_symbol(None, &next_symbol_decl.identifier());
             if inner_result.is_err() {
@@ -229,7 +227,7 @@ impl TypeChecker {
 
         if let Some(declaration) = self
             .symbols_to_check
-            .swap_remove(&TypeName::from(identifier.clone()))
+            .remove(&TypeName::from(identifier.clone()))
         {
             return self.check_decl(&declaration);
         }
